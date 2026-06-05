@@ -149,12 +149,9 @@ def format_item_path(item, item_metadata):
     elif item['item_type'] == 'episode':
         path = config.get("show_path_formatter")
 
-    # Audio
-    artist = sanitize_data(item_metadata.get('artists'))
+    # Split composer
     composer_full = item_metadata.get('composer', '')
     composer_first = re.split(r' [,&;] | & |,|;', composer_full)[0].strip() if composer_full else ''
-    composer = sanitize_data(composer_first)
-    album = sanitize_data(album)
 
     item_path = path.format(
         # Universal
@@ -164,10 +161,11 @@ def format_item_path(item, item_metadata):
         year=sanitize_data(item_metadata.get('release_year')),
         explicit=sanitize_data(str(config.get('explicit_label')) if item_metadata.get('explicit') else ''),
 
+
         # Audio
-        artist=artist,
-        composer=composer,
-        album=album,
+        artist=sanitize_data(item_metadata.get('artists')),
+        composer=sanitize_data(composer_first),
+        album=sanitize_data(album),
         album_artist=sanitize_data(item_metadata.get('album_artists')),
         album_type=item_metadata.get('album_type', 'single').title(),
         disc_number=item_metadata.get('disc_number', 1) if not config.get('use_double_digit_path_numbers') else str(item_metadata.get('disc_number', 1)).zfill(2),
