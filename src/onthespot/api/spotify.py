@@ -466,6 +466,11 @@ def spotify_get_lyrics(token, item_id, item_type, metadata, filepath):
                 else:
                     logger.info("Unsynced episode lyrics, please open a bug report.")
 
+        except requests.exceptions.RequestException as e:
+            # Lyrics are optional - a 404 (or any request error) just means no
+            # lyrics are available, so log it and continue the download without them.
+            logger.info(f'No lyrics available for {item_type} {item_id}: {str(e)}')
+            return None
         except (KeyError, IndexError) as e:
             logger.error(f'KeyError/Index Error. Failed to get lyrics for {item_id}: {str(e)}\nTraceback: {traceback.format_exc()}')
 
