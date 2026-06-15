@@ -18,8 +18,9 @@ from ..utils import make_call, conv_list_format
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
 
-# Cache for the Client-Credentials OAuth token (keyed by expiry).
-_oauth_token_cache = {'access_token': None, 'expires_at': 0}
+# Cache for the Client-Credentials OAuth token (keyed by client id + expiry so
+# changing the credentials in Settings takes effect immediately).
+_oauth_token_cache = {'access_token': None, 'expires_at': 0, 'client_id': None}
 _oauth_token_lock = threading.Lock()
 
 
@@ -37,7 +38,9 @@ def spotify_get_oauth_token():
         return None
 
     with _oauth_token_lock:
-        if _oauth_token_cache['access_token'] and time.time() < _oauth_token_cache['expires_at']:
+        if (_oauth_token_cache['access_token']
+                and _oauth_token_cache['client_id'] == client_id
+                and time.time() < _oauth_token_cache['expires_at']):
             return _oauth_token_cache['access_token']
 
         credentials_b64 = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
@@ -57,6 +60,7 @@ def spotify_get_oauth_token():
             return None
         data = resp.json()
         _oauth_token_cache['access_token'] = data['access_token']
+        _oauth_token_cache['client_id'] = client_id
         # Refresh a little early (5 min buffer) to avoid mid-call expiry.
         _oauth_token_cache['expires_at'] = time.time() + data.get('expires_in', 3600) - 300
         logger.info("[AUTH] Using Web API override credentials (OAuth) for Spotify metadata/search")

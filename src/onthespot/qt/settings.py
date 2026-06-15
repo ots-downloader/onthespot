@@ -19,6 +19,12 @@ def load_config(self):
     self.version.setText(config.get("version"))
     self.statistics.setText(self.tr("{0} / {1}").format(config.get('total_downloaded_items'), format_bytes(config.get('total_downloaded_data'))))
 
+    # Spotify Web API override credentials (programmatically added in mainui)
+    if hasattr(self, 'spotify_webapi_override_client_id'):
+        self.spotify_webapi_override_client_id.setText(config.get('spotify_webapi_override_client_id', ''))
+    if hasattr(self, 'spotify_webapi_override_client_secret'):
+        self.spotify_webapi_override_client_secret.setText(config.get('spotify_webapi_override_client_secret', ''))
+
     # Dev Tools
     self.settings_scrollarea_value.valueChanged.connect(self.settings_scroll_area.verticalScrollBar().setValue)
     if not config.get('debug_mode'):
@@ -227,6 +233,11 @@ def load_config(self):
 
 
 def save_config(self):
+    # Spotify Web API override credentials (programmatically added in mainui)
+    if hasattr(self, 'spotify_webapi_override_client_id'):
+        config.set('spotify_webapi_override_client_id', self.spotify_webapi_override_client_id.text().strip())
+    if hasattr(self, 'spotify_webapi_override_client_secret'):
+        config.set('spotify_webapi_override_client_secret', self.spotify_webapi_override_client_secret.text().strip())
     # General Settings
     config.set('language_index', self.language.currentIndex())
     config.set('explicit_label', self.explicit_label.text())

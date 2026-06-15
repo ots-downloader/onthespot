@@ -7,7 +7,7 @@ from urllib3.exceptions import MaxRetryError, NewConnectionError
 from PyQt6 import uic, QtGui
 from PyQt6.QtCore import QThread, QDir, Qt, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QIcon, QColor
-from PyQt6.QtWidgets import QApplication, QMainWindow, QHeaderView, QLabel, QPushButton, QProgressBar, QTableWidgetItem, QFileDialog, QRadioButton, QHBoxLayout, QWidget, QColorDialog
+from PyQt6.QtWidgets import QApplication, QMainWindow, QHeaderView, QLabel, QPushButton, QProgressBar, QTableWidgetItem, QFileDialog, QRadioButton, QHBoxLayout, QWidget, QColorDialog, QGroupBox, QVBoxLayout, QLineEdit
 from ..accounts import get_account_token, FillAccountPool
 from ..api.apple_music import apple_music_add_account, apple_music_get_track_metadata
 from ..api.bandcamp import bandcamp_add_account, bandcamp_get_track_metadata
@@ -90,6 +90,9 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(self.get_icon('onthespot'))
         self.centralwidget.setStyleSheet(config.get('theme'))
 
+        # Inject the Spotify Web API override credential fields into the settings page
+        self.setup_spotify_oauth_override()
+
         self.start_url = start_url
         logger.info(f"Initialising main window, logging session : {config.session_uuid}")
 
@@ -162,6 +165,73 @@ class MainWindow(QMainWindow):
                 config.save()
                 self.centralwidget.setStyleSheet(stylesheet)
                 self.__splash_dialog.update_theme(stylesheet)
+
+
+    def setup_spotify_oauth_override(self):
+        """Inject the optional Spotify Web API override credential fields into
+        the settings page, above the gb2 group box. Spotify hard rate-limits the
+        shared librespot client, so supplying your own Spotify app credentials
+        (their own quota) is the reliable way to keep search/metadata working."""
+        if not hasattr(self, 'gb2'):
+            logger.warning("Settings anchor 'gb2' not found; skipping OAuth override UI")
+            return
+        parent_layout = self.gb2.parent().layout()
+        gb2_index = None
+        for i in range(parent_layout.count()):
+            item = parent_layout.itemAt(i)
+            if item and item.widget() == self.gb2:
+                gb2_index = i
+                break
+        if gb2_index is None:
+            return
+
+        gb = QGroupBox(self.tr("Spotify Web API Credentials (recommended)"))
+        gb.setStyleSheet("QGroupBox { font-weight: bold; }")
+        layout = QVBoxLayout()
+
+        explanation = QLabel(self.tr(
+            "Spotify rate-limits OnTheSpot's shared login, which breaks search and "
+            "downloads. To fix it, create your own free Spotify app and paste its "
+            "credentials below - Web API calls then use your own quota.\n\n"
+            "1. Open the Spotify Developer Dashboard and create an app (Web API).\n"
+            "2. Set any Redirect URI, e.g. http://127.0.0.1:8888/callback.\n"
+            "3. Copy the Client ID and Client Secret into the fields below, then Save.\n\n"
+            "Note: a Spotify Premium account is required to create an app, and these "
+            "credentials are personal - do not share them."
+        ))
+        explanation.setWordWrap(True)
+        explanation.setStyleSheet("color: #888; margin-bottom: 8px; font-weight: normal;")
+        layout.addWidget(explanation)
+
+        dashboard_link = QLabel('<a href="https://developer.spotify.com/dashboard">'
+                                + self.tr("Open the Spotify Developer Dashboard") + '</a>')
+        dashboard_link.setOpenExternalLinks(True)
+        dashboard_link.setStyleSheet("font-weight: normal;")
+        layout.addWidget(dashboard_link)
+
+        id_row = QHBoxLayout()
+        id_label = QLabel(self.tr("Client ID:"))
+        id_label.setMinimumWidth(110)
+        self.spotify_webapi_override_client_id = QLineEdit()
+        self.spotify_webapi_override_client_id.setText(config.get('spotify_webapi_override_client_id', ''))
+        self.spotify_webapi_override_client_id.setPlaceholderText(self.tr("Leave empty to use the default librespot login"))
+        id_row.addWidget(id_label)
+        id_row.addWidget(self.spotify_webapi_override_client_id)
+        layout.addLayout(id_row)
+
+        secret_row = QHBoxLayout()
+        secret_label = QLabel(self.tr("Client Secret:"))
+        secret_label.setMinimumWidth(110)
+        self.spotify_webapi_override_client_secret = QLineEdit()
+        self.spotify_webapi_override_client_secret.setText(config.get('spotify_webapi_override_client_secret', ''))
+        self.spotify_webapi_override_client_secret.setPlaceholderText(self.tr("Leave empty to use the default librespot login"))
+        self.spotify_webapi_override_client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        secret_row.addWidget(secret_label)
+        secret_row.addWidget(self.spotify_webapi_override_client_secret)
+        layout.addLayout(secret_row)
+
+        gb.setLayout(layout)
+        parent_layout.insertWidget(gb2_index, gb)
 
 
     def bind_button_inputs(self):
