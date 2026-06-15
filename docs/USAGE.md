@@ -45,7 +45,9 @@ OnTheSpot supports various accounts and instructions for each are listed below, 
    > 1. Open the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and log in (a **Premium** account is required to create an app).
    > 2. Click **Create app**. Give it any name/description, set the **Redirect URI** to `http://127.0.0.1:8888/callback`, tick **Web API**, and save.
    > 3. Open the app's **Settings** and copy the **Client ID** and **Client Secret**.
-   > 4. In OnTheSpot, go to **Settings → Spotify Web API Credentials**, paste both values, and click **Save Settings**.
+   > 4. Add the credentials in OnTheSpot:
+   >    - **Desktop GUI / Web UI:** go to **Settings → Spotify Web API Credentials**, paste both values, and **Save Settings**.
+   >    - **CLI:** run `config set spotify_webapi_override_client_id <id>` then `config set spotify_webapi_override_client_secret <secret>`.
    >
    > These credentials are personal — do not share them. Leaving the fields empty
    > falls back to the default (rate-limited) login. This path covers search and

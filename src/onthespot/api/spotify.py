@@ -32,8 +32,9 @@ def spotify_get_oauth_token():
     which is now hard rate-limited (HTTP 429). Supplying your own client id/secret
     gives Web API calls their own quota. Catalog endpoints only - this token has
     no user context, so it can't read /me/* (liked songs, your episodes)."""
-    client_id = (config.get('spotify_webapi_override_client_id', '') or '').strip()
-    client_secret = (config.get('spotify_webapi_override_client_secret', '') or '').strip()
+    # str() guards against the CLI / web settings coercing an all-digit value to int.
+    client_id = str(config.get('spotify_webapi_override_client_id', '') or '').strip()
+    client_secret = str(config.get('spotify_webapi_override_client_secret', '') or '').strip()
     if not client_id or not client_secret:
         return None
 

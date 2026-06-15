@@ -131,6 +131,36 @@
                 </tr>
             </table>
 
+            <h2>Spotify Web API Credentials</h2>
+            <table style="width: 100%;">
+                <tr>
+                    <td colspan="2" style="font-weight: normal; color: #888; padding-bottom: 8px;">
+                        Spotify rate-limits OnTheSpot's shared login, which breaks search and downloads.
+                        Create your own free app at the
+                        <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify Developer Dashboard</a>
+                        (a Premium account is required), set any Redirect URI, then paste the Client ID and
+                        Secret below so Web API calls use your own quota. These are personal &mdash; do not share
+                        them. Leave both empty to use the default login.
+                    </td>
+                </tr>
+                <tr>
+                    <td style="width: 50%;">
+                        <label for="spotify_webapi_override_client_id">Spotify Client ID:</label>
+                    </td>
+                    <td style="width: 50%;">
+                        <input type="text" id="spotify_webapi_override_client_id" value="{{ config.spotify_webapi_override_client_id }}" placeholder="Leave empty to use the default login">
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <label for="spotify_webapi_override_client_secret">Spotify Client Secret:</label>
+                    </td>
+                    <td>
+                        <input type="password" id="spotify_webapi_override_client_secret" value="{{ config.spotify_webapi_override_client_secret }}" placeholder="Leave empty to use the default login">
+                    </td>
+                </tr>
+            </table>
+
             <h2>General</h2>
 
             <table style="width: 100%;">
@@ -908,6 +938,9 @@
                     use_webui_login: document.getElementById('use_webui_login').checked,
                     webui_username: document.getElementById('webui_username').value,
                     webui_password: document.getElementById('webui_password').value,
+                    // Spotify Web API Override Credentials
+                    spotify_webapi_override_client_id: document.getElementById('spotify_webapi_override_client_id').value,
+                    spotify_webapi_override_client_secret: document.getElementById('spotify_webapi_override_client_secret').value,
                     // General Settings
                     explicit_label: document.getElementById('explicit_label').value,
                     download_copy_btn: document.getElementById('download_copy_btn').checked,
