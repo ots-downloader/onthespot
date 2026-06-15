@@ -204,6 +204,7 @@ def apple_music_get_track_metadata(session, item_id):
     info['image_url'] = image_url.replace("{w}", str(max_width)).replace("{h}", str(max_height))
 
     info['writer'] = track_data.get('data', [])[0].get('attributes', {}).get('composerName')
+    info['composer'] = info['writer']
     info['language'] = track_data.get('data', [])[0].get('attributes', {}).get('audioLocale')
     info['item_url'] = track_data.get('data', [])[0].get('attributes', {}).get('url')
     info['is_playable'] = True if track_data.get('data', [])[0].get('attributes', {}).get('playParams') else False

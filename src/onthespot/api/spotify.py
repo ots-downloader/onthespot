@@ -873,6 +873,7 @@ def spotify_get_track_metadata(token, item_id):
         info['performers'] = conv_list_format([item for item in credits.get('performers', []) if isinstance(item, str)])
         info['producers'] = conv_list_format([item for item in credits.get('producers', []) if isinstance(item, str)])
         info['writers'] = conv_list_format([item for item in credits.get('writers', []) if isinstance(item, str)])
+        info['composer'] = info['writers']
 
     if track_audio_data:
         key_mapping = {

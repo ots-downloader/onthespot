@@ -205,6 +205,7 @@ class Config:
             "embed_performers": True,
             "embed_producers": True,
             "embed_writers": True,
+            "embed_composer": True,
             "embed_label": True,
             "embed_copyright": True,
             "embed_description": True,

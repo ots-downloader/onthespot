@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import platform
+import re
 import requests
 import ssl
 import subprocess
@@ -208,6 +209,10 @@ def format_item_path(item, item_metadata):
     elif item['item_type'] == 'episode':
         path = config.get("show_path_formatter")
 
+    # Split composer
+    composer_full = item_metadata.get('composer', '')
+    composer_first = re.split(r' [,&;] | & |,|;', composer_full)[0].strip() if composer_full else ''
+
     item_path = path.format(
         # Universal
         service=sanitize_data(item.get('item_service')).title(),
@@ -216,8 +221,10 @@ def format_item_path(item, item_metadata):
         year=sanitize_data(item_metadata.get('release_year')),
         explicit=sanitize_data(str(config.get('explicit_label')) if item_metadata.get('explicit') else ''),
 
+
         # Audio
         artist=sanitize_data(item_metadata.get('artists')),
+        composer=sanitize_data(composer_first),
         album=sanitize_data(album),
         album_artist=sanitize_data(item_metadata.get('album_artists')),
         album_type=item_metadata.get('album_type', 'single').title(),
@@ -460,6 +467,12 @@ def embed_metadata(item, metadata):
                     command += ['-metadata', 'TEXT={}'.format(value)]
                 else:
                     command += ['-metadata', 'author={}'.format(value)]
+
+            elif key == 'composer' and config.get("embed_composer"):
+                if filetype == '.mp3':
+                    command += ['-metadata', 'TCOM={}'.format(value)]
+                else:
+                    command += ['-metadata', 'composer={}'.format(value)]
 
             elif key == 'label' and config.get("embed_label"):
                 if filetype in ['.flac', '.ogg', '.opus']:
@@ -723,6 +736,7 @@ def add_to_m3u_file(item, item_metadata):
         service=item.get('item_service').title(),
         service_id=str(item.get('item_id')),
         artist=item_metadata.get('artists'),
+        composer=item_metadata.get('composer'),
         album=item_metadata.get('album_name'),
         album_artist=item_metadata.get('album_artists'),
         album_type=item_metadata.get('album_type', 'single').title(),
