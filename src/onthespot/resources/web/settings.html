@@ -618,6 +618,30 @@
                 </tr>
                 <tr>
                     <td>
+                        <label for="embed_composer">Embed Composer:</label>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="sliding_button" id="embed_composer" {% if config.embed_composer %}checked{% endif %}>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <label for="prefer_composer_as_album_artist">Prefer Composer as Album Artist:</label>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="sliding_button" id="prefer_composer_as_album_artist" {% if config.prefer_composer_as_album_artist %}checked{% endif %}>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <label for="shorten_composer_tag">Shorten Composer Tag:</label>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="sliding_button" id="shorten_composer_tag" {% if config.shorten_composer_tag %}checked{% endif %}>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
                         <label for="embed_label">Embed Label:</label>
                     </td>
                     <td>
@@ -970,6 +994,9 @@
                     embed_performers: document.getElementById('embed_performers').checked,
                     embed_producers: document.getElementById('embed_producers').checked,
                     embed_writers: document.getElementById('embed_writers').checked,
+                    embed_composer: document.getElementById('embed_composer').checked,
+                    prefer_composer_as_album_artist: document.getElementById('prefer_composer_as_album_artist').checked,
+                    shorten_composer_tag: document.getElementById('shorten_composer_tag').checked,
                     embed_label: document.getElementById('embed_label').checked,
                     embed_copyright: document.getElementById('embed_copyright').checked,
                     embed_description: document.getElementById('embed_description').checked,
@@ -1016,6 +1043,8 @@
                 const loginPassword = document.getElementById('login_password');
                 const loginButton = document.getElementById('login_button');
                 const loginNotice = document.getElementById('login_notice');
+
+                loginButton.setAttribute('onclick', 'addAccount()');
 
                 if (loginServices.value === 'apple_music') {
                     loginUsername.style.display = 'none';

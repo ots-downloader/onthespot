@@ -12,7 +12,7 @@ from librespot.zeroconf import ZeroconfServer
 from PyQt6.QtCore import QObject
 from ..otsconfig import config, cache_dir
 from ..runtimedata import get_logger, account_pool, pending, download_queue, pending_lock
-from ..utils import make_call, conv_list_format
+from ..utils import make_call, conv_list_format, get_primary_composer
 
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
@@ -605,6 +605,8 @@ def spotify_get_track_metadata(token, item_id):
         info['producers'] = conv_list_format([item for item in credits.get('producers', []) if isinstance(item, str)])
         info['writers'] = conv_list_format([item for item in credits.get('writers', []) if isinstance(item, str)])
         info['composer'] = info['writers']
+        if config.get("prefer_composer_as_album_artist") and info['composer']:
+            info['album_artists'] = get_primary_composer(info['composer'])
 
     if track_audio_data:
         key_mapping = {

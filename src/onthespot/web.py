@@ -385,3 +385,26 @@ def main():
 
 if __name__ == '__main__':
     main()
+    download_worker.start()
+
+    if config.get('enable_retry_worker'):
+        retryworker = RetryWorker()
+        retryworker.start()
+
+    fill_account_pool.wait()
+
+    if config.get('mirror_spotify_playback'):
+        mirrorplayback = MirrorSpotifyPlayback()
+        mirrorplayback.start()
+
+    cached_file_path = os.path.join(cache_dir(), 'cached_download_queue.txt')
+    if os.path.isfile(cached_file_path):
+        logger.info(f'Found cached download queue at {cached_file_path}, appending items to download queue...')
+        get_search_results(cached_file_path)
+        os.remove(cached_file_path)
+
+    app.run(host=args.host, port=args.port, debug=args.debug)
+
+
+if __name__ == '__main__':
+    main()

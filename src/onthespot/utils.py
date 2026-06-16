@@ -130,6 +130,12 @@ def conv_list_format(items):
     return (config.get('metadata_separator')).join(items)
 
 
+def get_primary_composer(composer_full):
+    if not composer_full:
+        return ''
+    return re.split(r' [,&;] | & |,|;', composer_full)[0].strip()
+
+
 def format_item_path(item, item_metadata):
     if config.get("translate_file_path"):
         name = translate(item_metadata.get('title'))
@@ -149,9 +155,11 @@ def format_item_path(item, item_metadata):
     elif item['item_type'] == 'episode':
         path = config.get("show_path_formatter")
 
-    # Split composer
+    # Audio
+    artist = sanitize_data(item_metadata.get('artists'))
     composer_full = item_metadata.get('composer', '')
-    composer_first = re.split(r' [,&;] | & |,|;', composer_full)[0].strip() if composer_full else ''
+    composer = sanitize_data(get_primary_composer(composer_full))
+    album = sanitize_data(album)
 
     item_path = path.format(
         # Universal
@@ -163,9 +171,9 @@ def format_item_path(item, item_metadata):
 
 
         # Audio
-        artist=sanitize_data(item_metadata.get('artists')),
-        composer=sanitize_data(composer_first),
-        album=sanitize_data(album),
+        artist=artist,
+        composer=composer,
+        album=album,
         album_artist=sanitize_data(item_metadata.get('album_artists')),
         album_type=item_metadata.get('album_type', 'single').title(),
         disc_number=item_metadata.get('disc_number', 1) if not config.get('use_double_digit_path_numbers') else str(item_metadata.get('disc_number', 1)).zfill(2),
@@ -378,7 +386,7 @@ def embed_metadata(item, metadata):
                     command += ['-metadata', 'discnumber={}'.format(value)]
                     command += ['-metadata', 'disctotal={}'.format(metadata['total_discs'])]
                 else:
-                    command += ['-metadata', 'disc={}/{}'.format(value, metadata['total_discs'])]
+                    command += ['-metadata', 'disk={}/{}'.format(value, metadata['total_discs'])]
 
             elif key in ['track_number', 'tracknumber'] and config.get("embed_tracknumber"):
                 if filetype in ['.flac', '.ogg', '.opus']:
@@ -409,6 +417,8 @@ def embed_metadata(item, metadata):
                     command += ['-metadata', 'author={}'.format(value)]
 
             elif key == 'composer' and config.get("embed_composer"):
+                if config.get("shorten_composer_tag"):
+                    value = get_primary_composer(value)
                 if filetype == '.mp3':
                     command += ['-metadata', 'TCOM={}'.format(value)]
                 else:

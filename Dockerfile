@@ -42,5 +42,5 @@ FROM base AS runtime
 
 COPY --from=builder /app/venv /app/venv
 
-EXPOSE 5000
-CMD ["onthespot-web", "--host", "0.0.0.0", "--port", "5000"]
+EXPOSE 6767
+CMD ["onthespot-web", "--host", "0.0.0.0", "--port", "6767"]

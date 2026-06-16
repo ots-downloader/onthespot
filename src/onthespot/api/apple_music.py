@@ -11,11 +11,54 @@ from pywidevine.license_protocol_pb2 import WidevinePsshData
 from ..constants import WVN_KEY
 from ..otsconfig import config
 from ..runtimedata import account_pool, get_logger
-from ..utils import conv_list_format, make_call
+from ..utils import conv_list_format, make_call, get_primary_composer
 
 logger = get_logger("api.apple_music")
 BASE_URL = 'https://amp-api.music.apple.com/v1'
+WEB_BASE_URL = 'https://music.apple.com'
 WVN_LICENSE_URL = "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/acquireWebPlaybackLicense"
+APPLE_MUSIC_DEVELOPER_TOKEN_REGEX = r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
+APPLE_MUSIC_DEVELOPER_TOKEN_ISSUER = 'AMPWebPlay'
+APPLE_MUSIC_DEVELOPER_TOKEN_KEY_ID = 'WebPlayKid'
+
+
+def _extract_web_player_assets(home_page):
+    asset_paths = []
+    for asset_path in re.findall(r'/(assets/(?:index|index-legacy)[^/"\'<>]+\.js)', home_page):
+        if asset_path not in asset_paths:
+            asset_paths.append(asset_path)
+
+    if not asset_paths:
+        raise ValueError("Could not find Apple Music web player JavaScript asset.")
+
+    return asset_paths
+
+
+def _extract_developer_token(index_js_page):
+    token_matches = re.findall(APPLE_MUSIC_DEVELOPER_TOKEN_REGEX, index_js_page)
+    if not token_matches:
+        raise ValueError("Could not find Apple Music developer token in web player asset.")
+
+    for token in token_matches:
+        header, payload, _signature = token.split('.')
+        try:
+            header_data = _decode_jwt_part(header)
+            payload_data = _decode_jwt_part(payload)
+        except Exception:
+            continue
+
+        if (
+            header_data.get('kid') == APPLE_MUSIC_DEVELOPER_TOKEN_KEY_ID or
+            payload_data.get('iss') == APPLE_MUSIC_DEVELOPER_TOKEN_ISSUER
+        ):
+            return token
+
+    raise ValueError("Could not identify Apple Music developer token in web player asset.")
+
+
+def _decode_jwt_part(jwt_part):
+    jwt_part += '=' * (-len(jwt_part) % 4)
+    return json.loads(base64.urlsafe_b64decode(jwt_part).decode('utf-8'))
 
 
 def apple_music_add_account(media_user_token):
@@ -56,15 +99,30 @@ def apple_music_login_user(account):
             }
         )
 
-        # Retrieve token from the homepage
-        home_page = session.get("https://music.apple.com").text
-        index_js_uri = re.search(r"/(assets/index-legacy[~-][^/\"]+.js)",home_page,).group(1)
-        index_js_page = session.get(f"https://music.apple.com/{index_js_uri}").text
-        token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
+        # Retrieve developer token from the web player assets.
+        home_page_response = session.get(WEB_BASE_URL)
+        home_page_response.raise_for_status()
+        asset_paths = _extract_web_player_assets(home_page_response.text)
+
+        token = None
+        for asset_path in asset_paths:
+            index_js_response = session.get(f"{WEB_BASE_URL}/{asset_path}")
+            index_js_response.raise_for_status()
+            try:
+                token = _extract_developer_token(index_js_response.text)
+                break
+            except ValueError:
+                logger.debug(f"Apple Music developer token not found in {asset_path}")
+
+        if not token:
+            raise ValueError("Could not find Apple Music developer token in any web player asset.")
+
         session.headers.update({"authorization": f"Bearer {token}"})
         session.params = {"l": 'en-US'}
 
-        account_data = session.get(f'{BASE_URL}/me/account?meta=subscription').json()
+        account_data_response = session.get(f'{BASE_URL}/me/account?meta=subscription')
+        account_data_response.raise_for_status()
+        account_data = account_data_response.json()
         session.cookies.update({'itua': account_data.get('meta', {}).get('subscription', {}).get('storefront')})
 
         account_pool.append({
@@ -80,7 +138,7 @@ def apple_music_login_user(account):
         })
         return True
     except Exception as e:
-        logger.error(f"Unknown Exception: {str(e)}")
+        logger.error(f"Apple Music login failed: {str(e)}")
         account_pool.append({
             "uuid": account['uuid'],
             "username": account['login']['media-user-token'],
@@ -214,6 +272,8 @@ def apple_music_get_track_metadata(session, item_id):
     info['artists'] = conv_list_format(artists)
 
     info['album_artists'] = artists[0]
+    if config.get("prefer_composer_as_album_artist") and info['composer']:
+        info['album_artists'] = get_primary_composer(info['composer'])
 
     if album_data:
         info['copyright'] = album_data.get('data', [])[0].get('attributes', {}).get('copyright')
