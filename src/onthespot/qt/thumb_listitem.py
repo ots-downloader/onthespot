@@ -4,6 +4,7 @@ from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkRepl
 from PyQt6.QtWidgets import QLabel, QHBoxLayout, QWidget
 from ..otsconfig import config
 
+
 class LabelWithThumb(QWidget):
     def __init__(self, label, thumb_url):
         super().__init__()
@@ -24,7 +25,9 @@ class LabelWithThumb(QWidget):
 
         # Create the QLabel for the pixmap
         self.image_label = QLabel(self)
-        self.image_label.setFixedSize(self.aspect_ratio, self.aspect_ratio)  # Set fixed size for the image label
+        self.image_label.setFixedSize(
+            self.aspect_ratio, self.aspect_ratio
+        )  # Set fixed size for the image label
 
         # Create QNetworkAccessManager
         self.manager = QNetworkAccessManager(self)
@@ -40,17 +43,25 @@ class LabelWithThumb(QWidget):
 
         self.setLayout(layout)
 
-
     def on_finished(self, reply: QNetworkReply):
         # This method is called when the network request is completed
-        if reply.error() == QNetworkReply.NetworkError.NoError:  # Correct error checking
+        if (
+            reply.error() == QNetworkReply.NetworkError.NoError
+        ):  # Correct error checking
             # Read the image data and create a pixmap
             image_data = reply.readAll()
             pixmap = QPixmap()
             pixmap.loadFromData(image_data)
 
-            scaled_pixmap = pixmap.scaled(self.aspect_ratio, self.aspect_ratio, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            self.image_label.setPixmap(scaled_pixmap)  # Update the QLabel with the pixmap
+            scaled_pixmap = pixmap.scaled(
+                self.aspect_ratio,
+                self.aspect_ratio,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self.image_label.setPixmap(
+                scaled_pixmap
+            )  # Update the QLabel with the pixmap
 
         # Mark request for deletion
         self.manager.deleteLater()

@@ -37,7 +37,7 @@ class Config:
         self.session_uuid = str(uuid.uuid4())
         self.__template_data = {
             # System Variables
-            "version": "v1.2.2",  # Application version
+            "version": "v1.8.0",  # Application version
             "debug_mode": False,  # Enable debug mode
             "language_index": 0,  # Language Index
             "total_downloaded_items": 0,  # Total downloaded items
@@ -52,14 +52,6 @@ class Config:
                     "uuid": "public_bandcamp",
                     "service": "bandcamp",
                     "active": True,
-                },
-                {
-                    "uuid": "public_deezer",
-                    "service": "deezer",
-                    "active": True,
-                    "login": {
-                        "arl": "public_deezer",
-                    },
                 },
                 {
                     "uuid": "public_soundcloud",
@@ -77,8 +69,8 @@ class Config:
                     "active": True,
                 },
                 {
-                    "uuid": "public_crunchyroll",
-                    "service": "crunchyroll",
+                    "uuid": "public_generic",
+                    "service": "generic",
                     "active": True,
                 },
             ],  # Saved account information
@@ -142,7 +134,7 @@ class Config:
             "f_search_artists": False,  # Enable filtered Artists search
             "f_search_playlists": False,  # Enable filtered Playlists search
             # Search Prefix Settings
-            "search_prefix": "the" ,
+            "search_prefix": "the",
             # Download Queue Filter Settings
             "download_queue_show_waiting": True,  # Enable listed filter in download queue
             "download_queue_show_failed": True,  # Enable listed filter in download queue
@@ -287,7 +279,7 @@ class Config:
         self.app_root = os.path.dirname(os.path.realpath(__file__))
         ffmpeg_path_candidates = [
             os.environ.get("FFMPEG_PATH", ""),  # ENV
-            shutil.which("ffmpeg") or "",        # SYSTEM PATH
+            shutil.which("ffmpeg") or "",  # SYSTEM PATH
             "/usr/bin/ffmpeg",  # UNIX
             "/opt/homebrew/bin/ffmpeg",  # MACOS ARM
             "/usr/local/bin/ffmpeg",  # MACOS INTEL
@@ -304,7 +296,7 @@ class Config:
             print(
                 "Failed to find ffmpeg binary, please consider installing ffmpeg or defining its path by setting FFMPEG_PATH."
             )
-        
+
         print(f"FFMPEG Binary: {ffmpeg_path}")
         self.set("_ffmpeg_bin_path", ffmpeg_path)
         self.set(

@@ -8,7 +8,19 @@ logger = get_logger("worker.utility")
 
 
 class DownloadActionsButtons(QWidget):
-    def __init__(self, local_id, item_metadata, pbar, copy_btn, cancel_btn, retry_btn, open_btn, locate_btn, delete_btn, parent=None):
+    def __init__(
+        self,
+        local_id,
+        item_metadata,
+        pbar,
+        copy_btn,
+        cancel_btn,
+        retry_btn,
+        open_btn,
+        locate_btn,
+        delete_btn,
+        parent=None,
+    ):
         super(DownloadActionsButtons, self).__init__(parent)
         self.local_id = local_id
         self.item_metadata = item_metadata
@@ -40,44 +52,40 @@ class DownloadActionsButtons(QWidget):
             layout.addWidget(delete_btn)
         self.setLayout(layout)
 
-
     def copy_link(self):
-        QApplication.clipboard().setText(self.item_metadata['item_url'])
-
+        QApplication.clipboard().setText(self.item_metadata["item_url"])
 
     def cancel_item(self):
-        download_queue[self.local_id]['item_status'] = "Cancelled"
-        download_queue[self.local_id]['gui']['status_label'].setText(self.tr("Cancelled"))
-        download_queue[self.local_id]['gui']['progress_bar'].setValue(0)
+        download_queue[self.local_id]["item_status"] = "Cancelled"
+        download_queue[self.local_id]["gui"]["status_label"].setText(
+            self.tr("Cancelled")
+        )
+        download_queue[self.local_id]["gui"]["progress_bar"].setValue(0)
         self.cancel_btn.hide()
         self.retry_btn.show()
 
-
     def retry_item(self):
-        download_queue[self.local_id]['item_status'] = "Waiting"
-        download_queue[self.local_id]['gui']['status_label'].setText(self.tr("Waiting"))
-        download_queue[self.local_id]['gui']['progress_bar'].setValue(0)
+        download_queue[self.local_id]["item_status"] = "Waiting"
+        download_queue[self.local_id]["gui"]["status_label"].setText(self.tr("Waiting"))
+        download_queue[self.local_id]["gui"]["progress_bar"].setValue(0)
         self.retry_btn.hide()
         self.cancel_btn.show()
 
-
     def open_file(self):
-        file_path = download_queue[self.local_id]['file_path']
+        file_path = download_queue[self.local_id]["file_path"]
         file = os.path.abspath(file_path)
         open_item(file)
 
-
     def locate_file(self):
-        file_path = download_queue[self.local_id]['file_path']
+        file_path = download_queue[self.local_id]["file_path"]
         file_dir = os.path.dirname(file_path)
         open_item(file_dir)
 
-
     def delete_file(self):
-        file_path = download_queue[self.local_id]['file_path']
+        file_path = download_queue[self.local_id]["file_path"]
         file = os.path.abspath(file_path)
         os.remove(file)
-        download_queue[self.local_id]["item_status"] = 'Deleted'
+        download_queue[self.local_id]["item_status"] = "Deleted"
         download_queue[self.local_id]["gui"]["status_label"].setText(self.tr("Deleted"))
         self.open_btn.hide()
         self.locate_btn.hide()
