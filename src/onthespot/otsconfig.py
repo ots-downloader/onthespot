@@ -338,63 +338,67 @@ class Config:
         self.__config = self.__template_data
 
     def migration(self):
-        if int(self.get("version").replace("v", "").replace(".", "")) < int(
-            self.__template_data.get("version").replace("v", "").replace(".", "")
-        ):
-            old_config_path = os.path.join(config_dir(), "config.json")
-            if os.path.exists(old_config_path):
-                os.remove(old_config_path)
-
-            # Migration (>v1.0.3)
-            if isinstance(self.get("file_hertz"), str):
-                self.set("file_hertz", int(self.get("file_hertz")))
-
-            # Migration (>v1.0.4)
-            if self.get("theme") == "dark":
-                self.set("theme", f"background-color: #282828; color: white;")
-            elif self.get("theme") == "light":
-                self.set("theme", f"background-color: white; color: black;")
-
-            # Migration (>v1.0.5)
-            cfg_copy = self.get("accounts").copy()
-            for account in cfg_copy:
-                if account["uuid"] == "public_youtube":
-                    account["uuid"] = "public_youtube_music"
-                    account["service"] = "youtube_music"
-            self.set("accounts", cfg_copy)
-
-            # Migration (>v1.0.7)
-            if int(self.get("version").replace("v", "").replace(".", "")) < 110:
-                updated_keys = [
-                    ("active_account_number", "parsing_acc_sn"),
-                    ("thumbnail_size", "search_thumb_height"),
-                    ("disable_download_popups", "disable_bulk_dl_notices"),
-                    ("raw_media_download", "force_raw"),
-                    ("download_chunk_size", "chunk_size"),
-                    ("rotate_active_account_number", "rotate_acc_sn"),
-                    ("audio_download_path", "download_root"),
-                    ("track_file_format", "media_format"),
-                    ("podcast_file_format", "podcast_media_format"),
-                    ("video_download_path", "generic_download_root"),
-                    ("create_m3u_file", "create_m3u_playlists"),
-                    ("m3u_path_formatter", "m3u_name_formatter"),
-                    ("enable_search_podcasts", "enable_search_shows"),
-                    ("extinf_separator", "ext_seperator"),
-                    ("extinf_label", "ext_path"),
-                    ("download_lyrics", "inp_enable_lyrics"),
-                    ("save_lrc_file", "use_lrc_file"),
-                    ("only_download_synced_lyrics", "only_synced_lyrics"),
-                    ("preferred_video_resolution", "maximum_generic_resolution"),
-                    ("use_custom_file_bitrate", True),
-                ]
-                for key in updated_keys:
-                    value = self.get(key[1])
-                    if value:
-                        self.set(key[0], value)
-                        self.__config.pop(key[1])
-
-            self.set("version", self.__template_data.get("version"))
-            self.save()
+        try:
+            #very old migration, not really used anymore throw error if version isn't numeric only
+            if int(self.get("version").replace("v", "").replace(".", "")) < int(
+                self.__template_data.get("version").replace("v", "").replace(".", "")
+            ):
+                old_config_path = os.path.join(config_dir(), "config.json")
+                if os.path.exists(old_config_path):
+                    os.remove(old_config_path)
+    
+                # Migration (>v1.0.3)
+                if isinstance(self.get("file_hertz"), str):
+                    self.set("file_hertz", int(self.get("file_hertz")))
+    
+                # Migration (>v1.0.4)
+                if self.get("theme") == "dark":
+                    self.set("theme", f"background-color: #282828; color: white;")
+                elif self.get("theme") == "light":
+                    self.set("theme", f"background-color: white; color: black;")
+    
+                # Migration (>v1.0.5)
+                cfg_copy = self.get("accounts").copy()
+                for account in cfg_copy:
+                    if account["uuid"] == "public_youtube":
+                        account["uuid"] = "public_youtube_music"
+                        account["service"] = "youtube_music"
+                self.set("accounts", cfg_copy)
+    
+                # Migration (>v1.0.7)
+                if int(self.get("version").replace("v", "").replace(".", "")) < 110:
+                    updated_keys = [
+                        ("active_account_number", "parsing_acc_sn"),
+                        ("thumbnail_size", "search_thumb_height"),
+                        ("disable_download_popups", "disable_bulk_dl_notices"),
+                        ("raw_media_download", "force_raw"),
+                        ("download_chunk_size", "chunk_size"),
+                        ("rotate_active_account_number", "rotate_acc_sn"),
+                        ("audio_download_path", "download_root"),
+                        ("track_file_format", "media_format"),
+                        ("podcast_file_format", "podcast_media_format"),
+                        ("video_download_path", "generic_download_root"),
+                        ("create_m3u_file", "create_m3u_playlists"),
+                        ("m3u_path_formatter", "m3u_name_formatter"),
+                        ("enable_search_podcasts", "enable_search_shows"),
+                        ("extinf_separator", "ext_seperator"),
+                        ("extinf_label", "ext_path"),
+                        ("download_lyrics", "inp_enable_lyrics"),
+                        ("save_lrc_file", "use_lrc_file"),
+                        ("only_download_synced_lyrics", "only_synced_lyrics"),
+                        ("preferred_video_resolution", "maximum_generic_resolution"),
+                        ("use_custom_file_bitrate", True),
+                    ]
+                    for key in updated_keys:
+                        value = self.get(key[1])
+                        if value:
+                            self.set(key[0], value)
+                            self.__config.pop(key[1])
+    
+                self.set("version", self.__template_data.get("version"))
+                self.save()
+        except Exception:
+            logger.error("can't migrate config")
 
         # Language
         if self.get("language_index") == 0:
