@@ -862,11 +862,11 @@ def spotify_get_track_metadata(token, item_id):
     else:
         credits_data = ""
 
-    track_data = make_call(f"{BASE_URL}/tracks?ids={item_id}", headers=headers)
     time.sleep(config.get("api_request_delay", 0.1))
     call_num += 1
 
     # Use embedded album data (album_type, name, images, total_tracks already available)
+
     album_data = track_data.get("tracks", [])[0].get("album", {})
 
     # Artists
