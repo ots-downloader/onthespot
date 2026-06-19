@@ -90,6 +90,7 @@ class RetryWorker(QObject):
     """
 
     progress = pyqtSignal(dict, str, int)
+    item_reset = pyqtSignal(dict)
 
     def __init__(self, gui: bool = False) -> None:
         super().__init__()
@@ -116,9 +117,7 @@ class RetryWorker(QObject):
                         if item["item_status"] == ItemStatus.FAILED:
                             item["item_status"] = ItemStatus.WAITING
                             if self.gui:
-                                item["gui"]["status_label"].setText(self.tr("Waiting"))
-                                item["gui"]["btn"]["cancel"].show()
-                                item["gui"]["btn"]["retry"].hide()
+                                self.item_reset.emit(item)
 
             delay_minutes = config.get("retry_worker_delay")
             if delay_minutes > 0:
@@ -181,12 +180,13 @@ class DownloadWorker(QObject):
 
     def _yt_dlp_progress_hook(self, item: dict, progress_info: dict) -> None:
         """Hook passed to yt-dlp to forward download progress to the GUI."""
-        current = item["gui"]["progress_bar"].value()
+        current = item.get("progress", 0)
         match = re.search(r"(\d+\.\d+)%", progress_info["_percent_str"])
         if not match:
             return
         new_value = round(float(match.group(1))) - 1
         if new_value >= current:
+            item["progress"] = new_value
             self.progress.emit(item, self.tr("Downloading"), new_value)
         if item["item_status"] == ItemStatus.CANCELLED:
             raise Exception("Download cancelled by user.")

@@ -172,17 +172,21 @@ def format_local_id(item_id):
 # ---------------------------------------------------------------------------
 
 
+def _version_to_int(version):
+    match = re.match(r"[\d.]+", str(version).lower().lstrip("v"))
+    digits = match.group(0).replace(".", "") if match else ""
+    return int(digits) if digits else 0
+
+
 def is_latest_release():
     """Return ``True`` if the running version is the latest GitHub release."""
     url = "https://api.github.com/repos/justin025/onthespot/releases/latest"
     response = requests.get(url)
     if response.status_code == 200:
-        current_version = config.get("version").replace("v", "").replace(".", "")
-        latest_version = response.json()["name"].replace("v", "").replace(".", "")
-        if int(latest_version) > int(current_version):
-            logger.info(
-                f"Update Available: {int(latest_version)} > {int(current_version)}"
-            )
+        current_version = _version_to_int(config.get("version"))
+        latest_version = _version_to_int(response.json()["name"])
+        if latest_version > current_version:
+            logger.info(f"Update Available: {latest_version} > {current_version}")
             return False
     return True
 
@@ -387,10 +391,13 @@ def convert_audio_format(filename, bitrate, default_format):
         # Run subprocess with CREATE_NO_WINDOW flag on Windows
         if os.name == "nt":
             subprocess.check_call(
-                command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+                command,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
-            subprocess.check_call(command, shell=False)
+            subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
         os.remove(temp_name)
 
 
@@ -472,10 +479,13 @@ def convert_video_format(item, output_path, output_format, video_files, item_met
     # Run subprocess with CREATE_NO_WINDOW flag on Windows
     if os.name == "nt":
         subprocess.check_call(
-            command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+            command,
+            shell=False,
+            stdin=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
     else:
-        subprocess.check_call(command, shell=False)
+        subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
 
     for file in video_files:
         if os.path.exists(file["path"]):
@@ -734,10 +744,13 @@ def embed_metadata(item, metadata):
         # Run subprocess with CREATE_NO_WINDOW flag on Windows
         if os.name == "nt":
             subprocess.check_call(
-                command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+                command,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
-            subprocess.check_call(command, shell=False)
+            subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
         os.remove(temp_name)
 
 
@@ -821,10 +834,13 @@ def set_music_thumbnail(filename, metadata):
                 )
                 if os.name == "nt":
                     subprocess.check_call(
-                        command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+                        command,
+                        shell=False,
+                        stdin=subprocess.DEVNULL,
+                        creationflags=subprocess.CREATE_NO_WINDOW,
                     )
                 else:
-                    subprocess.check_call(command, shell=False)
+                    subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
 
             elif config.get("embed_cover") and filetype == ".ogg":
                 with open(image_path, "rb") as image_file:
@@ -997,10 +1013,13 @@ def strip_metadata(item):
         # Run subprocess with CREATE_NO_WINDOW flag on Windows
         if os.name == "nt":
             subprocess.check_call(
-                command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+                command,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
-            subprocess.check_call(command, shell=False)
+            subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
         os.remove(temp_name)
 
 
