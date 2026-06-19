@@ -391,10 +391,13 @@ def convert_audio_format(filename, bitrate, default_format):
         # Run subprocess with CREATE_NO_WINDOW flag on Windows
         if os.name == "nt":
             subprocess.check_call(
-                command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+                command,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
-            subprocess.check_call(command, shell=False)
+            subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
         os.remove(temp_name)
 
 
@@ -476,10 +479,13 @@ def convert_video_format(item, output_path, output_format, video_files, item_met
     # Run subprocess with CREATE_NO_WINDOW flag on Windows
     if os.name == "nt":
         subprocess.check_call(
-            command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+            command,
+            shell=False,
+            stdin=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
     else:
-        subprocess.check_call(command, shell=False)
+        subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
 
     for file in video_files:
         if os.path.exists(file["path"]):
@@ -738,10 +744,13 @@ def embed_metadata(item, metadata):
         # Run subprocess with CREATE_NO_WINDOW flag on Windows
         if os.name == "nt":
             subprocess.check_call(
-                command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+                command,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
-            subprocess.check_call(command, shell=False)
+            subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
         os.remove(temp_name)
 
 
@@ -825,10 +834,13 @@ def set_music_thumbnail(filename, metadata):
                 )
                 if os.name == "nt":
                     subprocess.check_call(
-                        command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+                        command,
+                        shell=False,
+                        stdin=subprocess.DEVNULL,
+                        creationflags=subprocess.CREATE_NO_WINDOW,
                     )
                 else:
-                    subprocess.check_call(command, shell=False)
+                    subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
 
             elif config.get("embed_cover") and filetype == ".ogg":
                 with open(image_path, "rb") as image_file:
@@ -1001,10 +1013,13 @@ def strip_metadata(item):
         # Run subprocess with CREATE_NO_WINDOW flag on Windows
         if os.name == "nt":
             subprocess.check_call(
-                command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+                command,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
-            subprocess.check_call(command, shell=False)
+            subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
         os.remove(temp_name)
 
 
@@ -1021,4 +1036,3 @@ def format_bytes(size):
         size /= 1024
         index += 1
     return f"{size:.2f} {units[index]}"
-
