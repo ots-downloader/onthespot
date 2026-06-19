@@ -26,6 +26,7 @@ import subprocess
 import threading
 import time
 from hashlib import md5
+from urllib.parse import urlparse
 from io import BytesIO
 from PIL import Image
 from mutagen.flac import Picture
@@ -44,6 +45,22 @@ logger = get_logger("utils")
 # Serialises outbound API requests across all worker threads so that a single
 # global rate-limit applies rather than each thread racing independently.
 _api_request_lock = threading.Lock()
+
+# Per-host request locks: serialise dispatch to each API host independently so a
+# burst of concurrent calls to one service can't trip its rate limit, while
+# unrelated services (Apple Music, Bandcamp, Deezer, ...) keep running concurrently.
+_api_host_locks = {}
+_api_host_locks_guard = threading.Lock()
+
+
+def _get_host_lock(url):
+    host = urlparse(url).netloc
+    with _api_host_locks_guard:
+        lock = _api_host_locks.get(host)
+        if lock is None:
+            lock = threading.Lock()
+            _api_host_locks[host] = lock
+        return lock
 
 
 class SSLAdapter(requests.adapters.HTTPAdapter):
@@ -125,88 +142,18 @@ def make_call(
         ctx.verify_mode = ssl.CERT_REQUIRED
         session.mount("https://", SSLAdapter(ssl_context=ctx))
 
-    # Retry logic with exponential backoff
-    max_retries = config.get("api_retry_max_attempts", 3)
-    base_delay = config.get("api_retry_base_delay", 2)
-    max_delay = config.get("api_retry_max_delay", 60)
+    response = session.get(url, headers=headers, params=params)
 
-    # Use global lock to serialize API requests across all workers
-    # This ensures only one request happens at a time and rate limits are respected globally
-    with _api_request_lock:
-        for attempt in range(max_retries):
-            try:
-                response = session.get(url, headers=headers, params=params, timeout=30)
-
-                # Handle rate limiting (429)
-                if response.status_code == 429:
-                    # Check for Retry-After header
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after and retry_after.isdigit():
-                        delay = int(retry_after) + 1  # Add 1 second buffer
-                        logger.warning(
-                            f"Rate limited (429) on {url}. Retry-After header: {delay}s. Retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
-                        )
-                    else:
-                        # Exponential backoff: 2^attempt * base_delay
-                        delay = min((2**attempt) * base_delay, max_delay)
-                        logger.warning(
-                            f"Rate limited (429) on {url}. No Retry-After header, using exponential backoff. Retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
-                        )
-
-                    time.sleep(delay)
-                    continue
-
-                # Handle server errors with retry (500, 502, 503, 504)
-                elif response.status_code in (500, 502, 503, 504):
-                    delay = min((2**attempt) * base_delay, max_delay)
-                    logger.warning(
-                        f"Server error ({response.status_code}) on {url}. Retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
-                    )
-                    time.sleep(delay)
-                    continue
-                # Handle not found (404) - don't retry
-                elif response.status_code == 404:
-                    error_msg = f"Not found (404) for {url}"
-                    logger.error(error_msg)
-                    raise requests.exceptions.RequestException(error_msg)
-
-                # Success - cache and return
-                elif response.status_code == 200:
-                    if not skip_cache:
-                        with open(req_cache_file, "w", encoding="utf-8") as cf:
-                            cf.write(response.text)
-                        logger.info(
-                            f"[CACHE WRITE] Stored to cache | URL: {url} | MD5: {request_key} | File: {req_cache_file}"
-                        )
-                    if text:
-                        return response.text
-                    return json.loads(response.text)
-
-                # Other errors - don't retry
-                else:
-                    logger.info(f"Request error {response.status_code}: {url}")
-                    return None
-
-            except requests.exceptions.Timeout:
-                delay = min((2**attempt) * base_delay, max_delay)
-                logger.warning(
-                    f"Timeout on {url}. Retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
-                )
-                time.sleep(delay)
-                continue
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Request exception on {url}: {str(e)}")
-                raise e
-
-        # All retries exhausted - raise exception so it's properly handled
-        error_msg = f"Max retries ({max_retries}) exhausted for {url}"
-        logger.error(error_msg)
-        raise requests.exceptions.RequestException(error_msg)
-
-
-# ---------------------------------------------------------------------------
-# Queue helpers
-# ---------------------------------------------------------------------------
+    if response.status_code == 200:
+        if not skip_cache:
+            with open(req_cache_file, "w", encoding="utf-8") as cf:
+                cf.write(response.text)
+        if text:
+            return response.text
+        return json.loads(response.text)
+    else:
+        logger.info(f"Request status error {response.status_code}: {url}")
+        return None
 
 
 def format_local_id(item_id):

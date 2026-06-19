@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 import uuid
 
 
@@ -37,7 +36,7 @@ class Config:
         self.session_uuid = str(uuid.uuid4())
         self.__template_data = {
             # System Variables
-            "version": "v1.8.0",  # Application version
+            "version": "v1.1.4",  # Application version
             "debug_mode": False,  # Enable debug mode
             "language_index": 0,  # Language Index
             "total_downloaded_items": 0,  # Total downloaded items
@@ -52,6 +51,14 @@ class Config:
                     "uuid": "public_bandcamp",
                     "service": "bandcamp",
                     "active": True,
+                },
+                {
+                    "uuid": "public_deezer",
+                    "service": "deezer",
+                    "active": True,
+                    "login": {
+                        "arl": "public_deezer",
+                    },
                 },
                 {
                     "uuid": "public_soundcloud",
@@ -69,8 +76,8 @@ class Config:
                     "active": True,
                 },
                 {
-                    "uuid": "public_generic",
-                    "service": "generic",
+                    "uuid": "public_crunchyroll",
+                    "service": "crunchyroll",
                     "active": True,
                 },
             ],  # Saved account information
@@ -99,28 +106,17 @@ class Config:
             "raw_media_download": False,  # Skip media conversion and metadata writing
             "rotate_active_account_number": False,  # Rotate active account for parsing and downloading tracks
             "download_delay": 3,  # Seconds to wait before next download attempt
-            "download_delay_variance": 0,  # Random ± variance in seconds applied to download delay
             "download_chunk_size": 50000,  # Chunk size in bytes to download in
+            "api_request_delay": 0.1,  # Seconds to wait between consecutive metadata API calls to avoid rate limiting
+            "api_retry_max_attempts": 3,  # Max attempts for a metadata API call before giving up (handles 429/5xx)
+            "api_retry_base_delay": 2,  # Base seconds for exponential backoff between API retries
+            "api_retry_max_delay": 60,  # Maximum seconds to wait for a single API retry backoff
+            "spotify_webapi_override_client_id": "",  # Optional: your own Spotify app Client ID for Web API calls (avoids shared-client 429 rate limits)
+            "spotify_webapi_override_client_secret": "",  # Optional: your own Spotify app Client Secret (used with the Client ID above)
             "maximum_queue_workers": 1,  # Maximum number of queue workers
             "maximum_download_workers": 1,  # Maximum number of download workers
             "enable_retry_worker": False,  # Enable retry worker, automatically retries failed downloads after a set time
             "retry_worker_delay": 10,  # Amount of time to wait before retrying failed downloads, in minutes
-            "api_retry_max_attempts": 3,  # Max retries on rate limit (429)
-            "api_retry_base_delay": 2,  # Base delay for exponential backoff (seconds)
-            "api_retry_max_delay": 60,  # Max delay between retries (seconds)
-            "api_request_delay": 0.1,  # Delay between consecutive API calls (seconds)
-            # Spotify Web API Override Credentials (for debugging only)
-            # These credentials override the default librespot token authentication for Web API calls.
-            # Use when debugging metadata retrieval issues. Create personal tokens for yourself only.
-            # WARNING: Overuse can result in Spotify banning your account!
-            "spotify_webapi_override_client_id": "",  # Your personal Spotify app client ID
-            "spotify_webapi_override_client_secret": "",  # Your personal Spotify app client secret
-            # API Call Reduction - Metadata Fetching Options
-            "cache_metadata_in_queue": True,  # Pass metadata from QueueWorker to DownloadWorker (50% reduction)
-            "fetch_genre_metadata": True,  # Fetch genre from artist endpoint (adds 1 API call per track)
-            "fetch_extended_album_metadata": True,  # Fetch label, copyright (adds 1 API call per track)
-            "fetch_audio_features": True,  # Fetch BPM, key, danceability (adds 1 API call per track)
-            "fetch_track_credits": True,  # Fetch producers, writers (adds 1 API call per track)
             # Search Settings
             "enable_search_tracks": True,  # Enable listed category in search
             "enable_search_albums": True,  # Enable listed category in search
@@ -129,12 +125,6 @@ class Config:
             "enable_search_episodes": True,  # Enable listed category in search
             "enable_search_podcasts": True,  # Enable listed category in search
             "enable_search_audiobooks": True,  # Enable listed category in search
-            "f_search_tracks": False,  # Enable filtered Tracks search
-            "f_search_albums": False,  # Enable filtered Albums search
-            "f_search_artists": False,  # Enable filtered Artists search
-            "f_search_playlists": False,  # Enable filtered Playlists search
-            # Search Prefix Settings
-            "search_prefix": "the",
             # Download Queue Filter Settings
             "download_queue_show_waiting": True,  # Enable listed filter in download queue
             "download_queue_show_failed": True,  # Enable listed filter in download queue
@@ -197,7 +187,6 @@ class Config:
             "embed_performers": True,
             "embed_producers": True,
             "embed_writers": True,
-            "embed_composer": True,
             "embed_label": True,
             "embed_copyright": True,
             "embed_description": True,
@@ -279,7 +268,6 @@ class Config:
         self.app_root = os.path.dirname(os.path.realpath(__file__))
         ffmpeg_path_candidates = [
             os.environ.get("FFMPEG_PATH", ""),  # ENV
-            shutil.which("ffmpeg") or "",  # SYSTEM PATH
             "/usr/bin/ffmpeg",  # UNIX
             "/opt/homebrew/bin/ffmpeg",  # MACOS ARM
             "/usr/local/bin/ffmpeg",  # MACOS INTEL
@@ -287,6 +275,8 @@ class Config:
                 self.app_root, "bin", "ffmpeg", "ffmpeg" + self.ext_
             ),  # BUNDLED
         ]
+        # Initialise before the loop so that a no-match doesn't raise
+        # UnboundLocalError on the `if not ffmpeg_path` check below.
         ffmpeg_path = ""
         for path in ffmpeg_path_candidates:
             if os.path.isfile(path) and os.access(path, os.X_OK):
@@ -296,7 +286,7 @@ class Config:
             print(
                 "Failed to find ffmpeg binary, please consider installing ffmpeg or defining its path by setting FFMPEG_PATH."
             )
-
+            ffmpeg_path = ""
         print(f"FFMPEG Binary: {ffmpeg_path}")
         self.set("_ffmpeg_bin_path", ffmpeg_path)
         self.set(

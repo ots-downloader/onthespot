@@ -198,7 +198,13 @@ class CLI(Cmd):
         if len(parts) > 1 and parts[0] == "set":
             try:
                 key, value = parts[1].split(maxsplit=1)
-                if key in config.__dict__["_Config__config"]:
+                # Accept keys from the default template too, so newly added
+                # options (e.g. the Spotify Web API override credentials) are
+                # settable even before they exist in a pre-existing config file.
+                if (
+                    key in config.__dict__["_Config__config"]
+                    or key in config.__dict__["_Config__template_data"]
+                ):
                     try:
                         if value.lower() in ["true", "false"]:
                             value = value.lower() == "true"
@@ -498,6 +504,14 @@ class CLI(Cmd):
         )
         print(
             f"  \033[36mAdditional options can be found at {config_dir()}{os.path.sep}otsconfig.json\033[0m"
+        )
+        print(
+            "\033[32mFix Spotify rate-limited search/downloads with your own Spotify app credentials:\033[0m"
+        )
+        print("  set spotify_webapi_override_client_id <your-client-id>")
+        print("  set spotify_webapi_override_client_secret <your-client-secret>")
+        print(
+            "  \033[36m(create a free app at https://developer.spotify.com/dashboard - Premium required)\033[0m"
         )
 
     def do_search(self, arg):

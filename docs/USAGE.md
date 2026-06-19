@@ -35,6 +35,27 @@ OnTheSpot supports various accounts and instructions for each are listed below, 
 
 - **Spotify**: Ensure that both OnTheSpot and the Spotify Desktop App are not restricted by a firewall or vpn so that they can communicate. Click add account and then head over to devices in the Spotify app. Under devices you should see 'OnTheSpot', select it. Once complete the app will prompt you to restart.
 
+   > [!IMPORTANT]
+   > **Spotify Web API credentials are strongly recommended** (and in practice
+   > required if you hit rate limits). Spotify rate-limits the shared login that
+   > OnTheSpot uses for its Web API (search and metadata) calls, returning
+   > `HTTP 429` errors. Adding your own free Spotify app credentials runs those
+   > calls on your own quota. If you leave the fields empty, OnTheSpot falls back
+   > to the default shared login (which is frequently rate-limited):
+   >
+   > 1. Open the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and log in. Spotify's Feb 2026 Developer Mode rules may require a **Premium** account to create an app.
+   > 2. Click **Create app**. Give it any name/description, set the **Redirect URI** to `http://127.0.0.1:8888/callback`, tick **Web API**, and save.
+   > 3. Open the app's **Settings** and copy the **Client ID** and **Client Secret**.
+   > 4. Add the credentials in OnTheSpot:
+   >    - **Desktop GUI / Web UI:** go to **Settings → Spotify Web API Credentials**, paste both values, and **Save Settings**.
+   >    - **CLI:** run `config set spotify_webapi_override_client_id <id>` then `config set spotify_webapi_override_client_secret <secret>`.
+   >
+   > These credentials are personal — do not share them. Leaving the fields empty
+   > falls back to the default (rate-limited) login. This path covers search and
+   > track/album/artist/playlist/podcast downloads; **Liked Songs** and **Your
+   > Episodes** are not available through it, as the credentials have no access to
+   > your private library.
+
 - **Tidal**: The app will provide you a link, open the link and login in your browser.
 
 - **Youtube Music**: Youtube Music offers public downloads and does not require an account, simply click 'Add Youtube Music Account' and restart the app.
@@ -72,6 +93,7 @@ If a file path is provided the app will parse each line in the file for urls beg
 | **Check for Updates** | Automatically check for application updates. |
 | **Illegal Character Replacement** | Replace illegal characters in the filepath with the value specified (e.g., `/`, `\`, `<`, `>`, `*`, etc.). |
 | **Rotate Active Account** | Automatically rotate between added accounts for downloading to minimize the chance of hitting rate limits. |
+| **Spotify Web API Credentials** | Optional (but recommended) Client ID / Client Secret from your own [Spotify Developer app](https://developer.spotify.com/dashboard). Spotify rate-limits the shared login, so supplying your own credentials runs search/metadata calls on your own quota. See the Spotify entry under [Logging into your accounts](#1-logging-into-your-accounts) for the full setup. |
 | **Raw Media Download** | Downloads an unmodified file from whatever service is selected. With this enabled file conversion and the embedding of any metadata is skipped. Lyrics and cover art will still be downloaded. |
 | **Download Delay (s)** | The time, in seconds, to wait before initiating the next download. Helps prevent rate limits. |
 | **Download Delay Variance (±s)** | Random variance applied to the download delay. For example, with a delay of 60s and variance of 30s, each download will wait between 30–90 seconds. Set to 0 to disable. |

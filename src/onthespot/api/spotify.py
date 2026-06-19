@@ -24,121 +24,107 @@ from ..utils import make_call, conv_list_format
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
 
-# OAuth token cache (for Client Credentials flow)
-_oauth_token_cache = {"access_token": None, "expires_at": 0}
+# Cache for the Client-Credentials OAuth token (keyed by client id + expiry so
+# changing the credentials in Settings takes effect immediately).
+_oauth_token_cache = {"access_token": None, "expires_at": 0, "client_id": None}
+_oauth_token_lock = threading.Lock()
 
 
 def spotify_get_oauth_token():
-    """
-    Get OAuth access token using Client Credentials flow.
-    Uses your own Spotify app credentials instead of librespot tokens.
-    Recommended for Web API calls to avoid 429 rate limiting.
+    """Return an OAuth access token via the Client-Credentials flow using the
+    user's own Spotify app credentials, or None if they aren't configured.
 
-    Returns OAuth access token string, or None if not configured/failed.
-    """
-    # Return cached token if still valid
-    if (
-        _oauth_token_cache["access_token"]
-        and time.time() < _oauth_token_cache["expires_at"]
-    ):
-        logger.debug("Using cached OAuth token")
-        return _oauth_token_cache["access_token"]
-
-    # Get credentials from config
-    client_id = config.get("spotify_webapi_override_client_id", "").strip()
-    client_secret = config.get("spotify_webapi_override_client_secret", "").strip()
-
+    The default librespot token rides on Spotify's shared first-party client id,
+    which is now hard rate-limited (HTTP 429). Supplying your own client id/secret
+    gives Web API calls their own quota. Catalog endpoints only - this token has
+    no user context, so it can't read /me/* (liked songs, your episodes)."""
+    # str() guards against the CLI / web settings coercing an all-digit value to int.
+    client_id = str(config.get("spotify_webapi_override_client_id", "") or "").strip()
+    client_secret = str(
+        config.get("spotify_webapi_override_client_secret", "") or ""
+    ).strip()
     if not client_id or not client_secret:
-        logger.debug(
-            "Web API override credentials not configured, will use librespot token instead"
-        )
         return None
 
-    # Encode credentials for Basic Auth
-    credentials = f"{client_id}:{client_secret}"
-    credentials_b64 = base64.b64encode(credentials.encode()).decode()
+    with _oauth_token_lock:
+        if (
+            _oauth_token_cache["access_token"]
+            and _oauth_token_cache["client_id"] == client_id
+            and time.time() < _oauth_token_cache["expires_at"]
+        ):
+            return _oauth_token_cache["access_token"]
 
-    # Request token using Client Credentials flow
-    token_url = "https://accounts.spotify.com/api/token"
-    headers = {
-        "Authorization": f"Basic {credentials_b64}",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
-    data = {"grant_type": "client_credentials"}
-
-    try:
-        logger.info("[OAUTH] Requesting new access token from Spotify")
-        response = requests.post(token_url, headers=headers, data=data, timeout=10)
-
-        if response.status_code == 200:
-            token_data = response.json()
-            access_token = token_data["access_token"]
-            expires_in = token_data[
-                "expires_in"
-            ]  # Seconds until expiration (usually 3600)
-
-            # Cache token with 5 minute buffer before expiration
-            _oauth_token_cache["access_token"] = access_token
-            _oauth_token_cache["expires_at"] = time.time() + expires_in - 300
-
-            logger.info(
-                f"[OAUTH] Successfully obtained access token (expires in {expires_in}s)"
+        credentials_b64 = base64.b64encode(
+            f"{client_id}:{client_secret}".encode()
+        ).decode()
+        try:
+            resp = requests.post(
+                "https://accounts.spotify.com/api/token",
+                headers={
+                    "Authorization": f"Basic {credentials_b64}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={"grant_type": "client_credentials"},
+                timeout=15,
             )
-            logger.info(
-                "[AUTH] Using Web API override credentials (OAuth) for metadata authentication"
-            )
-            return access_token
-        else:
+        except requests.exceptions.RequestException as e:
+            logger.error(f"[OAUTH] Token request failed: {str(e)}")
+            return None
+        if resp.status_code != 200:
             logger.error(
-                f"[OAUTH] Failed to get access token: {response.status_code} - {response.text}"
+                f"[OAUTH] Failed to get access token: {resp.status_code} - {resp.text}"
             )
             return None
+        try:
+            data = resp.json()
+            access_token = data["access_token"]
+            expires_in = data.get("expires_in", 3600)
+        except (ValueError, KeyError) as e:
+            logger.error(f"[OAUTH] Malformed token response: {str(e)}")
+            return None
+        _oauth_token_cache["access_token"] = access_token
+        _oauth_token_cache["client_id"] = client_id
+        # Refresh a little early (5 min buffer) to avoid mid-call expiry.
+        _oauth_token_cache["expires_at"] = time.time() + expires_in - 300
+        logger.info(
+            "[AUTH] Using Web API override credentials (OAuth) for Spotify metadata/search"
+        )
+        return _oauth_token_cache["access_token"]
 
-    except Exception as e:
-        logger.error(f"[OAUTH] Exception while getting access token: {str(e)}")
-        return None
 
+def spotify_get_auth_header(token=None):
+    """Authorization header for public Spotify Web API (api.spotify.com) calls.
 
-def spotify_get_auth_header():
-    """
-    Get Authorization header for Spotify Web API calls.
-
-    Auto-detects authentication method:
-    - If override credentials configured: Use OAuth token
-    - Otherwise: Use librespot session token
-
-    Returns dict with Authorization header, or None if authentication unavailable.
-    """
-    # Try OAuth first if override credentials are configured
-    oauth_token = spotify_get_oauth_token()
-    if oauth_token:
-        # Success message already logged in spotify_get_oauth_token()
-        return {"Authorization": f"Bearer {oauth_token}"}
-
-    # Fall back to librespot session tokens
-    logger.info(
-        "[AUTH] Using librespot session token for Web API authentication (default behavior)"
-    )
-    try:
-        from ..accounts import get_account_token
-
-        token = get_account_token("spotify")
-        if token:
-            # This is a librespot Session object
-            oauth_token = token.tokens().get("user-read-email")
-            if oauth_token:
-                return {"Authorization": f"Bearer {oauth_token}"}
-            else:
-                logger.error(
-                    "[AUTH] Failed to extract OAuth token from librespot session"
-                )
-        else:
-            logger.error("[AUTH] Failed to get librespot session token")
-    except Exception as e:
-        logger.error(f"[AUTH] Error accessing librespot token: {str(e)}")
-
-    logger.error("[AUTH] All authentication methods failed - no valid token available")
+    Prefers the user's OAuth override token when configured (avoids the shared
+    librespot client's 429 rate limit); otherwise falls back to the librespot
+    session token passed in by the caller."""
+    oauth = spotify_get_oauth_token()
+    if oauth:
+        return {"Authorization": f"Bearer {oauth}"}
+    if token is not None:
+        return {"Authorization": f"Bearer {token.tokens().get('user-read-email')}"}
     return None
+
+
+def spotify_playlist_call(token, url):
+    """Fetch a playlist endpoint, preferring the OAuth override. Client-credentials
+    OAuth can't see private/collaborative playlists (HTTP 404 -> None), so on a
+    permanent failure retry once with the user-scoped librespot token."""
+    headers = spotify_get_auth_header(token)
+    try:
+        resp = make_call(url, headers=headers, skip_cache=True)
+    except requests.exceptions.RequestException:
+        resp = None
+    if not resp and token is not None:
+        librespot_headers = {
+            "Authorization": f"Bearer {token.tokens().get('user-read-email')}"
+        }
+        if librespot_headers != headers:
+            try:
+                resp = make_call(url, headers=librespot_headers, skip_cache=True)
+            except requests.exceptions.RequestException:
+                resp = None
+    return resp
 
 
 class MirrorSpotifyPlayback(QObject):
@@ -429,12 +415,7 @@ def spotify_get_artist_album_ids(token, artist_id):
     offset = 0
     limit = 50
     while True:
-        # Use new auth method (OAuth or librespot)
-        auth_header = spotify_get_auth_header()
-        if not auth_header:
-            logger.error("Failed to get authentication header")
-            return []
-        headers = auth_header
+        headers = spotify_get_auth_header(token)
 
         url = f"{BASE_URL}/artists/{artist_id}/albums?include_groups=album%2Csingle&limit={limit}&offset={offset}"  # %2Cappears_on%2Ccompilation
         artist_data = make_call(url, headers=headers)
@@ -453,15 +434,9 @@ def spotify_get_artist_album_ids(token, artist_id):
 
 def spotify_get_playlist_data(token, playlist_id):
     logger.info(f"Get playlist data for playlist: {playlist_id}")
-    # Use new auth method (OAuth or librespot)
-    auth_header = spotify_get_auth_header()
-    if not auth_header:
-        logger.error("Failed to get authentication header")
-        return "Unknown", "Unknown"
-    headers = auth_header
-    resp = make_call(
-        f"{BASE_URL}/playlists/{playlist_id}", headers=headers, skip_cache=True
-    )
+    resp = spotify_playlist_call(token, f"{BASE_URL}/playlists/{playlist_id}")
+    if not resp:
+        raise Exception(f"Failed to fetch playlist data for '{playlist_id}'")
     return resp["name"], resp["owner"]["display_name"]
 
 
@@ -593,16 +568,9 @@ def spotify_get_playlist_items(token, playlist_id):
 
     while True:
         url = f"{BASE_URL}/playlists/{playlist_id}/tracks?additional_types=track%2Cepisode&offset={offset}&limit={limit}"
-        # Use new auth method (OAuth or librespot)
-        auth_header = spotify_get_auth_header()
-        if not auth_header:
-            logger.error("Failed to get authentication header")
-            return []
-        headers = auth_header
-        try:
-            resp = make_call(url, headers=headers, skip_cache=True)
-        except Exception as e:
-            raise e
+        resp = spotify_playlist_call(token, url)
+        if not resp:
+            raise Exception(f"Failed to fetch playlist items for '{playlist_id}'")
 
         offset += limit
         items.extend(resp["items"])
@@ -662,15 +630,7 @@ def spotify_get_album_track_ids(token, album_id):
 
     while True:
         url = f"{BASE_URL}/albums/{album_id}/tracks?offset={offset}&limit={limit}"
-        logger.info(
-            f"  [Sub-API Call] Fetching album tracks: offset={offset}, limit={limit}"
-        )
-        # Use new auth method (OAuth or librespot)
-        auth_header = spotify_get_auth_header()
-        if not auth_header:
-            logger.error("Failed to get authentication header")
-            return []
-        headers = auth_header
+        headers = spotify_get_auth_header(token)
         resp = make_call(url, headers=headers)
 
         offset += limit
@@ -697,13 +657,8 @@ def spotify_get_search_results(
     search_prefix="",
 ):
     logger.info(f"Get search result for term '{search_term}'")
-    logger.info(f"Searching for '{content_types}'")
-    # Use new auth method (OAuth or librespot)
-    auth_header = spotify_get_auth_header()
-    if not auth_header:
-        logger.error("Failed to get authentication header")
-        return []
-    headers = auth_header
+
+    headers = spotify_get_auth_header(token)
 
     params = {}
     params["limit"] = config.get("max_search_results")
@@ -719,180 +674,171 @@ def spotify_get_search_results(
     # set article (prefix) removed from items for filters ensuring the last character is a space.
     prefix = search_prefix.strip().lower() + " "
 
-    data = requests.get(f"{BASE_URL}/search", params=params, headers=headers).json()
+    # Route through make_call so search shares the central 429/Retry-After/backoff
+    # and per-host serialisation. It raises on exhausted retries and returns None
+    # on a permanent error; treat both as "no results" rather than crashing.
+    try:
+        data = make_call(
+            f"{BASE_URL}/search", params=params, headers=headers, skip_cache=True
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Spotify search failed for '{search_term}': {str(e)}")
+        return []
+
+    # None/non-dict (permanent error) or an API error payload (e.g. {'error': ...}).
+    if not isinstance(data, dict) or "error" in data:
+        logger.error(
+            f"Spotify search did not return results for '{search_term}': {data}"
+        )
+        return []
+
     search_results = []
-    for key, section in (data or {}).items():
-        items = (section or {}).get("items", []) or []
-        for item in items:
+    for key, section in data.items():
+        if not isinstance(section, dict):
+            continue
+        for item in section.get("items", []) or []:
             if not item:
                 continue
             item_type = item.get("type")
             if not item_type:
                 continue
-            # TRACKS
-            if item_type == "track":
-                if filter_tracks:
-                    # Keep only tracks where title or artist contains search term (ignoring 'the ' prefix)
-                    term_normalized = search_term.lower().removeprefix(prefix).strip()
-                    title_normalized = item["name"].lower().removeprefix(prefix).strip()
-                    artist_normalized = (
-                        item["artists"][0]["name"].lower().removeprefix(prefix).strip()
+            # Field shapes differ between librespot and OAuth tokens (e.g. OAuth
+            # omits 'genres' on artists and 'publisher' on shows/audiobooks), so
+            # access every field defensively and skip any single malformed item
+            # rather than letting it blank out the whole result set.
+            try:
+                explicit = config.get("explicit_label") if item.get("explicit") else ""
+                images = item.get("images") or []
+                if item_type == "track":
+                    item_name = f"{explicit} {item['name']}"
+                    item_by = config.get("metadata_separator").join(
+                        [a.get("name", "") for a in item.get("artists", [])]
                     )
-
-                    if (
-                        term_normalized not in title_normalized
-                        and term_normalized not in artist_normalized
-                    ):
-                        logger.info(
-                            f"TRACK REJECTED Prefix: {prefix} : Search Term: {term_normalized} : Title: {title_normalized} : Artist: {artist_normalized}"
-                        )
-                        rejected_tracks += 1
-                        continue
-
-                item_name = f"{config.get('explicit_label') if item['explicit'] else ''} {item['name']}"
-                item_by = f"{config.get('metadata_separator').join([artist['name'] for artist in item['artists']])}"
-                item_thumbnail_url = (
-                    item["album"]["images"][-1]["url"]
-                    if item["album"]["images"]
-                    else ""
-                )
-            # ALBUMS
-            elif item_type == "album":
-                if filter_albums:
-                    # Keep only albums where artist name OR album name starts with search term (ignoring prefix)
-                    term_normalized = search_term.lower().removeprefix(prefix).strip()
-                    artist_normalized = (
-                        item["artists"][0]["name"].lower().removeprefix(prefix).strip()
+                    album_images = (item.get("album") or {}).get("images") or []
+                    item_thumbnail_url = album_images[-1]["url"] if album_images else ""
+                elif item_type == "album":
+                    rel_match = re.search(
+                        r"(\d{4})", item.get("release_date", "") or ""
                     )
-                    album_normalized = item["name"].lower().removeprefix(prefix).strip()
-
-                    artist_match = artist_normalized.startswith(term_normalized)
-                    album_match = album_normalized.startswith(term_normalized)
-
-                    if not artist_match and not album_match:
-                        logger.info(
-                            f"ALBUM REJECTED Prefix: {prefix} : Search Term: {term_normalized} : Artist: {artist_normalized} : Album: {album_normalized}"
-                        )
-                        rejected_albums += 1
-                        continue
-
-                rel_year = re.search(r"(\d{4})", item["release_date"]).group(1)
-                item_name = f"[Y:{rel_year}] [T:{item['total_tracks']}] {item['name']}"
-                item_by = f"{config.get('metadata_separator').join([artist['name'] for artist in item['artists']])}"
-                item_thumbnail_url = item["images"][-1]["url"] if item["images"] else ""
-                # logger.info(f"Album OK - artist: '{item['artists'][0]['name']}' Album: '{item['name']}'")
-            # PLAYLISTS
-            elif item_type == "playlist":
-                if filter_playlists:
-                    # Keep only playlists where name contains search term (ignoring 'the ' prefix)
-                    term_normalized = search_term.lower().removeprefix(prefix).strip()
-                    playlist_normalized = (
-                        item["name"].lower().removeprefix(prefix).strip()
+                    rel_year = rel_match.group(1) if rel_match else "?"
+                    item_name = f"[Y:{rel_year}] [T:{item.get('total_tracks', '?')}] {item['name']}"
+                    item_by = config.get("metadata_separator").join(
+                        [a.get("name", "") for a in item.get("artists", [])]
                     )
+                    item_thumbnail_url = images[-1]["url"] if images else ""
+                elif item_type == "playlist":
+                    item_name = f"{item['name']}"
+                    item_by = (item.get("owner") or {}).get("display_name", "")
+                    item_thumbnail_url = images[-1]["url"] if images else ""
+                elif item_type == "artist":
+                    item_name = item["name"]
+                    # 'genres' is present with librespot tokens but omitted under
+                    # the OAuth override, so treat it as optional.
+                    genres = item.get("genres") or []
+                    if genres:
+                        item_name = item["name"] + f"  |  GENRES: {'/'.join(genres)}"
+                    item_by = item["name"]
+                    item_thumbnail_url = images[-1]["url"] if images else ""
+                elif item_type == "show":
+                    item_name = f"{explicit} {item['name']}"
+                    item_by = item.get("publisher", "")
+                    item_thumbnail_url = images[-1]["url"] if images else ""
+                    item_type = "podcast"
+                elif item_type == "episode":
+                    item_name = f"{explicit} {item['name']}"
+                    item_by = ""
+                    item_thumbnail_url = images[-1]["url"] if images else ""
+                    item_type = "podcast_episode"
+                elif item_type == "audiobook":
+                    item_name = f"{explicit} {item['name']}"
+                    item_by = item.get("publisher", "")
+                    item_thumbnail_url = images[-1]["url"] if images else ""
+                else:
+                    continue
 
-                    if term_normalized not in playlist_normalized:
-                        rejected_playlists += 1
-                        logger.info(
-                            f"PLAYLIST REJECTED Prefix: {prefix} : Search Term: {term_normalized} : Playlist Name: {playlist_normalized} : By: {item['owner']['display_name']}"
-                        )
-                        continue
-
-                item_name = f"[T:{item['tracks']['total']}] {item['name']}"
-                item_by = f"{item['owner']['display_name']}"
-                item_thumbnail_url = item["images"][-1]["url"] if item["images"] else ""
-                # logger.info(f"Playlist OK: '{item['name']}' - Tracks: {item['tracks']['total']}")
-            # ARTISTS
-            elif item_type == "artist":
-                if filter_artists:
-                    # Keep only artists where name starts with search term (ignoring 'the ' prefix)
-                    name_normalized = item["name"].lower().removeprefix(prefix).strip()
-                    term_normalized = search_term.lower().removeprefix(prefix).strip()
-
-                    if not name_normalized.startswith(term_normalized):
-                        logger.info(
-                            f"ARTIST REJECTED Prefix: {prefix} : Search Term: {term_normalized} : Artist: {name_normalized}"
-                        )
-                        rejected_artists += 1
-                        continue
-
-                # Build item name with genres if available
-                item_name = item["name"]
-                try:
-                    if item["genres"]:
-                        item_name = (
-                            item["name"] + f"  |  GENRES: {'/'.join(item['genres'])}"
-                        )
-                except (KeyError, TypeError):
-                    logger.warning("No genre tag found for %s", item["name"])
-                item_by = item["name"]
-                item_thumbnail_url = item["images"][-1]["url"] if item["images"] else ""
-                # logger.info(f"Artist OK - artist_name is : '{item['name']}'")
-            # SHOWS
-            elif item_type == "show":
-                item_name = f"{config.get('explicit_label') if item['explicit'] else ''} {item['name']}"
-                item_by = f"{item['publisher']}"
-                item_thumbnail_url = (
-                    item["images"][-1]["url"] if len(item["images"]) > 0 else ""
+                search_results.append(
+                    {
+                        "item_id": item["id"],
+                        "item_name": item_name,
+                        "item_by": item_by,
+                        "item_type": item_type,
+                        "item_service": "spotify",
+                        "item_url": item.get("external_urls", {}).get("spotify", ""),
+                        "item_thumbnail_url": item_thumbnail_url,
+                    }
                 )
-                item_type = "podcast"
-            # EPISODES
-            elif item_type == "episode":
-                item_name = f"{config.get('explicit_label') if item['explicit'] else ''} {item['name']}"
-                item_by = ""
-                item_thumbnail_url = (
-                    item["images"][-1]["url"] if len(item["images"]) > 0 else ""
+            except (KeyError, IndexError, TypeError) as e:
+                logger.warning(
+                    f"Skipping malformed '{item_type}' search result: {str(e)}"
                 )
-                item_type = "podcast_episode"
-            # AUDIOBOOKS
-            elif item_type == "audiobook":
-                item_name = f"{config.get('explicit_label') if item['explicit'] else ''} {item['name']}"
-                item_by = f"{item['publisher']}"
-                item_thumbnail_url = (
-                    item["images"][-1]["url"] if len(item["images"]) > 0 else ""
-                )
-
-            search_results.append(
-                {
-                    "item_id": item["id"],
-                    "item_name": item_name,
-                    "item_by": item_by,
-                    "item_type": item_type,
-                    "item_service": "spotify",
-                    "item_url": item["external_urls"]["spotify"],
-                    "item_thumbnail_url": item_thumbnail_url,
-                }
-            )
-
-    # REJECTION LOGGING - logs number of items rejected by filters
-    rejections = {
-        "Tracks": rejected_tracks,
-        "Artists": rejected_artists,
-        "Albums": rejected_albums,
-        "Playlists": rejected_playlists,
-    }
-    rejection_msg = " ".join(
-        [f"{label}:{count}" for label, count in rejections.items() if count > 0]
-    )
-    if rejection_msg:
-        logger.info(f"TOTAL REJECTED - {rejection_msg}")
-    else:
-        logger.info("TOTAL REJECTED - None")
-
+                continue
     return search_results
 
 
 def spotify_get_track_metadata(token, item_id):
-    if item_id is None:
-        error_msg = f"Item ID is None, cannot fetch track metadata"
-        logger.error(error_msg)
-        raise Exception(error_msg)
-    # Use new auth method (OAuth or librespot)
-    auth_header = spotify_get_auth_header()
-    if not auth_header:
-        logger.error("Failed to get authentication header")
-        return None
+    # Public catalog calls (api.spotify.com) use the OAuth override when
+    # configured, else the librespot token. The internal spclient.wg endpoint
+    # (credits) only accepts the librespot token, so keep a separate header.
+    headers = spotify_get_auth_header(token)
+    librespot_headers = {
+        "Authorization": f"Bearer {token.tokens().get('user-read-email')}"
+    }
 
-    headers = auth_header
+    delay = config.get("api_request_delay", 0.1)
+
+    # Use the single-track endpoint /tracks/{id}. The multi-get /tracks?ids= is
+    # removed for dev-mode (OAuth) apps and returns 403. Wrap the single object
+    # so the parsing below (which expects {'tracks': [..]}) stays unchanged.
+    track = make_call(f"{BASE_URL}/tracks/{item_id}", headers=headers)
+    # A None result means a permanent (non-retryable) error such as 401/403/404.
+    # Bail out with a clear message rather than crashing on track_data.get(...).
+    if not track or not track.get("id"):
+        raise Exception(
+            f"No track data returned for '{item_id}' (rate limited or unavailable)"
+        )
+    track_data = {"tracks": [track]}
+    time.sleep(delay)
+
+    # The album and artist lookups only enrich the metadata (label, copyright,
+    # total discs, genre). If they fail - None on a permanent error, or a raise
+    # on exhausted retries - fall back to the data embedded in the track response
+    # so the track is still downloadable.
+    try:
+        album_data = (
+            make_call(
+                f"{BASE_URL}/albums/{track_data.get('tracks', [])[0].get('album', {}).get('id')}",
+                headers=headers,
+            )
+            or {}
+        )
+    except Exception:
+        album_data = {}
+    time.sleep(delay)
+    try:
+        artist_data = (
+            make_call(
+                f"{BASE_URL}/artists/{track_data.get('tracks', [])[0].get('artists', [])[0].get('id')}",
+                headers=headers,
+            )
+            or {}
+        )
+    except Exception:
+        artist_data = {}
+    time.sleep(delay)
+    try:
+        track_audio_data = make_call(
+            f"{BASE_URL}/audio-features/{item_id}", headers=headers
+        )
+        time.sleep(delay)
+    except Exception:
+        track_audio_data = ""
+    try:
+        credits_data = make_call(
+            f"https://spclient.wg.spotify.com/track-credits-view/v0/experimental/{item_id}/credits",
+            headers=librespot_headers,
+        )
+    except Exception:
+        credits_data = ""
 
     # Calculate number of API calls required
     api_total_calls = 1
@@ -1085,13 +1031,12 @@ def spotify_get_track_metadata(token, item_id):
 
 def spotify_get_podcast_episode_metadata(token, episode_id):
     logger.info(f"Get episode info for episode by id '{episode_id}'")
-    # Use new auth method (OAuth or librespot)
-    auth_header = spotify_get_auth_header()
-    if not auth_header:
-        logger.error("Failed to get authentication header")
-        return None
-    headers = auth_header
+    headers = spotify_get_auth_header(token)
     episode_data = make_call(f"{BASE_URL}/episodes/{episode_id}", headers=headers)
+    if not episode_data:
+        raise Exception(
+            f"No episode data returned for '{episode_id}' (rate limited or unavailable)"
+        )
     show_episode_ids = spotify_get_podcast_episode_ids(
         token, episode_data.get("show", {}).get("id")
     )
@@ -1148,12 +1093,7 @@ def spotify_get_podcast_episode_ids(token, show_id):
 
     while True:
         url = f"{BASE_URL}/shows/{show_id}/episodes?offset={offset}&limit={limit}"
-        # Use new auth method (OAuth or librespot)
-        auth_header = spotify_get_auth_header()
-        if not auth_header:
-            logger.error("Failed to get authentication header")
-            return []
-        headers = auth_header
+        headers = spotify_get_auth_header(token)
         resp = make_call(url, headers=headers)
 
         offset += limit
