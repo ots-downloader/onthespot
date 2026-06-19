@@ -398,7 +398,7 @@ class Config:
                 self.set("version", self.__template_data.get("version"))
                 self.save()
         except Exception:
-            logger.error("can't migrate config")
+            pass
 
         # Language
         if self.get("language_index") == 0:
