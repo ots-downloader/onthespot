@@ -810,6 +810,17 @@ def spotify_get_track_metadata(token, item_id):
     # Public catalog calls (api.spotify.com) use the OAuth override when
     # configured, else the librespot token. The internal spclient.wg endpoint
     # (credits) only accepts the librespot token, so keep a separate header.
+    # Calculate number of API calls required
+    api_total_calls = 1
+    if config.get("fetch_extended_album_metadata", True):
+        api_total_calls += 1
+    if config.get("fetch_genre_metadata", True):
+        api_total_calls += 1
+    call_num = 1
+    logger.info(
+        f"[API Call {call_num}/{api_total_calls}] Fetching track data for track_id={item_id}"
+    )
+
     headers = spotify_get_auth_header(token)
     librespot_headers = {
         "Authorization": f"Bearer {token.tokens().get('user-read-email')}"
@@ -830,16 +841,6 @@ def spotify_get_track_metadata(token, item_id):
     track_data = {"tracks": [track]}
     time.sleep(delay)
 
-    # Calculate number of API calls required
-    api_total_calls = 1
-    if config.get("fetch_extended_album_metadata", True):
-        api_total_calls += 1
-    if config.get("fetch_genre_metadata", True):
-        api_total_calls += 1
-    call_num = 1
-    logger.info(
-        f"[API Call {call_num}/{api_total_calls}] Fetching track data for track_id={item_id}"
-    )
     # The album and artist lookups only enrich the metadata (label, copyright,
     # total discs, genre). If they fail - None on a permanent error, or a raise
     # on exhausted retries - fall back to the data embedded in the track response
