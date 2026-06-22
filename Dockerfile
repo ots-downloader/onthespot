@@ -26,7 +26,7 @@ RUN python3 -m venv venv
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir --prefer-binary -r requirements.txt
 
-COPY pyproject.toml setup.cfg ./
+COPY setup.cfg ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
