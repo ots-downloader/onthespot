@@ -248,6 +248,7 @@ class MainWindow(QMainWindow):
 
         if config.get("enable_retry_worker"):
             retryworker = RetryWorker(gui=True)
+            retryworker.item_reset.connect(self.set_item_waiting)
             retryworker.start()
 
         self.mirrorplayback = MirrorSpotifyPlayback()
@@ -1103,6 +1104,12 @@ class MainWindow(QMainWindow):
                     item["gui"]["btn"]["copy"].show()
                 item["gui"]["btn"]["cancel"].show()
                 return
+
+    def set_item_waiting(self, item):
+        with download_queue_lock:
+            item["gui"]["status_label"].setText(self.tr("Waiting"))
+            item["gui"]["btn"]["cancel"].show()
+            item["gui"]["btn"]["retry"].hide()
 
     def remove_completed_from_download_list(self):
         with download_queue_lock:

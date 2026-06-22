@@ -29,6 +29,9 @@ BASE_URL = "https://api.spotify.com/v1"
 _oauth_token_cache = {"access_token": None, "expires_at": 0, "client_id": None}
 _oauth_token_lock = threading.Lock()
 
+_session_reinit_lock = threading.Lock()
+_SESSION_REINIT_TIMEOUT = 30
+
 
 def spotify_get_oauth_token():
     """Return an OAuth access token via the Client-Credentials flow using the
@@ -371,38 +374,66 @@ def spotify_login_user(account):
         return False
 
 
-def spotify_re_init_session(account):
+def spotify_re_init_session(account, dead_session=None):
     session_json_path = os.path.join(
         cache_dir(), "sessions", f"ots_login_{account['uuid']}.json"
     )
-    try:
-        config = (
-            Session.Configuration.Builder()
-            .set_stored_credential_file(session_json_path)
-            .build()
-        )
-        logger.debug("Session config created")
-        session = Session.Builder(conf=config).stored_file(session_json_path).create()
+    with _session_reinit_lock:
+        old_session = account.get("login", {}).get("session")
+        if dead_session is not None and old_session is not dead_session:
+            return
+        if old_session:
+            try:
+                old_session.close()
+            except Exception as e:
+                logger.debug(f"Failed to close old session: {e}")
+            account["login"]["session"] = ""
+        result = {}
+
+        def _build():
+            try:
+                cfg = (
+                    Session.Configuration.Builder()
+                    .set_stored_credential_file(session_json_path)
+                    .build()
+                )
+                session = (
+                    Session.Builder(conf=cfg).stored_file(session_json_path).create()
+                )
+                result["session"] = session
+                result["account_type"] = session.get_user_attribute("type")
+            except Exception as e:
+                result["error"] = e
+
+        builder = threading.Thread(target=_build, daemon=True)
+        builder.start()
+        builder.join(timeout=_SESSION_REINIT_TIMEOUT)
+        if builder.is_alive():
+            logger.error(
+                "Session re-init timed out, network may be unavailable. Will retry later."
+            )
+            return
+        session = result.get("session")
+        if session is None:
+            logger.error(f"Failed to re init session ! {result.get('error')}")
+            return
         logger.debug("Session re init done")
+        account_type = result["account_type"]
         account["login"]["session_path"] = session_json_path
         account["login"]["session"] = session
         account["status"] = "active"
-        account["account_type"] = session.get_user_attribute("type")
-        bitrate = "160k"
-        account_type = session.get_user_attribute("type")
-        if account_type == "premium":
-            bitrate = "320k"
-        account["bitrate"] = bitrate
-    except:
-        logger.error("Failed to re init session !")
+        account["account_type"] = account_type
+        account["bitrate"] = "320k" if account_type == "premium" else "160k"
 
 
 def spotify_get_token(parsing_index):
     try:
         token = account_pool[parsing_index]["login"]["session"]
-    except (OSError, AttributeError):
+    except (OSError, AttributeError, KeyError):
+        token = None
+    if not token or isinstance(token, str):
         logger.info(
-            f"Failed to retreive token for {account_pool[parsing_index]['username']}, attempting to reinit session."
+            f"No valid session for {account_pool[parsing_index]['username']}, attempting to reinit session."
         )
         spotify_re_init_session(account_pool[parsing_index])
         token = account_pool[parsing_index]["login"]["session"]

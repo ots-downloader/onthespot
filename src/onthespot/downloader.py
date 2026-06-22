@@ -19,6 +19,7 @@ DownloadWorker
 """
 
 import os
+import queue
 import random
 import re
 import requests
@@ -82,6 +83,10 @@ logger = get_logger("downloader")
 _MAX_PATH_LENGTH = 260
 
 
+class TrackUnavailableError(Exception):
+    """Raised when a track has no playable version (not a connection issue)."""
+
+
 class RetryWorker(QObject):
     """Periodically resets failed download-queue items back to *Waiting*.
 
@@ -90,6 +95,7 @@ class RetryWorker(QObject):
     """
 
     progress = pyqtSignal(dict, str, int)
+    item_reset = pyqtSignal(dict)
 
     def __init__(self, gui: bool = False) -> None:
         super().__init__()
@@ -116,9 +122,7 @@ class RetryWorker(QObject):
                         if item["item_status"] == ItemStatus.FAILED:
                             item["item_status"] = ItemStatus.WAITING
                             if self.gui:
-                                item["gui"]["status_label"].setText(self.tr("Waiting"))
-                                item["gui"]["btn"]["cancel"].show()
-                                item["gui"]["btn"]["retry"].hide()
+                                self.item_reset.emit(item)
 
             delay_minutes = config.get("retry_worker_delay")
             if delay_minutes > 0:
@@ -181,12 +185,13 @@ class DownloadWorker(QObject):
 
     def _yt_dlp_progress_hook(self, item: dict, progress_info: dict) -> None:
         """Hook passed to yt-dlp to forward download progress to the GUI."""
-        current = item["gui"]["progress_bar"].value()
+        current = item.get("progress", 0)
         match = re.search(r"(\d+\.\d+)%", progress_info["_percent_str"])
         if not match:
             return
         new_value = round(float(match.group(1))) - 1
         if new_value >= current:
+            item["progress"] = new_value
             self.progress.emit(item, self.tr("Downloading"), new_value)
         if item["item_status"] == ItemStatus.CANCELLED:
             raise Exception("Download cancelled by user.")
@@ -313,6 +318,13 @@ class DownloadWorker(QObject):
                         temp_path,
                         file_path,
                     )
+                except TrackUnavailableError:
+                    logger.error(f"Track is unavailable, track id '{item_id}'")
+                    item["item_status"] = ItemStatus.UNAVAILABLE
+                    if self.gui:
+                        self.progress.emit(item, self.tr("Unavailable"), 0)
+                    self._requeue_item(item)
+                    continue
                 except RuntimeError as exc:
                     logger.info(
                         f"Download failed (likely rate limited): {item}, Error: {exc}\n{traceback.format_exc()}"
@@ -591,6 +603,18 @@ class DownloadWorker(QObject):
 
         raise ValueError(f"No download handler for service '{service}'")
 
+    def _reinit_spotify_session(self, token):
+        from .api.spotify import spotify_re_init_session
+
+        for account in account_pool:
+            if (
+                account.get("service") == "spotify"
+                and account.get("login", {}).get("session") is token
+            ):
+                logger.info("Spotify session connection lost, re-initializing...")
+                spotify_re_init_session(account, dead_session=token)
+                return
+
     def _download_spotify(self, item, item_id, item_type, token, temp_path):
         default_format = ""
         temp_path += default_format
@@ -606,9 +630,19 @@ class DownloadWorker(QObject):
             quality = AudioQuality.VERY_HIGH
             bitrate = "320k"
 
-        stream = token.content_feeder().load(
-            audio_key, VorbisOnlyAudioQuality(quality), False, None
-        )
+        try:
+            stream = token.content_feeder().load(
+                audio_key, VorbisOnlyAudioQuality(quality), False, None
+            )
+        except RuntimeError as exc:
+            if "alternative track" in str(exc).lower():
+                raise TrackUnavailableError(item_id) from exc
+            self._reinit_spotify_session(token)
+            raise RuntimeError(f"Spotify session connection lost: {exc}") from exc
+        except queue.Empty as exc:
+            self._reinit_spotify_session(token)
+            raise RuntimeError(f"Spotify session connection lost: {exc}") from exc
+
         total_size = stream.input_stream.size
         downloaded = 0
 
