@@ -19,7 +19,6 @@ import base64
 import json
 import os
 import platform
-import re
 import requests
 import ssl
 import subprocess
@@ -44,7 +43,7 @@ logger = get_logger("utils")
 
 # Serialises outbound API requests across all worker threads so that a single
 # global rate-limit applies rather than each thread racing independently.
-_api_request_lock = threading.Lock()
+# _api_request_lock = threading.Lock()
 
 # Per-host request locks: serialise dispatch to each API host independently so a
 # burst of concurrent calls to one service can't trip its rate limit, while
@@ -71,7 +70,8 @@ class SSLAdapter(requests.adapters.HTTPAdapter):
         super().__init__(*args, **kwargs)
 
     def init_poolmanager(self, *args, **kwargs):
-        return super().init_poolmanager(*args, ssl_context=self.ssl_context, **kwargs)
+        context = self.ssl_context
+        return super().init_poolmanager(*args, ssl_context=context, **kwargs)
 
 
 def make_call(
@@ -142,18 +142,85 @@ def make_call(
         ctx.verify_mode = ssl.CERT_REQUIRED
         session.mount("https://", SSLAdapter(ssl_context=ctx))
 
-    response = session.get(url, headers=headers, params=params)
+    # Retry logic with exponential backoff for transient failures (rate limits,
+    # server errors, timeouts). Permanent client errors (e.g. 401/403/404) are
+    # returned as None without retrying.
+    max_retries = config.get("api_retry_max_attempts", 3)
+    base_delay = config.get("api_retry_base_delay", 2)
+    max_delay = config.get("api_retry_max_delay", 60)
 
-    if response.status_code == 200:
-        if not skip_cache:
-            with open(req_cache_file, "w", encoding="utf-8") as cf:
-                cf.write(response.text)
-        if text:
-            return response.text
-        return json.loads(response.text)
-    else:
-        logger.info(f"Request status error {response.status_code}: {url}")
-        return None
+    for attempt in range(max_retries):
+        # The lock serialises only the request dispatch, so a burst of workers
+        # can't hit the rate limit simultaneously. The backoff sleep below happens
+        # OUTSIDE the lock so a single backing-off call doesn't stall every other
+        # worker (and a long Retry-After can't freeze the whole app).
+        try:
+            with _get_host_lock(url):
+                response = session.get(url, headers=headers, params=params, timeout=30)
+        except requests.exceptions.Timeout:
+            time.sleep(min((2**attempt) * base_delay, max_delay))
+            logger.warning(
+                f"Timeout on {url}, retrying (attempt {attempt + 1}/{max_retries})"
+            )
+            continue
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request exception on {url}: {str(e)}")
+            return None
+
+        # Rate limited - honour Retry-After if present (capped at max_delay), else back off.
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after and retry_after.isdigit():
+                delay = min(int(retry_after) + 1, max_delay)  # 1s buffer, capped
+                logger.warning(
+                    f"Rate limited (429) on {url}. Retry-After honoured, waiting {delay}s (attempt {attempt + 1}/{max_retries})"
+                )
+            else:
+                delay = min((2**attempt) * base_delay, max_delay)
+                logger.warning(
+                    f"Rate limited (429) on {url}. No Retry-After header, backing off {delay}s (attempt {attempt + 1}/{max_retries})"
+                )
+            time.sleep(delay)
+            continue
+
+        # Transient errors (request timeout + server errors) - retry with backoff.
+        elif response.status_code in (408, 500, 502, 503, 504):
+            delay = min((2**attempt) * base_delay, max_delay)
+            logger.warning(
+                f"Transient error ({response.status_code}) on {url}. Retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
+            )
+            time.sleep(delay)
+            continue
+
+        # Success - cache and return.
+        elif response.status_code == 200:
+            if text:
+                if not skip_cache:
+                    with open(req_cache_file, "w", encoding="utf-8") as cf:
+                        cf.write(response.text)
+                return response.text
+            # Guard against a 200 with a non-JSON body (e.g. an HTML error/captive
+            # portal page) so we return None instead of raising into callers.
+            try:
+                data = json.loads(response.text)
+            except json.JSONDecodeError:
+                logger.error(f"Invalid JSON in 200 response from {url}")
+                return None
+            if not skip_cache:
+                with open(req_cache_file, "w", encoding="utf-8") as cf:
+                    cf.write(response.text)
+            return data
+
+        # Permanent client errors - don't retry.
+        else:
+            logger.error(f"Request status error {response.status_code}: {url}")
+            return None
+
+    # Retries exhausted - raise so the caller marks the item Failed (and the
+    # retry worker can pick it up later) instead of crashing on a None result.
+    error_msg = f"Max retries ({max_retries}) exhausted for {url}"
+    logger.error(error_msg)
+    raise requests.exceptions.RequestException(error_msg)
 
 
 def format_local_id(item_id):
@@ -205,7 +272,7 @@ def open_item(item):
 def sanitize_data(value):
     """Replace characters that are illegal in file/directory names.
 
-    On Windows, replaces ``\ / : * ? " < > |`` and strips trailing dots/spaces.
+    On Windows, replaces ``\\ / : * ? " < > |`` and strips trailing dots/spaces.
     On other platforms only ``/`` is replaced.
     Returns an empty string when *value* is ``None``.
     """
@@ -795,6 +862,7 @@ def set_music_thumbnail(filename, metadata):
 
                 command = [config.get("_ffmpeg_bin_path"), "-i", temp_name]
 
+                # Set log level based on environment variable
                 if int(os.environ.get("SHOW_FFMPEG_OUTPUT", 0)) == 0:
                     command += ["-loglevel", "error", "-hide_banner", "-nostats"]
 
@@ -1010,7 +1078,6 @@ def strip_metadata(item):
 
 
 def format_bytes(size):
-    """Convert *size* (bytes) to a human-readable string such as ``3.14 MiB``."""
     units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
     index = 0
     while size >= 1024 and index < len(units) - 1:

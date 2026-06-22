@@ -37,7 +37,7 @@ class Config:
         self.session_uuid = str(uuid.uuid4())
         self.__template_data = {
             # System Variables
-            "version": "v1.8.0beta2",  # Application version
+            "version": "v1.8.0beta4",  # Application version
             "debug_mode": False,  # Enable debug mode
             "language_index": 0,  # Language Index
             "total_downloaded_items": 0,  # Total downloaded items
@@ -351,7 +351,6 @@ class Config:
 
     def migration(self):
         try:
-            # very old migration, not really used anymore throw error if version isn't numeric only
             if int(
                 self.get("version")
                 .replace("v", "")
