@@ -50,7 +50,7 @@ from .api.crunchyroll import crunchyroll_get_episode_metadata, crunchyroll_add_a
 from .api.generic import generic_add_account
 from .downloader import DownloadWorker, RetryWorker
 from .otsconfig import cache_dir, config_dir, config
-from .parse_item import parsingworker, parse_url
+from .parse_item import ParsingWorker, parse_url
 from .runtimedata import (
     get_logger,
     account_pool,
