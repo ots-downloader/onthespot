@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-from onthespot.gui import main
+from onthespot.neogui import main
 
 if __name__ == "__main__":
     main()

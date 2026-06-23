@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi[standard]>=0.138.0",
     "flask>=3.1.0",
     "flask-login>=0.6.3",
     "librespot",
