@@ -1143,9 +1143,9 @@
                 else if (loginServices.value === 'tidal') {
                     loginUsername.style.display = 'none';
                     loginPassword.style.display = 'none';
-                    loginButton.style.display = 'none'
-                    loginNotice.style.display = 'block';
-                    loginNotice.textContent = 'Logins for this service are not currently supported, please login through the desktop app and modify your config accordingly.';
+                    loginButton.style.display = 'block'
+                    loginButton.textContent = 'Login to Tidal'
+                    loginNotice.style.display = 'none';
                 }
                 else if (loginServices.value === 'youtube_music') {
                     loginUsername.style.display = 'none';
@@ -1183,6 +1183,11 @@
                 const loginUsername = document.getElementById('login_username').value;
                 const loginPassword = document.getElementById('login_password').value;
 
+                if (selectedService === 'tidal') {
+                    tidalLoginStep1();
+                    return;
+                }
+
                 const data = {
                     username: loginUsername,
                     password: loginPassword,
@@ -1204,6 +1209,47 @@
                 })
                 .catch((error) => {
                     console.error('Error:', error);
+                });
+            }
+
+            function tidalLoginStep1() {
+                const loginNotice = document.getElementById('login_notice');
+                const loginButton = document.getElementById('login_button');
+                
+                loginNotice.style.display = 'block';
+                loginNotice.textContent = 'Requesting Tidal login link...';
+                loginButton.disabled = true;
+
+                fetch('/api/tidal_login_step1', {
+                    method: 'POST'
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Server returned error');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loginNotice.innerHTML = `Please visit <a href="https://${data.verification_url}" target="_blank">${data.verification_url}</a> to log in. Once you have logged in, this page will automatically update.`;
+                    tidalLoginStep2(data.device_code);
+                })
+                .catch(error => {
+                    loginNotice.textContent = 'Error requesting Tidal login link. Please check container logs.';
+                    loginButton.disabled = false;
+                });
+            }
+
+            function tidalLoginStep2(deviceCode) {
+                fetch('/api/tidal_login_step2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ device_code: deviceCode })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Handled in background
                 });
             }
             function removeAccount(accountId) {

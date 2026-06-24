@@ -41,7 +41,7 @@ from .api.spotify import (
     spotify_get_track_metadata,
     spotify_get_podcast_episode_metadata,
 )
-from .api.tidal import tidal_get_track_metadata
+from .api.tidal import tidal_get_track_metadata, tidal_add_account_pt1, tidal_add_account_pt2
 from .api.youtube_music import (
     youtube_music_get_track_metadata,
     youtube_music_add_account,
@@ -325,6 +325,38 @@ def download_media(local_id):
 @login_required
 def parse_download(url):
     parse_url(url)
+    return jsonify(success=True)
+
+
+@app.route("/api/tidal_login_step1", methods=["POST"])
+@login_required
+def tidal_login_step1():
+    device_code, verification_url = tidal_add_account_pt1()
+    if not device_code:
+        return jsonify({"error": "Failed to get device code from Tidal API."}), 400
+    return jsonify({
+        "device_code": device_code,
+        "verification_url": verification_url
+    })
+
+
+@app.route("/api/tidal_login_step2", methods=["POST"])
+@login_required
+def tidal_login_step2():
+    data = request.get_json()
+    device_code = data.get("device_code")
+
+    def background_login(code):
+        if tidal_add_account_pt2(code):
+            config.set("active_account_number", config.get("active_account_number") + 1)
+            config.save()
+            # Trigger a refresh of the account pool
+            refresher = FillAccountPool()
+            refresher.start()
+            refresher.wait()
+
+    thread = threading.Thread(target=background_login, args=(device_code,))
+    thread.start()
     return jsonify(success=True)
 
 
