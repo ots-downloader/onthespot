@@ -60,7 +60,7 @@ def apple_music_login_user(account):
         home_page = session.get("https://music.apple.com").text
         index_js_uri = re.search(r"/(assets/index-legacy[~-][^/\"]+.js)",home_page,).group(1)
         index_js_page = session.get(f"https://music.apple.com/{index_js_uri}").text
-        token = re.search('(?=eyJh)(.*?)(?=")', index_js_page).group(1)
+        token = re.search(r'nT="([^"]+)"', index_js_page).group(1)
         session.headers.update({"authorization": f"Bearer {token}"})
         session.params = {"l": 'en-US'}
 
