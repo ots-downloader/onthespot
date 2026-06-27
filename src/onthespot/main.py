@@ -18,7 +18,7 @@ from .api.deezer import deezer_add_account
 from .api.qobuz import qobuz_add_account
 from .api.soundcloud import soundcloud_add_account
 from .api.crunchyroll import crunchyroll_add_account
-from .api.spotify import spotify_new_session
+from .api.spotify import spotify_new_session, MirrorSpotifyPlayback
 from .api.tidal import tidal_add_account_pt1, tidal_add_account_pt2
 
 from .accounts import FillAccountPool
@@ -136,6 +136,8 @@ def add_item_to_download_list(item):
 parsing_worker = ParsingWorker()
 queueworker = QueueWorker()
 downloadworker = DownloadWorker(gui=True)
+spotifymirrorworker = MirrorSpotifyPlayback()
+retryworker = RetryWorker(gui=True)
 fillaccountpool = FillAccountPool(gui=True)
 
 # migrate possibly old configurations
@@ -208,12 +210,15 @@ def relogin():
 # FASTAPI INIT
 # ---------------------------------------------------------------------------
 
+#START ONTHESPOT WORKERS HERE
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"OnTheSpot Version: {config.get('version')}")  
     parsing_worker.start() 
     queueworker.start()
     downloadworker.start()
+    if config.get("enable_retry_worker"):
+        retryworker.start()
     fillaccountpool.start()
     logger.info("Initializing...")
 
@@ -253,12 +258,35 @@ async def query_url(q: str | None = None, filters: dict | None = None):
         result = search(q, filters)
     return result
 
+@app.post("/spotify/mirror")
+async def mirror_spotify(state: bool = False):
+    if state:
+        spotifymirrorworker.start()
+    else:
+        spotifymirrorworker.stop()
 
 ## QUEUES ENDPOINTS
 
 @app.get("/queue/downloads")
 async def query_download_queue():
     return download_queue
+
+@app.get("/queue/downloads/clear")
+async def remove_queue_items(status: str = "Completed"):
+    with download_queue_lock:
+        if status != "all":
+            for key, item in enumerate(download_queue):
+                if item["item_status"] == status:
+                    download_queue.pop(key)
+        else:
+            download_queue.clear()
+
+@app.get("/queue/downloads/retryfailed")
+async def retry_failed_items():
+    with download_queue_lock:
+        for key, item in enumerate(download_queue):
+            if item["item_status"] in ["Failed", "Cancelled"]:
+                download_queue[key]["item_status"] = "Waiting"
 
 
 @app.get("/queue/pending")
@@ -287,11 +315,15 @@ async def set_config(nkey, nvalue):
 async def save_config():
     return config.save()
 
+@app.post("/config/reset")
+async def reset_config():
+    return config.reset()
+ 
 
 # ACCOUNTS ENDPOINTS
 
 @app.post("/accounts/add")
-async def add_account(service: str, item: AccountData):
+async def add_account(service: str, item: AccountData | None = None):
     found = None
     match service:
         case "generic":
