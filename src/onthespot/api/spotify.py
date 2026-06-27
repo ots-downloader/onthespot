@@ -19,7 +19,7 @@ from ..runtimedata import (
     download_queue,
     pending_lock,
 )
-from ..utils import make_call, conv_list_format
+from ..utils import make_call, conv_list_format, get_primary_composer
 
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
@@ -1000,6 +1000,8 @@ def spotify_get_track_metadata(token, item_id):
             [item for item in credits.get("writers", []) if isinstance(item, str)]
         )
         info["composer"] = info["writers"]
+        if config.get("prefer_composer_as_album_artist") and info["composer"]:
+            info["album_artists"] = get_primary_composer(info["composer"])
 
     if track_audio_data:
         key_mapping = {

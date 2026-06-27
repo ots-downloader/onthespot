@@ -15,7 +15,6 @@ Sections
 * Miscellaneous        — :func:`is_latest_release`, :func:`open_item`, …
 """
 
-import base64
 import json
 import os
 import platform
@@ -29,9 +28,7 @@ from hashlib import md5
 from urllib.parse import urlparse
 from io import BytesIO
 from PIL import Image
-from mutagen.flac import Picture
 from mutagen.id3 import ID3, ID3NoHeaderError, WOAS, USLT, TCMP, COMM
-from mutagen.oggvorbis import OggVorbis
 import music_tag
 from .otsconfig import config
 from .runtimedata import get_logger, pending, download_queue
@@ -322,6 +319,12 @@ def conv_list_format(items):
         return ""
 
 
+def get_primary_composer(composer_full):
+    if not composer_full:
+        return ""
+    return re.split(r" [,&;] | & |,|;", composer_full)[0].strip()
+
+
 def format_item_path(item, item_metadata):
     """Build the relative file path for *item* using the configured formatter.
 
@@ -349,10 +352,8 @@ def format_item_path(item, item_metadata):
 
     # Split composer
     composer_full = item_metadata.get("composer", "")
-    composer_first = (
-        re.split(r" [,&;] | & |,|;", composer_full)[0].strip() if composer_full else ""
-    )
-
+    primary_composer = get_primary_composer(composer_full)
+    
     item_path = path.format(
         # Universal
         service=sanitize_data(item.get("item_service")).title(),
@@ -364,7 +365,7 @@ def format_item_path(item, item_metadata):
         ),
         # Audio
         artist=sanitize_data(item_metadata.get("artists")),
-        composer=sanitize_data(composer_first),
+        composer=sanitize_data(primary_composer),
         album=sanitize_data(album),
         album_artist=sanitize_data(item_metadata.get("album_artists")),
         album_type=item_metadata.get("album_type", "single").title(),
@@ -395,6 +396,8 @@ def format_item_path(item, item_metadata):
         if not config.get("use_double_digit_path_numbers")
         else str(item_metadata.get("episode_number", 1)).zfill(2),
     )
+    # Clean up any duplicate consecutive slashes from empty fields
+    item_path = re.sub(r"/+", "/", item_path)
 
     return item_path
 
@@ -412,9 +415,7 @@ def convert_audio_format(filename, bitrate, default_format):
     """
     if os.path.isfile(os.path.abspath(filename)):
         target_path = os.path.abspath(filename)
-        file_name = os.path.basename(target_path)
-        filetype = os.path.splitext(file_name)[1]
-        file_stem = os.path.splitext(file_name)[0]
+        file_stem, filetype = os.path.splitext(os.path.basename(target_path))
 
         temp_name = os.path.join(
             os.path.dirname(target_path), "~" + file_stem + filetype
@@ -476,9 +477,7 @@ def convert_video_format(item, output_path, output_format, video_files, item_met
     written to ``output_path + '.' + output_format``.
     """
     target_path = os.path.abspath(output_path)
-    file_name = os.path.basename(target_path)
-    filetype = os.path.splitext(file_name)[1]
-    file_stem = os.path.splitext(file_name)[0]
+    file_stem, filetype = os.path.splitext(os.path.basename(target_path))
 
     temp_file_path = (
         os.path.join(os.path.dirname(target_path), "~" + file_stem + filetype)
@@ -570,9 +569,7 @@ def embed_metadata(item, metadata):
     """
     if os.path.isfile(os.path.abspath(item["file_path"])):
         target_path = os.path.abspath(item["file_path"])
-        file_name = os.path.basename(target_path)
-        filetype = os.path.splitext(file_name)[1]
-        file_stem = os.path.splitext(file_name)[0]
+        file_stem, filetype = os.path.splitext(os.path.basename(target_path))
 
         temp_name = os.path.join(
             os.path.dirname(target_path), "~" + file_stem + filetype
@@ -690,6 +687,8 @@ def embed_metadata(item, metadata):
                     command += ["-metadata", "author={}".format(value)]
 
             elif key == "composer" and config.get("embed_composer"):
+                if config.get("shorten_composer_tag"):
+                    value = get_primary_composer(value)
                 if filetype == ".mp3":
                     command += ["-metadata", "TCOM={}".format(value)]
                 else:
@@ -833,107 +832,109 @@ def set_music_thumbnail(filename, metadata):
     Supports MP3, FLAC, OGG, and most common audio containers.
     Does nothing when ``metadata['image_url']`` is falsy.
     """
-    if metadata["image_url"]:
-        target_path = os.path.abspath(filename)
-        file_name = os.path.basename(target_path)
-        filetype = os.path.splitext(file_name)[1]
-        file_stem = os.path.splitext(file_name)[0]
+    if not metadata.get("image_url"):
+        return
+    
+    target_path = os.path.abspath(filename)
+    dirname = os.path.dirname(target_path)
+    file_stem, filetype = os.path.splitext(os.path.basename(target_path))
 
-        temp_name = os.path.join(
-            os.path.dirname(target_path), "~" + file_stem + filetype
-        )
+    temp_name = os.path.join(
+        dirname, "~" + file_stem + filetype
+    )
 
-        image_path = os.path.join(os.path.dirname(filename), "cover")
-        image_path += "." + config.get("album_cover_format")
+    format = config.get("album_cover_format")
+    image_path = os.path.join(dirname, f"cover.{format}")
 
-        logger.info("Fetching item thumbnail")
+    logger.info("Fetching item thumbnail")
+    try:
         img = Image.open(BytesIO(requests.get(metadata["image_url"]).content))
-        buf = BytesIO()
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-        img.save(buf, format=config.get("album_cover_format"))
-        buf.seek(0)
-        with open(image_path, "wb") as cover:
-            cover.write(buf.read())
+    except Exception as e:
+        logger.error(f"Failed to download image: {e}")
+        return
 
-        if not config.get("raw_media_download"):
-            if config.get("embed_cover") and config.get(
-                "windows_10_explorer_thumbnails"
-            ):
-                # music_tag renders covers visible in Windows Explorer; raw
-                # mutagen/ffmpeg do not in this mode.
-                with open(image_path, "rb") as image_file:
-                    image_data = image_file.read()
-                tags = music_tag.load_file(filename)
-                tags["artwork"] = image_data
-                tags.save()
+    _save_image(img, image_path, format)
 
-            elif config.get("embed_cover") and filetype not in (".wav", ".ogg"):
-                if os.path.isfile(temp_name):
-                    os.remove(temp_name)
+    if not config.get("raw_media_download"):
+        if config.get("embed_cover") and config.get(
+            "windows_10_explorer_thumbnails"
+        ):
+            # music_tag renders covers visible in Windows Explorer; raw
+            # mutagen/ffmpeg do not in this mode.
+            _embed_with_music_tag(filename, image_path)
 
-                os.rename(filename, temp_name)
-
-                command = [config.get("_ffmpeg_bin_path"), "-i", temp_name]
-
-                # Set log level based on environment variable
-                if int(os.environ.get("SHOW_FFMPEG_OUTPUT", 0)) == 0:
-                    command += ["-loglevel", "error", "-hide_banner", "-nostats"]
-
-                command += [
-                    "-i",
-                    image_path,
-                    "-map",
-                    "0:a",
-                    "-map",
-                    "1:v",
-                    "-c",
-                    "copy",
-                    "-disposition:v:0",
-                    "attached_pic",
-                    "-metadata:s:v",
-                    "title=Cover",
-                    "-metadata:s:v",
-                    "comment=Cover (front), -id3v2_version 1",
-                ]
-
-                command += [filename]
-                logger.debug(
-                    f"Setting thumbnail with ffmpeg. Built commandline {command}"
-                )
-                if os.name == "nt":
-                    subprocess.check_call(
-                        command,
-                        shell=False,
-                        stdin=subprocess.DEVNULL,
-                        creationflags=subprocess.CREATE_NO_WINDOW,
-                    )
-                else:
-                    subprocess.check_call(
-                        command, shell=False, stdin=subprocess.DEVNULL
-                    )
-
-            elif config.get("embed_cover") and filetype == ".ogg":
-                with open(image_path, "rb") as image_file:
-                    image_data = image_file.read()
-                tags = OggVorbis(filename)
-                picture = Picture()
-                picture.data = image_data
-                picture.type = 3
-                picture.desc = "Cover"
-                picture.mime = f"image/{config.get('album_cover_format')}"
-                picture_data = picture.write()
-                encoded_data = base64.b64encode(picture_data)
-                vcomment_value = encoded_data.decode("ascii")
-                tags["metadata_block_picture"] = [vcomment_value]
-                tags.save()
-
-            if os.path.exists(temp_name):
+        elif config.get("embed_cover") and filetype not in (".wav", ".ogg"):
+            if os.path.isfile(temp_name):
                 os.remove(temp_name)
 
-        if not config.get("save_album_cover") and os.path.exists(image_path):
-            os.remove(image_path)
+            os.rename(filename, temp_name)
 
+            command = [config.get("_ffmpeg_bin_path"), "-i", temp_name]
+
+            # Set log level based on environment variable
+            if int(os.environ.get("SHOW_FFMPEG_OUTPUT", 0)) == 0:
+                command += ["-loglevel", "error", "-hide_banner", "-nostats"]
+
+            command += [
+                "-i", image_path,
+                "-map", "0:a",
+                "-map", "1:v",
+                "-c", "copy",
+                "-disposition:v:0", "attached_pic",
+                "-metadata:s:v", "title=Cover",
+                "-metadata:s:v", "comment=Cover (front), -id3v2_version 1",
+            ]
+
+            command += [filename]
+            logger.debug(
+                f"Setting thumbnail with ffmpeg. Built commandline {command}"
+            )
+            if os.name == "nt":
+                subprocess.check_call(
+                    command,
+                    shell=False,
+                    stdin=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            else:
+                subprocess.check_call(
+                    command, shell=False, stdin=subprocess.DEVNULL
+                )
+
+        elif config.get("embed_cover") and filetype == ".ogg":
+            _embed_with_music_tag(filename, image_path)
+
+        if os.path.exists(temp_name):
+            os.remove(temp_name)
+
+    if not config.get("save_album_cover") and os.path.exists(image_path):
+        os.remove(image_path)
+
+
+def _save_image(img, image_path, format):
+    """Convert and save image to file."""
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    
+    # Handle jpg/jpeg format alias
+    save_format = "jpeg" if format == "jpg" else format
+    
+    buf = BytesIO()
+    img.save(buf, format=save_format)
+    buf.seek(0)
+    
+    with open(image_path, "wb") as cover:
+        cover.write(buf.read())
+
+
+def _embed_with_music_tag(filename, image_path):
+    """Embed cover using music_tag (Windows Explorer compatible)."""
+    with open(image_path, "rb") as image_file:
+        image_data = image_file.read()
+    
+    tags = music_tag.load_file(filename)
+    tags["artwork"] = image_data
+    tags.save()
 
 # ---------------------------------------------------------------------------
 # ID3 fix-up
@@ -1057,9 +1058,7 @@ def strip_metadata(item):
     """
     if os.path.isfile(os.path.abspath(item["file_path"])):
         target_path = os.path.abspath(item["file_path"])
-        file_name = os.path.basename(target_path)
-        filetype = os.path.splitext(file_name)[1]
-        file_stem = os.path.splitext(file_name)[0]
+        file_stem, filetype = os.path.splitext(os.path.basename(target_path))
 
         temp_name = os.path.join(
             os.path.dirname(target_path), "~" + file_stem + filetype

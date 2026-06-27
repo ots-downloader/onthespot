@@ -22,15 +22,15 @@ import os
 import queue
 import random
 import re
-import requests
 import subprocess
 import threading
 import time
 import traceback
 
-from PyQt6.QtCore import QObject, pyqtSignal
+import requests
 from librespot.audio.decoders import AudioQuality, VorbisOnlyAudioQuality
-from librespot.metadata import TrackId, EpisodeId
+from librespot.metadata import EpisodeId, TrackId
+from PyQt6.QtCore import QObject, pyqtSignal
 from yt_dlp import YoutubeDL
 
 from .accounts import get_account_token
@@ -51,12 +51,12 @@ from .api.deezer import (
     get_song_info_from_deezer_website,
 )
 from .api.qobuz import qobuz_get_file_url
-from .api.tidal import tidal_get_mpd_data
 from .api.registry import (
     SERVICE_LYRICS_FUNCTIONS,
     SERVICE_METADATA_FUNCTIONS,
     get_metadata_function,
 )
+from .api.tidal import tidal_get_mpd_data
 from .constants import ItemStatus
 from .otsconfig import config
 from .runtimedata import (
@@ -786,7 +786,7 @@ class DownloadWorker(QObject):
         bitrate = ""
         ydl_opts = {}
 
-        mpd_file_path = temp_path + "mpd"
+        mpd_file_path = temp_path + ".mpd"
 
         if service == "soundcloud":
             if token["oauth_token"]:
@@ -799,16 +799,56 @@ class DownloadWorker(QObject):
                 ydl_opts["format"] = "bestaudio[ext=mp3]"
 
         elif service == "tidal":
-            default_format = ".flac"
+            defaultformat = ".flac"
             bitrate = "1411k"
+
+            # Get MPD manifest with error handling
             mpd_data = tidal_get_mpd_data(token, item_id)
+            if not mpd_data:
+                raise RuntimeError(
+                    f"Tidal: Failed to get MPD manifest for track {itemid}"
+                )
+
+            # Check if manifest is JSON with direct URLs (common for AAC/MP4 tracks)
+            import json as _json
+            try:
+                manifest_json = _json.loads(mpd_data)
+                if "urls" in manifest_json and manifest_json["urls"]:
+                    direct_url = manifest_json["urls"][0]
+                    logger.info(f"Tidal: Direct URL detected, downloading via requests: {direct_url[:80]}")
+                    headers = {"Authorization": f"Bearer {token['access_token']}"}
+                    resp = requests.get(direct_url, headers=headers, stream=True, timeout=60)
+                    resp.raise_for_status()
+                    with open(temp_path, "wb") as f:
+                        for chunk in resp.iter_content(chunk_size=65536):
+                            if chunk:
+                                f.write(chunk)
+                    mime = manifest_json.get("mimeType", "audio/mp4")
+                    default_format = ".flac" if "flac" in mime else ".m4a"
+                    bitrate = "1411k"
+                    return default_format, bitrate
+            except (_json.JSONDecodeError, KeyError):
+                pass
+
+            # Fallback: Write MPD to temp file for yt-dlp
             with open(mpd_file_path, "wb") as mpd_file:
                 mpd_file.write(mpd_data.encode("utf-8"))
+
             prefix = "file:///" if os.name == "nt" else "file://"
             item_url = f"{prefix}{mpd_file_path}"
-            ydl_opts["enable_file_urls"] = True
-            ydl_opts["fixup"] = "never"
+
             ydl_opts["allowed_extractors"] = ["generic"]
+            ydl_opts["fixup"] = "never"
+            ydl_opts["enable_file_urls"] = True
+            ydl_opts["allow_unplayable_formats"] = True
+
+            ydl_opts["http_headers"] = {
+                "Authorization": f"Bearer {token['access_token']}",
+                "X-Tidal-Token": token["access_token"],
+            }
+
+            ydl_opts["quiet"] = False
+            ydl_opts["nowarnings"] = False
 
         elif service == "youtube_music":
             # metadata_fn = get_metadata_function(service, item_type)
@@ -826,7 +866,7 @@ class DownloadWorker(QObject):
 
         ydl_opts.update(
             {
-                "quiet": True,
+                "quiet": False,
                 "no_warnings": True,
                 "noprogress": True,
                 "extract_audio": True,
@@ -905,7 +945,7 @@ class DownloadWorker(QObject):
         decryption_key = apple_music_get_decryption_key(token, stream_url, item_id)
 
         ydl_opts = {
-            "quiet": True,
+            "quiet": False,
             "no_warnings": True,
             "outtmpl": temp_path,
             "allow_unplayable_formats": True,
@@ -949,7 +989,7 @@ class DownloadWorker(QObject):
     def _download_crunchyroll(self, item, item_metadata, item_id, token, temp_path):
         """Download encrypted Crunchyroll video/audio streams and subtitles."""
         ydl_base_opts = {
-            "quiet": True,
+            "quiet": False,
             "no_warnings": True,
             "allow_unplayable_formats": True,
             "fixup": "never",
@@ -1142,7 +1182,7 @@ class DownloadWorker(QObject):
                 f"(bestvideo[height<={config.get('preferred_video_resolution')}]+bestaudio)/"
                 f"best"
             ),
-            "quiet": True,
+            "quiet": False,
             "no_warnings": True,
             "noprogress": True,
             "outtmpl": config.get("video_download_path") + os.sep + "%(title)s.%(ext)s",
@@ -1210,6 +1250,18 @@ class DownloadWorker(QObject):
         bitrate,
     ):
         """Convert, tag, thumbnail, and optionally add to M3U."""
+        # Verify temp file is valid before post-processing
+        if not os.path.exists(temp_path) or os.path.getsize(temp_path) < 4096:
+            size = os.path.getsize(temp_path) if os.path.exists(temp_path) else 0
+            logger.error(
+                f"Downloaded temp file is missing or too small ({size} bytes): {temp_path}"
+            )
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise RuntimeError(
+                f"Corrupt or incomplete download detected ({size} bytes)"
+            )
+
         # Lyrics
         lyrics_fn = SERVICE_LYRICS_FUNCTIONS.get(service)
         if lyrics_fn and config.get("download_lyrics"):

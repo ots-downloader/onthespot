@@ -34,6 +34,7 @@ if [ "$KEEP_BUILD_DIRS" = false ] || [ ! -d "venv" ]; then
 
     echo " => Upgrading pip and installing necessary dependencies..."
     venv/bin/pip install --upgrade pip wheel pyinstaller
+    venv/bin/pip install "pyqt6==6.4.2" "pyqt6-sip==13.5.0"
     venv/bin/pip install -r requirements.txt
 else
     echo " => Reusing existing virtual environment..."
@@ -73,7 +74,7 @@ FFBIN="--add-binary=dist/ffmpeg:onthespot/bin/ffmpeg"
 
 
 echo " => Running PyInstaller to create .app package..."
-pyinstaller --windowed \
+venv/bin/pyinstaller --windowed \
     --hidden-import="zeroconf._utils.ipaddress" \
     --hidden-import="zeroconf._handlers.answers" \
     --add-data="src/onthespot/qt/qtui/*.ui:onthespot/qt/qtui" \

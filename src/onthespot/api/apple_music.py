@@ -11,7 +11,7 @@ from pywidevine.license_protocol_pb2 import WidevinePsshData
 from ..constants import WVN_KEY
 from ..otsconfig import config
 from ..runtimedata import account_pool, get_logger
-from ..utils import conv_list_format, make_call
+from ..utils import conv_list_format, make_call, get_primary_composer
 
 logger = get_logger("api.apple_music")
 BASE_URL = "https://amp-api.music.apple.com/v1"
@@ -380,6 +380,8 @@ def apple_music_get_track_metadata(session, item_id):
     info["artists"] = conv_list_format(artists)
 
     info["album_artists"] = artists[0]
+    if config.get("prefer_composer_as_album_artist") and info["composer"]:
+        info["album_artists"] = get_primary_composer(info["composer"])
 
     if album_data:
         info["copyright"] = (

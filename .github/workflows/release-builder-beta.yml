@@ -33,7 +33,7 @@ jobs:
         if: ${{ github.event.release.prerelease == true }}
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ACTIONSBUILDTOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: dist/OnTheSpot.exe
@@ -62,7 +62,7 @@ jobs:
         if: ${{ github.event.release.prerelease == true }}
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ACTIONSBUILDTOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: dist/OnTheSpot.dmg
@@ -91,7 +91,7 @@ jobs:
         if: ${{ github.event.release.prerelease == true }}
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ACTIONSBUILDTOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: dist/OnTheSpot.dmg
@@ -125,7 +125,7 @@ jobs:
         if: ${{ github.event.release.prerelease == true }}
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ACTIONSBUILDTOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: dist/OnTheSpot.tar.gz
@@ -159,7 +159,7 @@ jobs:
         if: ${{ github.event.release.prerelease == true }}
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ACTIONSBUILDTOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: dist/OnTheSpot-x86_64.AppImage

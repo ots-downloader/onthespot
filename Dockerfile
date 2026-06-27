@@ -26,7 +26,7 @@ RUN python3 -m venv venv
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir --prefer-binary -r requirements.txt
 
-COPY pyproject.toml setup.cfg ./
+COPY setup.py setup.cfg ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
@@ -42,5 +42,5 @@ FROM base AS runtime
 
 COPY --from=builder /app/venv /app/venv
 
-EXPOSE 5000
-CMD ["onthespot-web", "--host", "0.0.0.0", "--port", "5000"]
+EXPOSE 6767
+CMD ["onthespot-web", "--host", "0.0.0.0", "--port", "6767"]

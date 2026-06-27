@@ -656,6 +656,30 @@
                 </tr>
                 <tr>
                     <td>
+                        <label for="embed_composer">Embed Composer:</label>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="sliding_button" id="embed_composer" {% if config.embed_composer %}checked{% endif %}>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <label for="prefer_composer_as_album_artist">Prefer Composer as Album Artist:</label>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="sliding_button" id="prefer_composer_as_album_artist" {% if config.prefer_composer_as_album_artist %}checked{% endif %}>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <label for="shorten_composer_tag">Shorten Composer Tag:</label>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="sliding_button" id="shorten_composer_tag" {% if config.shorten_composer_tag %}checked{% endif %}>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
                         <label for="embed_label">Embed Label:</label>
                     </td>
                     <td>
@@ -1011,6 +1035,9 @@
                     embed_performers: document.getElementById('embed_performers').checked,
                     embed_producers: document.getElementById('embed_producers').checked,
                     embed_writers: document.getElementById('embed_writers').checked,
+                    embed_composer: document.getElementById('embed_composer').checked,
+                    prefer_composer_as_album_artist: document.getElementById('prefer_composer_as_album_artist').checked,
+                    shorten_composer_tag: document.getElementById('shorten_composer_tag').checked,
                     embed_label: document.getElementById('embed_label').checked,
                     embed_copyright: document.getElementById('embed_copyright').checked,
                     embed_description: document.getElementById('embed_description').checked,
@@ -1064,6 +1091,8 @@
                 const loginButton = document.getElementById('login_button');
                 const loginNotice = document.getElementById('login_notice');
 
+                loginButton.setAttribute('onclick', 'addAccount()');
+
                 if (loginServices.value === 'apple_music') {
                     loginUsername.style.display = 'none';
                     loginPassword.style.display = 'block';
@@ -1114,9 +1143,9 @@
                 else if (loginServices.value === 'tidal') {
                     loginUsername.style.display = 'none';
                     loginPassword.style.display = 'none';
-                    loginButton.style.display = 'none'
-                    loginNotice.style.display = 'block';
-                    loginNotice.textContent = 'Logins for this service are not currently supported, please login through the desktop app and modify your config accordingly.';
+                    loginButton.style.display = 'block'
+                    loginButton.textContent = 'Login to Tidal'
+                    loginNotice.style.display = 'none';
                 }
                 else if (loginServices.value === 'youtube_music') {
                     loginUsername.style.display = 'none';
@@ -1154,6 +1183,11 @@
                 const loginUsername = document.getElementById('login_username').value;
                 const loginPassword = document.getElementById('login_password').value;
 
+                if (selectedService === 'tidal') {
+                    tidalLoginStep1();
+                    return;
+                }
+
                 const data = {
                     username: loginUsername,
                     password: loginPassword,
@@ -1175,6 +1209,47 @@
                 })
                 .catch((error) => {
                     console.error('Error:', error);
+                });
+            }
+
+            function tidalLoginStep1() {
+                const loginNotice = document.getElementById('login_notice');
+                const loginButton = document.getElementById('login_button');
+                
+                loginNotice.style.display = 'block';
+                loginNotice.textContent = 'Requesting Tidal login link...';
+                loginButton.disabled = true;
+
+                fetch('/api/tidal_login_step1', {
+                    method: 'POST'
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Server returned error');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loginNotice.innerHTML = `Please visit <a href="https://${data.verification_url}" target="_blank">${data.verification_url}</a> to log in. Once you have logged in, this page will automatically update.`;
+                    tidalLoginStep2(data.device_code);
+                })
+                .catch(error => {
+                    loginNotice.textContent = 'Error requesting Tidal login link. Please check container logs.';
+                    loginButton.disabled = false;
+                });
+            }
+
+            function tidalLoginStep2(deviceCode) {
+                fetch('/api/tidal_login_step2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ device_code: deviceCode })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Handled in background
                 });
             }
             function removeAccount(accountId) {
