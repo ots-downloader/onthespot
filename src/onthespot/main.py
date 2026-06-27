@@ -199,7 +199,7 @@ def search(search_term, search_filters: dict | None = None) -> None:
 
 
 def relogin():
-    fillaccountpool.quit()
+    fillaccountpool.stop()
     time.sleep(1)
     fillaccountpool.start()    
 
@@ -224,7 +224,7 @@ async def lifespan(app: FastAPI):
     queueworker.stop()
     parsing_worker.stop()
     downloadworker.stop()
-    fillaccountpool.quit()
+    fillaccountpool.stop()
     logger.info("Application shutdown")
 
 app = FastAPI(lifespan=lifespan)

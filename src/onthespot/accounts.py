@@ -13,8 +13,7 @@ optionally rotating to the next available account.
 """
 
 from time import sleep
-
-from PyQt6.QtCore import QThread, pyqtSignal
+import threading
 
 from .api.registry import SERVICE_LOGIN_FUNCTIONS, SERVICE_TOKEN_FUNCTIONS
 from .otsconfig import config
@@ -26,20 +25,28 @@ logger = get_logger("accounts")
 _TOKENLESS_SERVICES = frozenset({"bandcamp", "youtube_music", "generic"})
 
 
-class AccountPoolLoader(QThread):
-    """QThread that authenticates every active account from the config.
+class AccountPoolLoader():
+    """Thread that authenticates every active account from the config.
 
     Emits :attr:`progress` for each account attempt and :attr:`finished` when
     all accounts have been processed.
     """
 
-    finished = pyqtSignal()
-    progress = pyqtSignal(str, bool)
-
     def __init__(self, gui: bool = False) -> None:
-        self.gui = gui
         super().__init__()
+        self.gui = gui
+        self.is_running = True
+        self.thread = threading.Thread(target=self.run, daemon=True)
 
+    def start(self) -> None:
+        logger.info("Starting AccountPool Worker")
+        self.thread.start()
+
+    def stop(self) -> None:
+        logger.info("Stopping AccountPool Worker")
+        self.is_running = False
+        self.thread.join()
+    
     def run(self) -> None:
         """Iterate saved accounts, log each one in, and emit progress."""
         for account in config.get("accounts"):
@@ -47,35 +54,16 @@ class AccountPoolLoader(QThread):
             if not account["active"]:
                 continue
 
-            if self.gui:
-                self.progress.emit(
-                    self.tr("Attempting to create session for\n{0}...").format(
-                        account["uuid"]
-                    ),
-                    True,
-                )
-
             login_fn = SERVICE_LOGIN_FUNCTIONS.get(service)
             if login_fn is None:
                 logger.warning(f"No login function registered for service '{service}'")
                 continue
 
             login_succeeded = login_fn(account)
+        if login_succeeded:
+            logger.info("Logins Completed")
 
-            if self.gui:
-                if login_succeeded:
-                    self.progress.emit(
-                        self.tr("Session created for\n{0}!").format(account["uuid"]),
-                        True,
-                    )
-                else:
-                    self.progress.emit(
-                        self.tr("Login failed for \n{0}!").format(account["uuid"]),
-                        True,
-                    )
-                    sleep(0.5)
 
-        self.finished.emit()
 
 
 # Backwards-compatible alias used by the GUI code.

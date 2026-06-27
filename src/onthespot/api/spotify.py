@@ -10,7 +10,6 @@ import uuid
 from librespot.audio.decoders import AudioQuality
 from librespot.core import Session
 from librespot.zeroconf import ZeroconfServer
-from PyQt6.QtCore import QObject
 from ..otsconfig import config, cache_dir
 from ..runtimedata import (
     get_logger,
@@ -130,7 +129,7 @@ def spotify_playlist_call(token, url):
     return resp
 
 
-class MirrorSpotifyPlayback(QObject):
+class MirrorSpotifyPlayback():
     def __init__(self):
         super().__init__()
         self.thread = None
