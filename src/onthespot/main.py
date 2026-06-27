@@ -39,16 +39,79 @@ from .downloader import DownloadWorker, RetryWorker
 log_level = int(os.environ.get("LOG_LEVEL", 20))
 logger = get_logger("gui")
 
+class QueueWorker:
+    def __init__(self):
+        super().__init__()
+        self.is_running = True
+        self.thread = threading.Thread(target=self.run)
+
+    def start(self):
+        self.thread.start()
+
+    def run(self):
+        while self.is_running:
+            if pending:
+                try:
+                    local_id = next(iter(pending))
+                    with pending_lock:
+                        item = pending.pop(local_id)
+
+                    add_item_to_download_list(item)
+                    # Padding for 'GLib-ERROR : Creating pipes for GWakeup: Too many open files Trace/breakpoint trap'
+                    # when mass downloading cached responses with download queue thumbnails enabled.
+                    if config.get("show_download_thumbnails"):
+                        time.sleep(0.1)
+
+                except Exception as e:
+                    error_msg = f"Unknown Exception for {item}: {str(e)}"
+                    logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
+
+                    # Check if this is a permanent failure (e.g., max retries exhausted)
+                    if item is None:
+                        logger.warning(
+                            f"Permanent failure detected for {item['item_id']}, will not retry. Adding to download list as Failed."
+                        )
+
+                        # Create user-friendly error message
+                        error_str = str(e)
+                        service = item["item_service"].replace("_", " ").title()
+                        item_type = item["item_type"]
+
+                        if "404" in error_str or "not found" in error_str.lower():
+                            user_msg = f"Track not found: Could not load {item_type} from {service}. The item may have been removed or is unavailable in your region."
+                        elif "Max retries" in error_str or "exhausted" in error_str:
+                            user_msg = f"Failed to load {item_type} from {service} after multiple retries. The service may be experiencing issues."
+                        else:
+                            user_msg = f"Failed to load {item_type} from {service}: {error_str}"
+
+                        # Emit error to UI
+                        self.error.emit(user_msg)
+
+                        # Create minimal metadata so item can be added to UI with "Failed" status
+                        failed_metadata = create_failed_metadata(item, str(e))
+                        self.add_item_to_download_list.emit(item, failed_metadata)
+                    continue
+            else:
+                time.sleep(0.2)
+
+    def stop(self):
+        logger.info("Stopping Queue Worker")
+        self.is_running = False
+        self.thread.join()
+
+
+# defined here to allow app to access them
+parsing_worker = ParsingWorker()
+queueworker = QueueWorker()
+downloadworker = DownloadWorker(gui=True)
+fillaccountpool = FillAccountPool(gui=True)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Application Initialization")
-    parsing_worker = ParsingWorker()
-    parsing_worker.start()
-    queueworker = QueueWorker()
+    logger.info("Application Starting")   
+    parsing_worker.start() 
     queueworker.start()
-    downloadworker = DownloadWorker(gui=True)
     downloadworker.start()
-    fillaccountpool = FillAccountPool(gui=True)
     fillaccountpool.start()
 
     yield
@@ -58,7 +121,7 @@ async def lifespan(app: FastAPI):
     downloadworker.stop()
     fillaccountpool.quit()
     logger.info("Application shutdown")
-    
+
 app = FastAPI(lifespan=lifespan)
 
 config.migration()
@@ -137,66 +200,6 @@ def add_item_to_download_list(item):
         }
 
 
-class QueueWorker:
-    def __init__(self):
-        super().__init__()
-        self.is_running = True
-        self.thread = threading.Thread(target=self.run)
-
-    def start(self):
-        self.thread.start()
-
-    def run(self):
-        while self.is_running:
-            if pending:
-                try:
-                    local_id = next(iter(pending))
-                    with pending_lock:
-                        item = pending.pop(local_id)
-
-                    add_item_to_download_list(item)
-                    # Padding for 'GLib-ERROR : Creating pipes for GWakeup: Too many open files Trace/breakpoint trap'
-                    # when mass downloading cached responses with download queue thumbnails enabled.
-                    if config.get("show_download_thumbnails"):
-                        time.sleep(0.1)
-
-                except Exception as e:
-                    error_msg = f"Unknown Exception for {item}: {str(e)}"
-                    logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
-
-                    # Check if this is a permanent failure (e.g., max retries exhausted)
-                    if item is None:
-                        logger.warning(
-                            f"Permanent failure detected for {item['item_id']}, will not retry. Adding to download list as Failed."
-                        )
-
-                        # Create user-friendly error message
-                        error_str = str(e)
-                        service = item["item_service"].replace("_", " ").title()
-                        item_type = item["item_type"]
-
-                        if "404" in error_str or "not found" in error_str.lower():
-                            user_msg = f"Track not found: Could not load {item_type} from {service}. The item may have been removed or is unavailable in your region."
-                        elif "Max retries" in error_str or "exhausted" in error_str:
-                            user_msg = f"Failed to load {item_type} from {service} after multiple retries. The service may be experiencing issues."
-                        else:
-                            user_msg = f"Failed to load {item_type} from {service}: {error_str}"
-
-                        # Emit error to UI
-                        self.error.emit(user_msg)
-
-                        # Create minimal metadata so item can be added to UI with "Failed" status
-                        failed_metadata = create_failed_metadata(item, str(e))
-                        self.add_item_to_download_list.emit(item, failed_metadata)
-                    continue
-            else:
-                time.sleep(0.2)
-
-    def stop(self):
-        logger.info("Stopping Queue Worker")
-        self.is_running = False
-        self.thread.join()
-
 
 def search(search_term, search_filters: dict | None = None) -> None:
     if not search_filters:
@@ -221,8 +224,7 @@ def search(search_term, search_filters: dict | None = None) -> None:
 def relogin():
     fillaccountpool.quit()
     time.sleep(1)
-    fillaccountpool.start()
-    
+    fillaccountpool.start()    
 
 @app.get("/")
 def read_root():
