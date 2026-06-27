@@ -6,6 +6,7 @@ import logging
 import uvicorn
 from pydantic import BaseModel
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
 # Must be set before any protobuf/librespot imports.
@@ -38,7 +39,27 @@ from .downloader import DownloadWorker, RetryWorker
 log_level = int(os.environ.get("LOG_LEVEL", 20))
 logger = get_logger("gui")
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Application Initialization")
+    parsing_worker = ParsingWorker()
+    parsing_worker.start()
+    queueworker = QueueWorker()
+    queueworker.start()
+    downloadworker = DownloadWorker(gui=True)
+    downloadworker.start()
+    fillaccountpool = FillAccountPool(gui=True)
+    fillaccountpool.start()
+
+    yield
+
+    queueworker.stop()
+    parsing_worker.stop()
+    downloadworker.stop()
+    fillaccountpool.quit()
+    logger.info("Application shutdown")
+    
+app = FastAPI(lifespan=lifespan)
 
 config.migration()
 
@@ -308,23 +329,9 @@ async def get_accounts():
     return account_pool
 
 
-fillaccountpool = FillAccountPool(gui=True)
-fillaccountpool.start()
-
-parsing_worker = ParsingWorker()
-parsing_worker.start()
-queueworker = QueueWorker()
-queueworker.start()
-downloadworker = DownloadWorker(gui=True)
-downloadworker.start()
 
 
-@app.on_event("shutdown")
-def shutdown_event():
-    queueworker.stop()
-    parsing_worker.stop()
-    downloadworker.stop()
-    logger.info("Application shutdown")
+
 
 
 logger.info("Init completed !")
