@@ -41,7 +41,7 @@ from .api.spotify import (
     spotify_get_track_metadata,
     spotify_get_podcast_episode_metadata,
 )
-from .api.tidal import tidal_get_track_metadata
+from .api.tidal import tidal_get_track_metadata, tidal_add_account_pt1, tidal_add_account_pt2
 from .api.youtube_music import (
     youtube_music_get_track_metadata,
     youtube_music_add_account,
@@ -50,7 +50,7 @@ from .api.crunchyroll import crunchyroll_get_episode_metadata, crunchyroll_add_a
 from .api.generic import generic_add_account
 from .downloader import DownloadWorker, RetryWorker
 from .otsconfig import cache_dir, config_dir, config
-from .parse_item import parsingworker, parse_url
+from .parse_item import ParsingWorker, parse_url
 from .runtimedata import (
     get_logger,
     account_pool,
@@ -328,6 +328,38 @@ def parse_download(url):
     return jsonify(success=True)
 
 
+@app.route("/api/tidal_login_step1", methods=["POST"])
+@login_required
+def tidal_login_step1():
+    device_code, verification_url = tidal_add_account_pt1()
+    if not device_code:
+        return jsonify({"error": "Failed to get device code from Tidal API."}), 400
+    return jsonify({
+        "device_code": device_code,
+        "verification_url": verification_url
+    })
+
+
+@app.route("/api/tidal_login_step2", methods=["POST"])
+@login_required
+def tidal_login_step2():
+    data = request.get_json()
+    device_code = data.get("device_code")
+
+    def background_login(code):
+        if tidal_add_account_pt2(code):
+            config.set("active_account_number", config.get("active_account_number") + 1)
+            config.save()
+            # Trigger a refresh of the account pool
+            refresher = FillAccountPool()
+            refresher.start()
+            refresher.wait()
+
+    thread = threading.Thread(target=background_login, args=(device_code,))
+    thread.start()
+    return jsonify(success=True)
+
+
 @app.route("/api/delete/<path:local_id>", methods=["DELETE"])
 @login_required
 def delete_media(local_id):
@@ -418,9 +450,8 @@ def main():
 
     fill_account_pool.start()
 
-    thread = threading.Thread(target=parsingworker)
-    thread.daemon = True
-    thread.start()
+    parsing_worker = ParsingWorker()
+    parsing_worker.start()
 
     for _ in range(config.get("maximum_queue_workers")):
         queue_worker = QueueWorker()

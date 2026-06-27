@@ -322,6 +322,12 @@ def conv_list_format(items):
         return ""
 
 
+def get_primary_composer(composer_full):
+    if not composer_full:
+        return ""
+    return re.split(r" [,&;] | & |,|;", composer_full)[0].strip()
+
+
 def format_item_path(item, item_metadata):
     """Build the relative file path for *item* using the configured formatter.
 
@@ -349,10 +355,8 @@ def format_item_path(item, item_metadata):
 
     # Split composer
     composer_full = item_metadata.get("composer", "")
-    composer_first = (
-        re.split(r" [,&;] | & |,|;", composer_full)[0].strip() if composer_full else ""
-    )
-
+    primary_composer = get_primary_composer(composer_full)
+    
     item_path = path.format(
         # Universal
         service=sanitize_data(item.get("item_service")).title(),
@@ -364,7 +368,7 @@ def format_item_path(item, item_metadata):
         ),
         # Audio
         artist=sanitize_data(item_metadata.get("artists")),
-        composer=sanitize_data(composer_first),
+        composer=sanitize_data(primary_composer),
         album=sanitize_data(album),
         album_artist=sanitize_data(item_metadata.get("album_artists")),
         album_type=item_metadata.get("album_type", "single").title(),
@@ -395,6 +399,8 @@ def format_item_path(item, item_metadata):
         if not config.get("use_double_digit_path_numbers")
         else str(item_metadata.get("episode_number", 1)).zfill(2),
     )
+    # Clean up any duplicate consecutive slashes from empty fields
+    item_path = re.sub(r"/+", "/", item_path)
 
     return item_path
 
@@ -690,6 +696,8 @@ def embed_metadata(item, metadata):
                     command += ["-metadata", "author={}".format(value)]
 
             elif key == "composer" and config.get("embed_composer"):
+                if config.get("shorten_composer_tag"):
+                    value = get_primary_composer(value)
                 if filetype == ".mp3":
                     command += ["-metadata", "TCOM={}".format(value)]
                 else:

@@ -1,11 +1,13 @@
-from base64 import b64decode
 import json
-import requests
 import time
 import uuid
+from base64 import b64decode
+
+import requests
+
 from ..otsconfig import config
-from ..runtimedata import get_logger, account_pool
-from ..utils import make_call, conv_list_format
+from ..runtimedata import account_pool, get_logger
+from ..utils import conv_list_format, make_call
 
 logger = get_logger("api.tidal")
 CLIENT_ID = b64decode("ZlgySnhkbW50WldLMGl4VA==").decode("utf-8")
@@ -345,9 +347,11 @@ def tidal_get_lyrics(token, item_id, item_type, metadata, filepath):
     if config.get("download_lyrics"):
         headers = {}
         headers["Authorization"] = f"Bearer {token['access_token']}"
+        headers["X-Tidal-Token"] = CLIENT_ID
 
         params = {}
         params["countryCode"] = token["country_code"]
+        params["locale"] = "en_US"
 
         lyrics = []
 
@@ -423,18 +427,37 @@ def tidal_get_mpd_data(token, item_id):
     headers = {}
     headers["Authorization"] = f"Bearer {token['access_token']}"
 
-    params = {}
-    params["audioquality"] = "LOSSLESS"  # LOW, HIGH, LOSSLESS, MQA
-    params["playbackmode"] = "STREAM"
-    params["assetpresentation"] = "FULL"
+    for quality in ["LOSSLESS", "HIGH", "LOW"]:
+        params = {}
+        params["audioquality"] = quality
+        params["playbackmode"] = "STREAM"
+        params["assetpresentation"] = "FULL"
 
-    playback_info = make_call(
-        f"{BASE_URL}/tracks/{item_id}/playbackinfopostpaywall",
-        params=params,
-        headers=headers,
-        skip_cache=False,
+        playback_info = make_call(
+            f"{BASE_URL}/tracks/{item_id}/playbackinfopostpaywall",
+            params=params,
+            headers=headers,
+            skip_cache=False,
+        )
+
+        if playback_info and "manifest" in playback_info:
+            logger.info(f"Tidal: Got manifest for track {item_id} at quality {quality}")
+            manifest = b64decode(playback_info["manifest"]).decode("utf-8")
+            logger.info(f"MPD PREVIEW: {manifest[:800]}")
+            logger.info(f"MPD PREVIEW: {manifest[:800]}")
+            if "<MPD" in manifest or "BaseURL" in manifest or "http" in manifest:
+                return manifest
+            logger.warning(
+                f"Tidal: Manifest for {item_id} at {quality} looks invalid, trying next quality"
+            )
+        else:
+            logger.warning(
+                f"Tidal: No manifest at quality {quality} for track {item_id}, trying next"
+            )
+
+    raise RuntimeError(
+        f"Tidal: Could not get valid manifest for track {item_id} at any quality"
     )
-    return b64decode(playback_info["manifest"]).decode("utf-8")
 
 
 def tidal_get_artist_album_ids(token, artist_id):

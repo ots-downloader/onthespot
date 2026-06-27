@@ -198,6 +198,8 @@ class Config:
             "embed_producers": True,
             "embed_writers": True,
             "embed_composer": True,
+            "prefer_composer_as_album_artist": False,
+            "shorten_composer_tag": False,
             "embed_label": True,
             "embed_copyright": True,
             "embed_description": True,
