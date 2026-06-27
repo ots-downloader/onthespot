@@ -4,11 +4,21 @@ import threading
 import time
 import logging
 import uvicorn
+from pydantic import BaseModel
 from fastapi import FastAPI
 from logging.handlers import RotatingFileHandler
 
 # Must be set before any protobuf/librespot imports.
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+from .api.generic import generic_add_account
+from .api.apple_music import apple_music_add_account
+from .api.bandcamp import bandcamp_add_account
+from .api.deezer import deezer_add_account
+from .api.qobuz import qobuz_add_account
+from .api.soundcloud import soundcloud_add_account
+from .api.crunchyroll import crunchyroll_add_account
+from .api.spotify import spotify_new_session
+from .api.tidal import tidal_add_account_pt1, tidal_add_account_pt2
 
 from .accounts import FillAccountPool
 from .search import get_search_results
@@ -21,6 +31,7 @@ from .runtimedata import (
     download_queue,
     download_queue_lock,
     parsing,
+    account_pool,
 )
 from .downloader import DownloadWorker, RetryWorker
 
@@ -33,6 +44,47 @@ config.migration()
 
 
 logger.info(f"OnTheSpot Version: {config.get('version')}")
+
+
+class AccountData(BaseModel):
+    username: str | None = None
+    token: str | None = None
+
+
+def add_spotify_account():
+    logger.info("Add spotify account clicked ")
+    login_worker = threading.Thread(target=add_spotify_account_worker)
+    login_worker.daemon = True
+    login_worker.start()
+
+
+def add_spotify_account_worker():
+    if spotify_new_session():
+        config.set("active_account_number", len(account_pool))
+        config.save()
+    else:
+        logger.info("Account Already Exists")
+
+
+def add_tidal_account():
+    logger.info("Add Tidal account clicked ")
+    device_code, verification_url = tidal_add_account_pt1()
+    logger.info(
+        f"Login Service Started head to <a style='color: #6495ed;' href='https://{verification_url}'>https://{verification_url}</a> to continue."
+    )
+    login_worker = threading.Thread(
+        target=add_tidal_account_worker, args=(device_code,)
+    )
+    login_worker.daemon = True
+    login_worker.start()
+
+
+def add_tidal_account_worker(device_code):
+    if tidal_add_account_pt2(device_code):
+        config.set("active_account_number", len(account_pool))
+        config.save()
+    else:
+        logger.info("Account Already Exists")
 
 
 def add_item_to_download_list(item):
@@ -145,6 +197,11 @@ def search(search_term, search_filters: dict | None = None) -> None:
     results = get_search_results(search_term, content_types)
     return results
 
+def relogin():
+    fillaccountpool.quit()
+    time.sleep(1)
+    fillaccountpool.start()
+    
 
 @app.get("/")
 def read_root():
@@ -190,6 +247,65 @@ async def set_config(nkey, nvalue):
 @app.post("/config/save")
 async def save_config():
     return config.save()
+
+
+@app.post("/accounts/add")
+async def add_account(service: str, item: AccountData):
+    found = None
+    match service:
+        case "generic":
+            generic_add_account()
+            found = True
+        case "spotify":
+            add_spotify_account()
+            found = True
+        case "tidal":
+            add_tidal_account()
+            found = True
+        case "applemusic":
+            apple_music_add_account(item.token)
+            found = True
+        case "youtube":
+            generic_add_account()
+            found = True
+        case "bandcamp":
+            bandcamp_add_account()
+            found = True
+        case "qobuz":
+            qobuz_add_account(item.username, item.token)
+            found = True
+        case "deezer":
+            deezer_add_account(item.token)
+            found = True
+        case "soundcloud":
+            soundcloud_add_account(oauth_token=item.token)
+            found = True
+        case "crunchyroll":
+            crunchyroll_add_account(item.username, item.token)
+            found = True
+        case _:
+            raise NotImplementedError
+    if found:
+        relogin()
+
+@app.post("/accounts/remove")
+async def remove_account(uuid: str):
+    index = None
+    for idx, item in enumerate(account_pool):
+        if item["uuid"] == uuid:
+            index = idx
+    if index is None:
+        return None
+    del account_pool[index]
+    accounts = config.get("accounts").copy()
+    del accounts[index]
+    config.set("accounts", accounts)
+    config.save()
+    return True
+
+@app.get("/accounts/get")
+async def get_accounts():
+    return account_pool
 
 
 fillaccountpool = FillAccountPool(gui=True)
