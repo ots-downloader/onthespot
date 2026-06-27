@@ -20,44 +20,22 @@ from .runtimedata import (
     pending_lock,
     download_queue,
     download_queue_lock,
+    parsing,
 )
-
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
-_log_formatter = logging.Formatter(
-    "[%(asctime)s :: %(name)s :: %(pathname)s -> %(lineno)s:%(funcName)20s() :: %(levelname)s] -> %(message)s"
-)
-_file_handler = RotatingFileHandler(
-    config.get("_log_file"),
-    mode="a",
-    maxBytes=(5 * 1024 * 1024),
-    backupCount=2,
-    encoding="utf-8",
-    delay=0,
-)
-_stdout_handler = logging.StreamHandler(sys.stdout)
-_file_handler.setFormatter(_log_formatter)
-_stdout_handler.setFormatter(_log_formatter)
+from .downloader import DownloadWorker, RetryWorker
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
-
 logger = get_logger("gui")
+
 app = FastAPI()
+
 config.migration()
-parsing_worker = ParsingWorker()
-parsing_worker.start()
+
 
 logger.info(f"OnTheSpot Version: {config.get('version')}")
 
-fillaccountpool = FillAccountPool(gui=True)
-fillaccountpool.start()
 
-
-def add_item_to_download_list(item, item_metadata):
-
-    item_by = "ND"
+def add_item_to_download_list(item):
 
     playlist_name = ""
     playlist_by = ""
@@ -70,10 +48,6 @@ def add_item_to_download_list(item, item_metadata):
     else:
         item_category = f"{item['parent_category'].title()}"
 
-    item_service = item["item_service"]
-
-    title = "ND"
-
     with download_queue_lock:
         download_queue[item["local_id"]] = {
             "local_id": item["local_id"],
@@ -83,7 +57,7 @@ def add_item_to_download_list(item, item_metadata):
             "item_id": item["item_id"],
             "item_status": "Waiting",
             "file_path": None,
-            "parent_category": item["parent_category"],
+            "parent_category": item_category,
             "playlist_name": playlist_name,
             "playlist_by": playlist_by,
             "playlist_number": item.get("playlist_number"),
@@ -107,7 +81,7 @@ class QueueWorker:
                     with pending_lock:
                         item = pending.pop(local_id)
 
-                    add_item_to_download_list(item, {})
+                    add_item_to_download_list(item)
                     # Padding for 'GLib-ERROR : Creating pipes for GWakeup: Too many open files Trace/breakpoint trap'
                     # when mass downloading cached responses with download queue thumbnails enabled.
                     if config.get("show_download_thumbnails"):
@@ -151,32 +125,25 @@ class QueueWorker:
         self.thread.join()
 
 
-def search(search_term) -> None:
-    enable_search_tracks = True
-    enable_search_playlists = False
-    enable_search_albums = False
-    enable_search_artists = False
-    enable_search_podcasts = False
-    enable_search_episodes = False
-    enable_search_audiobooks = False
-    content_types = []
-    if enable_search_tracks:
-        content_types.append("track")
-    if enable_search_playlists:
-        content_types.append("playlist")
-    if enable_search_albums:
-        content_types.append("album")
-    if enable_search_artists:
-        content_types.append("artist")
-    if enable_search_podcasts:
-        content_types.append("show")
-    if enable_search_episodes:
-        content_types.append("episode")
-    if enable_search_audiobooks:
-        content_types.append("audiobook")
+def search(search_term, search_filters: dict | None = None) -> None:
+    if not search_filters:
+        search_filters = {
+            "tracks": True,
+            "playlists": True,
+            "albums": True,
+            "artists": True,
+            "podcasts": True,
+            "episodes": True,
+            "audiobooks": True,
+        }
 
-    # ADD THESE LINES to Read the filter checkbox states
-    return get_search_results(search_term, content_types)
+    content_types = []
+    for key, value in search_filters.items():
+        if value is True:
+            content_types.append(key)
+
+    results = get_search_results(search_term, content_types)
+    return results
 
 
 @app.get("/")
@@ -184,25 +151,66 @@ def read_root():
     return {"Hello": "World"}
 
 
-@app.get("/query/")
-async def read_items(q: str | None = None):
+##QUERY URL
+@app.post("/query/url")
+async def query_url(q: str | None = None, filters: dict | None = None):
+    result = None
     if q:
-        result = search(q)
+        result = search(q, filters)
     return result
 
 
+## QUEUES STATE
+@app.get("/query/downloads/queue")
+async def query_download_queue():
+    return download_queue
+
+
+@app.get("/query/pending/queue")
+async def query_pending_queue():
+    return pending
+
+
+@app.get("/query/parsing/queue")
+async def query_parsing_queue():
+    return parsing
+
+
+## CONFIG
+@app.get("/config/get")
+async def get_config():
+    return config
+
+
+@app.post("/config/set")
+async def set_config(nkey, nvalue):
+    return config.set(nkey, nvalue)
+
+
+@app.post("/config/save")
+async def save_config():
+    return config.save()
+
+
+fillaccountpool = FillAccountPool(gui=True)
+fillaccountpool.start()
+
+parsing_worker = ParsingWorker()
+parsing_worker.start()
 queueworker = QueueWorker()
 queueworker.start()
+downloadworker = DownloadWorker(gui=True)
+downloadworker.start()
 
 
 @app.on_event("shutdown")
 def shutdown_event():
-    with open("log.txt", mode="a") as log:
-        queueworker.stop()
-        parsing_worker.stop()
-        logger.info("Application shutdown")
+    queueworker.stop()
+    parsing_worker.stop()
+    downloadworker.stop()
+    logger.info("Application shutdown")
 
 
-logger.info("Main window init completed !")
+logger.info("Init completed !")
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

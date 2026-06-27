@@ -52,6 +52,7 @@ def get_search_results(
     without producing a result set, or ``False`` on error / empty input.
     """
     if not account_pool:
+        logger.error("No Accounts configured")
         return None
 
     if not search_term:
