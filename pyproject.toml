@@ -1,6 +1,6 @@
 [project]
 name = "onthespot"
-version = "0.1.0"
+version = "2.0.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -18,6 +18,6 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-librespot = { git = "https://github.com/justin025/librespot-python.git" }
+librespot = { git = "https://github.com/ots-downloader/librespot-python.git" }
 [tool.fastapi]
 entrypoint = "src.onthespot.main:app"

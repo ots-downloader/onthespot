@@ -8,19 +8,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
-SHELL ["/bin/bash", "-c"]
-
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
     libegl1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./app
-COPY src ./app
+COPY pyproject.toml ./app/
+COPY src ./app/
 
 WORKDIR /app
 
-RUN uv sync --frozen --no-cache
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
-CMD ["/app/.venv/bin/fastapi", "run", "app/src/onthespot/main.py", "--port", "6767", "--host", "0.0.0.0"]
+RUN uv sync --no-cache
+
+CMD ["/app/.venv/bin/fastapi", "run", "/app/onthespot/main.py", "--port", "6767", "--host", "0.0.0.0"]
