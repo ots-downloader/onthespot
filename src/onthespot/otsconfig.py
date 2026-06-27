@@ -7,7 +7,7 @@ import uuid
 def config_dir():
     if os.path.exists(os.environ.get("ONTHESPOTDIR", "")):
         return os.environ["ONTHESPOTDIR"]
-    elif os.name == "nt" and os.path.exists(os.environ.get("APPDATA", "")):
+    if os.name == "nt" and os.path.exists(os.environ.get("APPDATA", "")):
         base_dir = os.environ["APPDATA"]
     elif os.name == "nt" and os.path.exists(os.environ.get("LOCALAPPDATA", "")):
         base_dir = os.environ["LOCALAPPDATA"]
@@ -250,7 +250,7 @@ class Config:
             "v2a_preferred_codec": "mp3",
             "v2a_preferred_bitrate": 192,
         }
-        # Load Config
+        # Load Config if exists or load default and make config dir
         if os.path.isfile(self.__cfg_path):
             self.__config = json.load(open(cfg_path, "r"))
         else:
@@ -266,6 +266,7 @@ class Config:
             with open(self.__cfg_path, "w") as cf:
                 cf.write(json.dumps(self.__template_data, indent=4))
             self.__config = self.__template_data
+        self.set("_cache_dir", cache_dir())
         # Make Download Dirs
         try:
             os.makedirs(self.get("audio_download_path"), exist_ok=True)
@@ -306,11 +307,12 @@ class Config:
             ffmpeg_path = ""
         print(f"FFMPEG Binary: {ffmpeg_path}")
         self.set("_ffmpeg_bin_path", ffmpeg_path)
+        # Set log file path and name and build folder structure
+        log_filename = "onthespot-" + self.session_uuid + ".log"
         self.set(
             "_log_file",
-            os.path.join(cache_dir(), "logs", self.session_uuid, "onthespot.log"),
+            os.path.join(cache_dir(), "logs", log_filename),
         )
-        self.set("_cache_dir", cache_dir())
         try:
             os.makedirs(os.path.dirname(self.get("_log_file")), exist_ok=True)
         except (FileNotFoundError, PermissionError):
@@ -329,10 +331,9 @@ class Config:
     def get(self, key, default=None):
         if key in self.__config:
             return self.__config[key]
-        elif key in self.__template_data:
+        if key in self.__template_data:
             return self.__template_data[key]
-        else:
-            return default
+        return default
 
     def set(self, key, value):
         if type(value) in [list, dict]:
@@ -370,24 +371,6 @@ class Config:
                 old_config_path = os.path.join(config_dir(), "config.json")
                 if os.path.exists(old_config_path):
                     os.remove(old_config_path)
-
-                # Migration (>v1.0.3)
-                if isinstance(self.get("file_hertz"), str):
-                    self.set("file_hertz", int(self.get("file_hertz")))
-
-                # Migration (>v1.0.4)
-                if self.get("theme") == "dark":
-                    self.set("theme", f"background-color: #282828; color: white;")
-                elif self.get("theme") == "light":
-                    self.set("theme", f"background-color: white; color: black;")
-
-                # Migration (>v1.0.5)
-                cfg_copy = self.get("accounts").copy()
-                for account in cfg_copy:
-                    if account["uuid"] == "public_youtube":
-                        account["uuid"] = "public_youtube_music"
-                        account["service"] = "youtube_music"
-                self.set("accounts", cfg_copy)
 
                 # Migration (>v1.0.7)
                 if (

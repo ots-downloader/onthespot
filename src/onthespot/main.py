@@ -43,6 +43,35 @@ logger = get_logger("gui")
 # ONTHESPOT BOOTSTRAP
 # ---------------------------------------------------------------------------
 
+def add_item_to_download_list(item, item_status: str | None = None):
+
+    playlist_name = ""
+    playlist_by = ""
+    if item["parent_category"] == "playlist":
+        item_category = f"Playlist: {item['playlist_name']}"
+        playlist_name = item.get("playlist_name")
+        playlist_by = item.get("playlist_by")
+    elif item["parent_category"] in ("album", "show"):
+        item_category = f"{item['parent_category'].title()}"
+    else:
+        item_category = f"{item['parent_category'].title()}"
+
+    with download_queue_lock:
+        download_queue[item["local_id"]] = {
+            "local_id": item["local_id"],
+            "available": True,
+            "item_service": item["item_service"],
+            "item_type": item["item_type"],
+            "item_id": item["item_id"],
+            "item_status": "Waiting" if not item_status else item_status,
+            "file_path": None,
+            "parent_category": item_category,
+            "playlist_name": playlist_name,
+            "playlist_by": playlist_by,
+            "playlist_number": item.get("playlist_number"),
+        }
+
+
 class QueueWorker:
     def __init__(self):
         super().__init__()
@@ -61,10 +90,7 @@ class QueueWorker:
                         item = pending.pop(local_id)
 
                     add_item_to_download_list(item)
-                    # Padding for 'GLib-ERROR : Creating pipes for GWakeup: Too many open files Trace/breakpoint trap'
-                    # when mass downloading cached responses with download queue thumbnails enabled.
-                    if config.get("show_download_thumbnails"):
-                        time.sleep(0.1)
+                    
 
                 except Exception as e:
                     error_msg = f"Unknown Exception for {item}: {str(e)}"
@@ -88,12 +114,10 @@ class QueueWorker:
                         else:
                             user_msg = f"Failed to load {item_type} from {service}: {error_str}"
 
-                        # Emit error to UI
-                        self.error.emit(user_msg)
+                        # log error
+                        logger.error(f"{user_msg}")
 
-                        # Create minimal metadata so item can be added to UI with "Failed" status
-                        failed_metadata = create_failed_metadata(item, str(e))
-                        self.add_item_to_download_list.emit(item, failed_metadata)
+                        add_item_to_download_list(item, "Failed")
                     continue
             else:
                 time.sleep(0.2)
@@ -103,33 +127,6 @@ class QueueWorker:
         self.is_running = False
         self.thread.join()
 
-def add_item_to_download_list(item):
-
-    playlist_name = ""
-    playlist_by = ""
-    if item["parent_category"] == "playlist":
-        item_category = f"Playlist: {item['playlist_name']}"
-        playlist_name = item.get("playlist_name")
-        playlist_by = item.get("playlist_by")
-    elif item["parent_category"] in ("album", "show"):
-        item_category = f"{item['parent_category'].title()}"
-    else:
-        item_category = f"{item['parent_category'].title()}"
-
-    with download_queue_lock:
-        download_queue[item["local_id"]] = {
-            "local_id": item["local_id"],
-            "available": True,
-            "item_service": item["item_service"],
-            "item_type": item["item_type"],
-            "item_id": item["item_id"],
-            "item_status": "Waiting",
-            "file_path": None,
-            "parent_category": item_category,
-            "playlist_name": playlist_name,
-            "playlist_by": playlist_by,
-            "playlist_number": item.get("playlist_number"),
-        }
 
 # define workers here to allow app to access them
 # but start/stop them on lifespan events
