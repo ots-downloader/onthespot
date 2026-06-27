@@ -17,8 +17,6 @@ import threading
 import time
 import traceback
 
-from PyQt6.QtCore import QObject, pyqtSignal
-
 from .accounts import get_account_token
 from .api.registry import (
     SERVICE_ALBUM_TRACK_ID_FUNCTIONS,
@@ -116,6 +114,7 @@ class UrlMatcher:
 
     Returns ``None`` when the URL is not recognised by any built-in pattern
     (callers should then try the generic yt-dlp fallback).
+    Return service as ``__handled__`` when parsed by the matcher itself (deezer share)
     """
 
     def match(self, url: str):
@@ -303,7 +302,7 @@ def parse_url(url: str) -> bool | None:
 # ---------------------------------------------------------------------------
 
 
-class ParsingWorker(QObject):
+class ParsingWorker():
     """Background thread that drains the ``parsing`` queue.
 
     Each item in the queue represents a service collection (album, playlist,
@@ -316,7 +315,6 @@ class ParsingWorker(QObject):
     signal to show an error dialog.
     """
 
-    error = pyqtSignal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -447,7 +445,7 @@ class ParsingWorker(QObject):
                 )
             else:
                 msg = f"Failed to load Spotify playlist: {error_str}\n\nPlaylist ID: {playlist_id}"
-            self.error.emit(msg)
+            logger.error(msg)
             logger.error(f"Playlist fetch failed: {traceback.format_exc()}")
             return
 
@@ -490,7 +488,7 @@ class ParsingWorker(QObject):
         for index, track in enumerate(spotify_get_your_episodes(token)):
             episode_id = track["episode"]["id"]
             if not episode_id:
-                continue
+                raise NotImplementedError
             local_id = format_local_id(episode_id)
             with pending_lock:
                 pending[local_id] = {
@@ -507,7 +505,7 @@ class ParsingWorker(QObject):
     def _expand_youtube_music_channel(self, token, channel_id, service):
         get_track_ids = SERVICE_CHANNEL_TRACK_ID_FUNCTIONS.get(service)
         if get_track_ids is None:
-            return
+            raise NotImplementedError
         for track_id in get_track_ids(token, channel_id):
             local_id = format_local_id(track_id)
             with pending_lock:
@@ -522,7 +520,7 @@ class ParsingWorker(QObject):
     def _expand_podcast(self, service, item_type, item_id, token):
         get_episode_ids = SERVICE_PODCAST_EPISODE_ID_FUNCTIONS.get(service)
         if get_episode_ids is None:
-            return
+            raise NotImplementedError
         for episode_id in get_episode_ids(token, item_id):
             local_id = format_local_id(episode_id)
             with pending_lock:
@@ -542,17 +540,17 @@ class ParsingWorker(QObject):
             if item_type == "album":
                 get_track_ids = SERVICE_ALBUM_TRACK_ID_FUNCTIONS.get(service)
                 if get_track_ids is None:
-                    return
+                    raise NotImplementedError
                 track_ids = get_track_ids(token, item_id)
             elif item_type == "mix":
                 get_mix = SERVICE_MIX_DATA_FUNCTIONS.get(service)
                 if get_mix is None:
-                    return
+                    raise NotImplementedError
                 playlist_name, playlist_by, track_ids = get_mix(token, item_id)
             else:
                 get_playlist = SERVICE_PLAYLIST_DATA_FUNCTIONS.get(service)
                 if get_playlist is None:
-                    return
+                    raise NotImplementedError
                 playlist_name, playlist_by, track_ids = get_playlist(token, item_id)
 
         except Exception as exc:
@@ -584,7 +582,7 @@ class ParsingWorker(QObject):
             get_album_ids = SERVICE_ARTIST_ALBUM_ID_FUNCTIONS.get(service)
 
         if get_album_ids is None:
-            return
+            raise NotImplementedError
 
         for album_id in get_album_ids(token, item_id):
             with parsing_lock:
@@ -598,7 +596,7 @@ class ParsingWorker(QObject):
     def _expand_show(self, service, item_type, item_id, token):
         get_episode_ids = SERVICE_EPISODE_ID_FUNCTIONS.get(service)
         if get_episode_ids is None:
-            return
+            raise NotImplementedError
         for episode_id in get_episode_ids(token, item_id):
             local_id = format_local_id(episode_id)
             with pending_lock:
@@ -650,7 +648,7 @@ class ParsingWorker(QObject):
                 f"{item_type.title()} ID: {item_id}"
             )
 
-        self.error.emit(msg)
+        logger.error(msg)
         logger.error(
             f"{item_type.title()} fetch failed for {service}: {traceback.format_exc()}"
         )
@@ -688,7 +686,7 @@ class ParsingWorker(QObject):
         else:
             msg = f"Error parsing {item_type}: {error_str}\n\nURL: {item_url}"
 
-        self.error.emit(msg)
+        logger.error(msg)
         logger.error(
             f"Unknown Exception: {str(exc)}\nTraceback: {traceback.format_exc()}"
         )
