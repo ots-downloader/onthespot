@@ -39,6 +39,10 @@ from .downloader import DownloadWorker, RetryWorker
 log_level = int(os.environ.get("LOG_LEVEL", 20))
 logger = get_logger("gui")
 
+# ---------------------------------------------------------------------------
+# ONTHESPOT BOOTSTRAP
+# ---------------------------------------------------------------------------
+
 class QueueWorker:
     def __init__(self):
         super().__init__()
@@ -99,42 +103,45 @@ class QueueWorker:
         self.is_running = False
         self.thread.join()
 
+def add_item_to_download_list(item):
 
-# defined here to allow app to access them
+    playlist_name = ""
+    playlist_by = ""
+    if item["parent_category"] == "playlist":
+        item_category = f"Playlist: {item['playlist_name']}"
+        playlist_name = item.get("playlist_name")
+        playlist_by = item.get("playlist_by")
+    elif item["parent_category"] in ("album", "show"):
+        item_category = f"{item['parent_category'].title()}"
+    else:
+        item_category = f"{item['parent_category'].title()}"
+
+    with download_queue_lock:
+        download_queue[item["local_id"]] = {
+            "local_id": item["local_id"],
+            "available": True,
+            "item_service": item["item_service"],
+            "item_type": item["item_type"],
+            "item_id": item["item_id"],
+            "item_status": "Waiting",
+            "file_path": None,
+            "parent_category": item_category,
+            "playlist_name": playlist_name,
+            "playlist_by": playlist_by,
+            "playlist_number": item.get("playlist_number"),
+        }
+
+# define workers here to allow app to access them
+# but start/stop them on lifespan events
 parsing_worker = ParsingWorker()
 queueworker = QueueWorker()
 downloadworker = DownloadWorker(gui=True)
 fillaccountpool = FillAccountPool(gui=True)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Application Starting")   
-    parsing_worker.start() 
-    queueworker.start()
-    downloadworker.start()
-    fillaccountpool.start()
-
-    yield
-
-    queueworker.stop()
-    parsing_worker.stop()
-    downloadworker.stop()
-    fillaccountpool.quit()
-    logger.info("Application shutdown")
-
-app = FastAPI(lifespan=lifespan)
-
+# migrate possibly old configurations
 config.migration()
 
-
-logger.info(f"OnTheSpot Version: {config.get('version')}")
-
-
-class AccountData(BaseModel):
-    username: str | None = None
-    token: str | None = None
-
-
+##ONTHESPOT BRIDGE FUNCTIONS
 def add_spotify_account():
     logger.info("Add spotify account clicked ")
     login_worker = threading.Thread(target=add_spotify_account_worker)
@@ -171,36 +178,6 @@ def add_tidal_account_worker(device_code):
         logger.info("Account Already Exists")
 
 
-def add_item_to_download_list(item):
-
-    playlist_name = ""
-    playlist_by = ""
-    if item["parent_category"] == "playlist":
-        item_category = f"Playlist: {item['playlist_name']}"
-        playlist_name = item.get("playlist_name")
-        playlist_by = item.get("playlist_by")
-    elif item["parent_category"] in ("album", "show"):
-        item_category = f"{item['parent_category'].title()}"
-    else:
-        item_category = f"{item['parent_category'].title()}"
-
-    with download_queue_lock:
-        download_queue[item["local_id"]] = {
-            "local_id": item["local_id"],
-            "available": True,
-            "item_service": item["item_service"],
-            "item_type": item["item_type"],
-            "item_id": item["item_id"],
-            "item_status": "Waiting",
-            "file_path": None,
-            "parent_category": item_category,
-            "playlist_name": playlist_name,
-            "playlist_by": playlist_by,
-            "playlist_number": item.get("playlist_number"),
-        }
-
-
-
 def search(search_term, search_filters: dict | None = None) -> None:
     if not search_filters:
         search_filters = {
@@ -221,17 +198,54 @@ def search(search_term, search_filters: dict | None = None) -> None:
     results = get_search_results(search_term, content_types)
     return results
 
+
 def relogin():
     fillaccountpool.quit()
     time.sleep(1)
     fillaccountpool.start()    
+
+# ---------------------------------------------------------------------------
+# FASTAPI INIT
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"OnTheSpot Version: {config.get('version')}")  
+    parsing_worker.start() 
+    queueworker.start()
+    downloadworker.start()
+    fillaccountpool.start()
+    logger.info("Initializing...")
+
+    yield
+
+    queueworker.stop()
+    parsing_worker.stop()
+    downloadworker.stop()
+    fillaccountpool.quit()
+    logger.info("Application shutdown")
+
+app = FastAPI(lifespan=lifespan)
+
+
+# Pydantic schemas of body data
+class AccountData(BaseModel):
+    username: str | None = None
+    token: str | None = None
+
+
+
+# ---------------------------------------------------------------------------
+# API ENDPOINTS
+# ---------------------------------------------------------------------------
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
 
 
-##QUERY URL
+##QUERY ENDPOINTS
+
 @app.post("/query/url")
 async def query_url(q: str | None = None, filters: dict | None = None):
     result = None
@@ -240,23 +254,25 @@ async def query_url(q: str | None = None, filters: dict | None = None):
     return result
 
 
-## QUEUES STATE
-@app.get("/query/downloads/queue")
+## QUEUES ENDPOINTS
+
+@app.get("/queue/downloads")
 async def query_download_queue():
     return download_queue
 
 
-@app.get("/query/pending/queue")
+@app.get("/queue/pending")
 async def query_pending_queue():
     return pending
 
 
-@app.get("/query/parsing/queue")
+@app.get("/queue/parsing")
 async def query_parsing_queue():
     return parsing
 
 
-## CONFIG
+## CONFIG ENDPOINTS
+
 @app.get("/config/get")
 async def get_config():
     return config
@@ -271,6 +287,8 @@ async def set_config(nkey, nvalue):
 async def save_config():
     return config.save()
 
+
+# ACCOUNTS ENDPOINTS
 
 @app.post("/accounts/add")
 async def add_account(service: str, item: AccountData):
@@ -311,6 +329,7 @@ async def add_account(service: str, item: AccountData):
     if found:
         relogin()
 
+
 @app.post("/accounts/remove")
 async def remove_account(uuid: str):
     index = None
@@ -326,16 +345,11 @@ async def remove_account(uuid: str):
     config.save()
     return True
 
+
 @app.get("/accounts/get")
 async def get_accounts():
     return account_pool
 
 
-
-
-
-
-
-logger.info("Init completed !")
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
