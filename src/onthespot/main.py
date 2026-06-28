@@ -318,6 +318,14 @@ async def get_config():
 
 @app.post("/config/set")
 async def set_config(nkey, nvalue):
+    if nvalue in ['false', 'true']:
+        match nvalue:
+            case 'false':
+                nvalue = False
+            case 'true':
+                nvalue = True
+            case _:
+                pass
     return config.set(nkey, nvalue)
 
 
