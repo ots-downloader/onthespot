@@ -6,6 +6,7 @@ import logging
 import uvicorn
 from pydantic import BaseModel
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
@@ -228,7 +229,19 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutdown")
 
 app = FastAPI(lifespan=lifespan)
+# Define allowed origins
+origins = [
+    "http://localhost:3000",
+    "https://example.com",
+]
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+) 
 
 # Pydantic schemas of body data
 class AccountData(BaseModel):
