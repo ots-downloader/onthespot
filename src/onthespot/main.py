@@ -45,7 +45,6 @@ from .downloader import DownloadWorker, RetryWorker
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
 logger = get_logger("gui")
-
 # ---------------------------------------------------------------------------
 # ONTHESPOT BOOTSTRAP
 # ---------------------------------------------------------------------------
@@ -301,7 +300,7 @@ async def remove_queue_items(status: str = "Completed"):
 @app.get("/queue/downloads/retryfailed")
 async def retry_failed_items():
     with download_queue_lock:
-        for key, item in enumerate(download_queue):
+        for key, item in download_queue.items():
             if item["item_status"] in ["Failed", "Cancelled"]:
                 download_queue[key]["item_status"] = "Waiting"
 
@@ -411,22 +410,23 @@ async def get_accounts():
 @app.get("/logs")
 async def get_logs():
     log_path = config.get("_log_file")
+    lines = None
+    data = []
     with open(log_path, "r") as f:
-        data = []
         lines = f.readlines()
-        for l in lines:
-            main = re.findall(r"(\[*.+\])( -> *.+)",l)
-            message = main[0][1]
-            log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
-            date = log_info[0][0][:-4]
-            source = log_info[0][2]
-            level = log_info[0][3]
-            data.append({
-                "id": uuid.uuid4(),
-                "timestamp": date,
-                "level": level,
-                "message": source + message,
-            })
+    for l in lines:
+        main = re.findall(r"(\[*.+\])( -> *.+)",l)
+        message = main[0][1]
+        log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
+        date = log_info[0][0][:-4]
+        source = log_info[0][2]
+        level = log_info[0][3]
+        data.append({
+            "id": uuid.uuid4(),
+            "timestamp": date,
+            "level": level,
+            "message": source + message,
+        })
     return data
 
 @app.websocket("/ws")

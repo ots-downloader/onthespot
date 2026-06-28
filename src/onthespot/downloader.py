@@ -258,7 +258,15 @@ class DownloadWorker():
                 try:
                     metadata_fn = get_metadata_function(service, item_type)
                     item_metadata = metadata_fn(token, item_id)
-
+                    try:
+                        progress_item = item
+                        progress_item["name"] = item_metadata["title"]
+                        progress_item["artist"] = item_metadata["artists"]
+                        progress_item["thumbnail"] = item_metadata["image_url"]
+                        progress_item["album"] = item_metadata["album_name"]
+                        self._progress_hook(progress_item, 25)
+                    except Exception as e:
+                        logger.error(f"error emitting progress metadata {e}")
                     # YouTube Music album number shim
                     if (
                         service == "youtube_music"
@@ -339,8 +347,8 @@ class DownloadWorker():
                 # ---- Post-processing ------------------------------------------
                 if service != "generic":
                     
-                    self._progress_hook(item, 99)
-                    item["progress"] = 99
+                    self._progress_hook(item, 50)
+                    item["progress"] = 50
                     if item_type in ("track", "podcast_episode"):
                         self._finalize_audio(
                             item,
@@ -493,7 +501,7 @@ class DownloadWorker():
         # Lyrics
         lyrics_fn = SERVICE_LYRICS_FUNCTIONS.get(service)
         if lyrics_fn and config.get("download_lyrics"):
-            self._progress_hook(item, 99, ItemStatus.GETTING_LYRICS)
+            self._progress_hook(item, 60, ItemStatus.GETTING_LYRICS)
             extra = lyrics_fn(token, item_id, item_type, item_metadata, file_path)
             if isinstance(extra, dict):
                 item_metadata.update(extra)
@@ -502,12 +510,12 @@ class DownloadWorker():
             strip_metadata(item)
             embed_metadata(item, item_metadata)
             if config.get("save_album_cover") or config.get("embed_cover"):
-                self._progress_hook(item, 99, ItemStatus.SETTING_THUMBNAIL)
+                self._progress_hook(item, 70, ItemStatus.SETTING_THUMBNAIL)
                 set_music_thumbnail(item["file_path"], item_metadata)
             if os.path.splitext(item["file_path"])[1] == ".mp3":
                 fix_mp3_metadata(item["file_path"])
         elif config.get("save_album_cover"):
-            self._progress_hook(item, 99, ItemStatus.SETTING_THUMBNAIL)
+            self._progress_hook(item, 70, ItemStatus.SETTING_THUMBNAIL)
             set_music_thumbnail(file_path, item_metadata)
 
     # ------------------------------------------------------------------
@@ -1228,7 +1236,7 @@ class DownloadWorker():
         # Lyrics
         lyrics_fn = SERVICE_LYRICS_FUNCTIONS.get(service)
         if lyrics_fn and config.get("download_lyrics"):
-            self._progress_hook(item, 99, ItemStatus.GETTING_LYRICS)
+            self._progress_hook(item, 60, ItemStatus.GETTING_LYRICS)
             extra = lyrics_fn(token, item_id, item_type, item_metadata, file_path)
             if isinstance(extra, dict):
                 item_metadata.update(extra)
@@ -1245,26 +1253,26 @@ class DownloadWorker():
         item["file_path"] = final_path
 
         if not config.get("raw_media_download"):
-            self._progress_hook(item, 99, ItemStatus.CONVERTING)
+            self._progress_hook(item, 70, ItemStatus.CONVERTING)
             if config.get("use_custom_file_bitrate"):
                 bitrate = config.get("file_bitrate")
             convert_audio_format(final_path, bitrate, default_format)
             embed_metadata(item, item_metadata)
 
             if config.get("save_album_cover") or config.get("embed_cover"):
-                self._progress_hook(item, 99, ItemStatus.SETTING_THUMBNAIL)
+                self._progress_hook(item, 80, ItemStatus.SETTING_THUMBNAIL)
                 set_music_thumbnail(final_path, item_metadata)
 
             if os.path.splitext(final_path)[1] == ".mp3":
                 fix_mp3_metadata(final_path)
 
         elif config.get("save_album_cover"):
-            self._progress_hook(item, 99, ItemStatus.SETTING_THUMBNAIL)
+            self._progress_hook(item, 80, ItemStatus.SETTING_THUMBNAIL)
             set_music_thumbnail(final_path, item_metadata)
 
         # M3U
         if config.get("create_m3u_file") and item.get("parent_category") == "playlist":
-            self._progress_hook(item, 99, ItemStatus.ADDING_TO_M3U)
+            self._progress_hook(item, 90, ItemStatus.ADDING_TO_M3U)
             add_to_m3u_file(item, item_metadata)
 
     def _finalize_video(self, item, item_metadata, item_type, file_path, video_files):
@@ -1275,7 +1283,7 @@ class DownloadWorker():
             vf["path"] = final_path
 
         if not config.get("raw_media_download"):
-            self._progress_hook(item, 99, ItemStatus.CONVERTING)
+            self._progress_hook(item, 70, ItemStatus.CONVERTING)
             output_format = config.get(
                 "show_file_format" if item_type == "episode" else "movie_file_format"
             )
