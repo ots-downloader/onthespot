@@ -13,6 +13,7 @@ import linecache
 import logging
 import os
 import sys
+import time
 import tracemalloc
 from functools import wraps
 from logging.handlers import RotatingFileHandler
@@ -89,9 +90,24 @@ pending: dict = {}
 #: Active download queue (local_id → item dict).
 download_queue: dict = {}
 
+# Websocket Events
+websocket_queue: dict = {}
+
+
 parsing_lock = Lock()
 pending_lock = Lock()
 download_queue_lock = Lock()
+websocket_queue_lock = Lock()
+
+# LOCK HELPERS
+
+# Event callback for websocket updates
+def websocket_event(etype: str, event = None):
+    with websocket_queue_lock:
+        websocket_queue[str(time.time())] = {
+            "type": etype,
+            "event": event
+        }
 
 # ---------------------------------------------------------------------------
 # System-tray initialisation flag

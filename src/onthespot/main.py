@@ -4,8 +4,11 @@ import threading
 import time
 import logging
 import uvicorn
+import uuid
+import re
+import asyncio
 from pydantic import BaseModel
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
@@ -33,6 +36,9 @@ from .runtimedata import (
     download_queue,
     download_queue_lock,
     parsing,
+    websocket_queue,
+    websocket_queue_lock,
+    websocket_event,
     account_pool,
 )
 from .downloader import DownloadWorker, RetryWorker
@@ -266,6 +272,7 @@ async def query_url(q: str | None = None, filters: dict | None = None):
     result = None
     if q:
         result = search(q, filters)
+    websocket_event("QUEUE_UPDATE")
     return result
 
 @app.post("/spotify/mirror")
@@ -400,6 +407,87 @@ async def remove_account(uuid: str):
 async def get_accounts():
     return account_pool
 
+#LOGS ENDPOINTS
+@app.get("/logs")
+async def get_logs():
+    log_path = config.get("_log_file")
+    with open(log_path, "r") as f:
+        data = []
+        lines = f.readlines()
+        for l in lines:
+            main = re.findall(r"(\[*.+\])( -> *.+)",l)
+            message = main[0][1]
+            log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
+            date = log_info[0][0][:-4]
+            source = log_info[0][2]
+            level = log_info[0][3]
+            data.append({
+                "id": uuid.uuid4(),
+                "timestamp": date,
+                "level": level,
+                "message": source + message,
+            })
+    return data
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    logger.info("websocket connected")
+    
+    try:
+        
+        # Step 1: Send the initial HANDSHAKE with the current queue
+        # The frontend accepts either an array or an object (it converts objects to arrays via Object.values)
+        await websocket.send_json({
+            "type": "HANDSHAKE",
+            "queue": download_queue
+        })
+        loop = True
+        while loop:
+            if websocket_queue:
+                with websocket_queue_lock:
+                    if websocket_queue:
+                        websocket_event_time, websocket_event_item = websocket_queue.popitem()
+                        websocket_event_type = websocket_event_item["type"]
+                        websocket_payload = websocket_event_item["event"]
+                        if websocket_event_type == "LOG": #log Entry
+                            # Send a LOG message
+                            await websocket.send_json({
+                                "type": "LOG",
+                                "line": websocket_payload
+                            })  
+                        elif websocket_event_type == "STATUS_CHANGE": #progress change on item
+                            # Update status of item_1 to 'downloading' and trigger a notification
+                            
+                            await websocket.send_json({
+                                "type": "STATUS_CHANGE",
+                                "item": websocket_payload,
+                                "notification": websocket_payload["item_status"]
+                            })
+                            
+                        elif websocket_event_type == "QUEUE_UPDATE": #queue update
+                            # Add a new item to the queue and send a full QUEUE_UPDATE
+                            
+                            await websocket.send_json({
+                                "type": "QUEUE_UPDATE",
+                                "queue": download_queue
+                            })
+                        else:
+                            # Keep the connection alive with simple heartbeat logs, or break/reset
+                            await websocket.send_json({
+                                "type": "LOG",
+                                "line": f"Unknown websocket event {websocket_event_type}"
+                            })
+                        await asyncio.sleep(0.5)
+            else:
+                await asyncio.sleep(1)
+                await websocket.send_json({
+                                "type": "Keepalive",
+                            })
+                        
+
+    except WebSocketDisconnect:
+        print("Client disconnected")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -64,6 +64,9 @@ from .runtimedata import (
     download_queue_lock,
     get_logger,
     temp_download_path,
+    websocket_queue,
+    websocket_queue_lock,
+    websocket_event,
 )
 from .utils import (
     add_to_m3u_file,
@@ -187,16 +190,19 @@ class DownloadWorker():
             item["progress"] = new_value
             with download_queue_lock:
                 download_queue[item["local_id"]]["progress"] = new_value
+        websocket_event("STATUS_CHANGE", item)
         if item["item_status"] == ItemStatus.CANCELLED:
             raise Exception("Download cancelled by user.")
-
+        
     def _progress_hook(self, item: dict, progress: int, status: ItemStatus | None = None):
         current = item.get("progress", 0)
-        if progress > current:
-            with download_queue_lock:
-                download_queue[item["local_id"]]["progress"] = progress
-                if status:
-                    download_queue[item["local_id"]]["item_status"] = status
+        with download_queue_lock:
+            download_queue[item["local_id"]]["progress"] = progress
+            item["progress"] = progress
+            if status:
+                download_queue[item["local_id"]]["item_status"] = status
+                item["item_status"] = status
+        websocket_event("STATUS_CHANGE", item)
     # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
@@ -332,8 +338,9 @@ class DownloadWorker():
 
                 # ---- Post-processing ------------------------------------------
                 if service != "generic":
+                    
+                    self._progress_hook(item, 99)
                     item["progress"] = 99
-                    self._progress_hook(item, item["progress"])
                     if item_type in ("track", "podcast_episode"):
                         self._finalize_audio(
                             item,
@@ -359,9 +366,9 @@ class DownloadWorker():
                 # ---- Mark downloaded ------------------------------------------
                 item["item_status"] = ItemStatus.DOWNLOADED
                 logger.info("Item Successfully Downloaded")
+                
+                self._progress_hook(item, 100, item["item_status"])
                 item["progress"] = 100
-                self._progress_hook(item, item["progress"], item["item_status"])
-
                 try:
                     config.set(
                         "total_downloaded_data",
