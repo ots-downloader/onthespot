@@ -42,6 +42,7 @@ from .runtimedata import (
     account_pool,
 )
 from .downloader import DownloadWorker, RetryWorker
+from .constants import ItemStatus
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
 logger = get_logger("gui")
@@ -291,9 +292,29 @@ async def query_download_queue():
 async def remove_queue_items(status: str = "Completed"):
     with download_queue_lock:
         if status != "all":
-            for key, item in enumerate(download_queue):
-                if item["item_status"] == status:
+            for key, item in download_queue.items():
+                if item["item_status"] == status or item["item_status"] == "Already Exists":
                     download_queue.pop(key)
+                    return
+        else:
+            download_queue.clear()
+
+@app.post("/queue/downloads/action")
+async def queue_action(id: str, action: str):
+    with download_queue_lock:
+        for key, item in download_queue.items():
+            if item["local_id"] == id:
+                match (action):
+                    case "retry":
+                        item["item_status"] = ItemStatus.WAITING
+                    case "cancel":
+                        item["item_status"] = ItemStatus.CANCELLED
+                    case "delete":
+                        download_queue.pop(key)
+                    case (_):
+                        pass 
+                
+                return
         else:
             download_queue.clear()
 
@@ -416,11 +437,19 @@ async def get_logs():
         lines = f.readlines()
     for l in lines:
         main = re.findall(r"(\[*.+\])( -> *.+)",l)
-        message = main[0][1]
+        try:
+            message = main[0][1]
+        except IndexError:
+            pass
         log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
-        date = log_info[0][0][:-4]
-        source = log_info[0][2]
-        level = log_info[0][3]
+        try:
+            date = log_info[0][0][:-4]
+            source = log_info[0][2]
+            level = log_info[0][3]
+        except IndexError:
+            date = ""
+            source = main
+            level = ""
         data.append({
             "id": uuid.uuid4(),
             "timestamp": date,
@@ -480,7 +509,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             })
                         await asyncio.sleep(0.5)
             else:
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
                 await websocket.send_json({
                                 "type": "Keepalive",
                             })

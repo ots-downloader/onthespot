@@ -12,7 +12,7 @@ from ..runtimedata import get_logger, account_pool
 from ..utils import conv_list_format, make_call
 
 logger = get_logger("api.deezer")
-BASE_URL = "https://api.deezer.com/"
+BASE_URL = "https://api.deezer.com"
 
 
 class ScriptExtractor(html.parser.HTMLParser):

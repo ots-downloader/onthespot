@@ -486,6 +486,7 @@ class DownloadWorker():
             
 
             item["item_status"] = ItemStatus.ALREADY_EXISTS
+            self._progress_hook(item, 100, ItemStatus.ALREADY_EXISTS)
             logger.info(f"File already exists — skipping download for id '{item_id}'")
             item["progress"] = 100
             time.sleep(0.2)
