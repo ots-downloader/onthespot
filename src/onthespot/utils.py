@@ -224,12 +224,8 @@ def make_call(
 def format_local_id(item_id):
     """Return a unique local ID for *item_id* that does not clash with any
     existing entry in the download queue or pending dict."""
-    suffix = 0
-    local_id = f"{item_id}-{suffix}"
-    while local_id in download_queue or local_id in pending:
-        suffix += 1
-        local_id = f"{item_id}-{suffix}"
-    return local_id
+    local_id = str(time.time())
+    return local_id.split(".")[0]
 
 
 # ---------------------------------------------------------------------------

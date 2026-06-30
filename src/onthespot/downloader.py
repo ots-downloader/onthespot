@@ -258,12 +258,14 @@ class DownloadWorker():
                 try:
                     metadata_fn = get_metadata_function(service, item_type)
                     item_metadata = metadata_fn(token, item_id)
+                    item["available"] = True
                     try:
                         progress_item = item
-                        progress_item["name"] = item_metadata["title"]
-                        progress_item["artist"] = item_metadata["artists"]
-                        progress_item["thumbnail"] = item_metadata["image_url"]
-                        progress_item["album"] = item_metadata["album_name"]
+                        progress_item["name"] = item_metadata.get("title")
+                        progress_item["artist"] = item_metadata.get("artists")
+                        progress_item["thumbnail"] = item_metadata.get("image_url")
+                        progress_item["album"] = item_metadata.get("album_name")
+                        
                         self._progress_hook(progress_item, 25)
                     except Exception as e:
                         logger.error(f"error emitting progress metadata {e}")
@@ -374,8 +376,18 @@ class DownloadWorker():
                 # ---- Mark downloaded ------------------------------------------
                 item["item_status"] = ItemStatus.DOWNLOADED
                 logger.info("Item Successfully Downloaded")
-                
-                self._progress_hook(item, 100, item["item_status"])
+                try:
+                    item_progress = item
+                    item_progress["bitrate"] = str(bitrate)
+                    item_progress["format"] = default_format
+                    item_progress["length"] = item_metadata.get("length")
+                    try:
+                        item_progress["file_size"] = str(os.path.getsize(item["file_path"]))
+                    except:
+                        pass
+                except Exception as e:
+                    logger.error(f"error emitting progress metadata {e}")
+                self._progress_hook(item_progress, 100, item["item_status"])
                 item["progress"] = 100
                 try:
                     config.set(
@@ -486,11 +498,26 @@ class DownloadWorker():
             
 
             item["item_status"] = ItemStatus.ALREADY_EXISTS
-            self._progress_hook(item, 100, ItemStatus.ALREADY_EXISTS)
+            item["available"] = True
+            progress_item = item
+            try:
+                try:
+                    progress_item["file_size"] = os.path.getsize(item["file_path"])
+                except:
+                    pass
+                progress_item["length"] = item_metadata.get("length")
+                progress_item["name"] = item_metadata.get("title")
+                progress_item["artist"] = item_metadata.get("artists")
+                progress_item["thumbnail"] = item_metadata.get("image_url")
+                progress_item["album"] = item_metadata.get("album_name")
+                progress_item["available"] = True
+            except Exception as e:
+                logger.error(f"error emitting progress metadata {e}")
+            self._progress_hook(progress_item, 100, ItemStatus.ALREADY_EXISTS)
             logger.info(f"File already exists — skipping download for id '{item_id}'")
             item["progress"] = 100
             time.sleep(0.2)
-            self._requeue_item(item)
+            #self._requeue_item(item)
             return True  # caller should continue
 
         return False  # file not found; proceed with download

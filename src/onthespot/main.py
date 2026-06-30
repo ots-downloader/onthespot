@@ -10,6 +10,7 @@ import asyncio
 from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
@@ -286,7 +287,7 @@ async def mirror_spotify(state: bool = False):
 
 @app.get("/queue/downloads")
 async def query_download_queue():
-    return download_queue
+    return dict(sorted(download_queue.items()))
 
 @app.get("/queue/downloads/clear")
 async def remove_queue_items(status: str = "Completed"):
@@ -325,6 +326,15 @@ async def retry_failed_items():
             if item["item_status"] in ["Failed", "Cancelled"]:
                 download_queue[key]["item_status"] = "Waiting"
 
+@app.get("/queue/downloads/download")
+async def download_file(id):
+    # Returns the file with appropriate headers
+    for local_id, item in download_queue.items():
+        if local_id == id:
+            file_path = item["file_path"]
+            directory, file_name = os.path.split(file_path)
+            break
+    return FileResponse(file_path, media_type="audio/mpeg", filename=file_name)
 
 @app.get("/queue/pending")
 async def query_pending_queue():
@@ -439,9 +449,10 @@ async def get_logs():
         main = re.findall(r"(\[*.+\])( -> *.+)",l)
         try:
             message = main[0][1]
+            log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
         except IndexError:
             pass
-        log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
+        
         try:
             date = log_info[0][0][:-4]
             source = log_info[0][2]
