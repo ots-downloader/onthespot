@@ -135,15 +135,19 @@ class QueueWorker:
         self.is_running = False
         self.thread.join()
 
+def notification_hook(title, message = "", url = "", ):
+    websocket_event(etype="Notification", event={"id":f"{uuid.uuid4()}","url": f"{url}", "title": f"{title}", "message": f"{message}"})
+
+
 
 # define workers here to allow app to access them
 # but start/stop them on lifespan events
 parsing_worker = ParsingWorker()
 queueworker = QueueWorker()
-downloadworker = DownloadWorker(gui=True)
+downloadworker = DownloadWorker()
 spotifymirrorworker = MirrorSpotifyPlayback()
-retryworker = RetryWorker(gui=True)
-fillaccountpool = FillAccountPool(gui=True)
+retryworker = RetryWorker()
+fillaccountpool = FillAccountPool()
 
 # migrate possibly old configurations
 config.migration()
@@ -170,6 +174,7 @@ def add_tidal_account():
     logger.info(
         f"Login Service Started head to <a style='color: #6495ed;' href='https://{verification_url}'>https://{verification_url}</a> to continue."
     )
+    notification_hook(title="Continue Login - Go to the URL ", url=f"https://{verification_url}")
     login_worker = threading.Thread(
         target=add_tidal_account_worker, args=(device_code,)
     )
@@ -181,6 +186,10 @@ def add_tidal_account_worker(device_code):
     if tidal_add_account_pt2(device_code):
         config.set("active_account_number", len(account_pool))
         config.save()
+        fillaccountpool.stop()
+        time.sleep(1)
+        relogin()
+        notification_hook("Login Complete", "Refresh the page")
     else:
         logger.info("Account Already Exists")
 
@@ -207,9 +216,10 @@ def search(search_term, search_filters: dict | None = None) -> None:
 
 
 def relogin():
-    fillaccountpool.stop()
     time.sleep(1)
-    fillaccountpool.start()    
+    global fillaccountpool 
+    fillaccountpool = FillAccountPool()
+    fillaccountpool.start()
 
 # ---------------------------------------------------------------------------
 # FASTAPI INIT
@@ -301,24 +311,23 @@ async def remove_queue_items(status: str = "Completed"):
             download_queue.clear()
 
 @app.post("/queue/downloads/action")
-async def queue_action(id: str, action: str):
+async def queue_action(lid: str, action: str):
     with download_queue_lock:
         for key, item in download_queue.items():
-            if item["local_id"] == id:
+            if item["local_id"] == lid:
                 match (action):
                     case "retry":
                         item["item_status"] = ItemStatus.WAITING
+                        return True
                     case "cancel":
                         item["item_status"] = ItemStatus.CANCELLED
+                        return True
                     case "delete":
                         download_queue.pop(key)
-                    case (_):
-                        pass 
-                
-                return
-        else:
-            download_queue.clear()
-
+                        return True
+                    case _:
+                        return False
+    
 @app.get("/queue/downloads/retryfailed")
 async def retry_failed_items():
     with download_queue_lock:
@@ -327,10 +336,10 @@ async def retry_failed_items():
                 download_queue[key]["item_status"] = "Waiting"
 
 @app.get("/queue/downloads/download")
-async def download_file(id):
+async def download_file(lid):
     # Returns the file with appropriate headers
     for local_id, item in download_queue.items():
-        if local_id == id:
+        if local_id == lid:
             file_path = item["file_path"]
             directory, file_name = os.path.split(file_path)
             break
@@ -379,17 +388,17 @@ async def reset_config():
 
 @app.post("/accounts/add")
 async def add_account(service: str, item: AccountData | None = None):
-    found = None
+    found = False
     match service:
         case "generic":
             generic_add_account()
             found = True
         case "spotify":
             add_spotify_account()
-            found = True
+            #found = True
         case "tidal":
             add_tidal_account()
-            found = True
+            #found = True
         case "applemusic":
             apple_music_add_account(item.token)
             found = True
@@ -410,18 +419,20 @@ async def add_account(service: str, item: AccountData | None = None):
             found = True
         case "crunchyroll":
             crunchyroll_add_account(item.username, item.token)
-            found = True
+            #found = True
         case _:
             raise NotImplementedError
     if found:
         relogin()
+    notification_hook(title="Logging in...")
+    return found
 
 
 @app.post("/accounts/remove")
-async def remove_account(uuid: str):
+async def remove_account(luuid: str):
     index = None
     for idx, item in enumerate(account_pool):
-        if item["uuid"] == uuid:
+        if item["uuid"] == luuid:
             index = idx
     if index is None:
         return None
@@ -511,6 +522,13 @@ async def websocket_endpoint(websocket: WebSocket):
                             await websocket.send_json({
                                 "type": "QUEUE_UPDATE",
                                 "queue": download_queue
+                            })
+                        elif websocket_event_type == "Notification": #queue update
+                            # Add a new item to the queue and send a full QUEUE_UPDATE
+                            
+                            await websocket.send_json({
+                                "type": "Notification",
+                                "content": websocket_payload,
                             })
                         else:
                             # Keep the connection alive with simple heartbeat logs, or break/reset

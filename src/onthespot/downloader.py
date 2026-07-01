@@ -1337,7 +1337,7 @@ class DownloadWorker():
 
     def _jittered_delay(self) -> float:
         """Return the configured download delay with optional random variance."""
-        variance = config.get("download_delay_variance")
+        variance = int(config.get("download_delay_variance"))
         return max(
-            0, config.get("download_delay") + random.randint(-variance, variance)
+            0, int(config.get("download_delay")) + random.randint(-variance, variance)
         )

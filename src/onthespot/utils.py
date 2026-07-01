@@ -24,6 +24,7 @@ import ssl
 import subprocess
 import threading
 import time
+import itertools
 from hashlib import md5
 from urllib.parse import urlparse
 from io import BytesIO
@@ -49,6 +50,7 @@ logger = get_logger("utils")
 _api_host_locks = {}
 _api_host_locks_guard = threading.Lock()
 
+counter = itertools.count(start=1)
 
 def _get_host_lock(url):
     host = urlparse(url).netloc
@@ -224,8 +226,9 @@ def make_call(
 def format_local_id(item_id):
     """Return a unique local ID for *item_id* that does not clash with any
     existing entry in the download queue or pending dict."""
-    local_id = str(time.time())
-    return local_id.split(".")[0]
+    local_id = next(counter)
+    logger.info(f"NEW ID: {local_id}")
+    return local_id
 
 
 # ---------------------------------------------------------------------------
