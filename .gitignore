@@ -17,6 +17,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+#exclude ui lib folder!
+!/ui/src/lib
 lib64/
 parts/
 sdist/
