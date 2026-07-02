@@ -1,5 +1,6 @@
 # Usage Guide
 
+# NOT UPDATED! SOME SERVICES WILL NOT WORK YET
 
 ## 1. Logging into your accounts
 OnTheSpot supports various accounts and instructions for each are listed below, for further assistance please reach out for support on the community discord [here](https://discord.gg/GCQwRBFPk9).
@@ -66,13 +67,10 @@ OnTheSpot supports various accounts and instructions for each are listed below, 
 
 
 ## 2. Searching and Downloading Music
-The search bar is able to parse queries, urls, and text files.
-
-If a query is provided, say 'Daft Punk' for instance, the app will provide results to the query seperated into categories: Tracks, Albums, Artists, Playlists, and depending on the music service Episodes, Podcasts, and Audiobooks.
+The search bar is able to parse urls.
 
 If a url is provided the app will parse the url and immediately begin downloading.
 
-If a file path is provided the app will parse each line in the file for urls beginning in either http:// or https:// and begin downloading the items listed.
 
 
 ## 4. Configuration
