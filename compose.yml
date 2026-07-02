@@ -4,7 +4,7 @@ services:
       context: ./api
     pull_policy: build
     ports:
-      - "6767:8000"
+      - "6767:6767"
     volumes:
       - ./Music:/root/Music/OnTheSpot
       - ./Videos:/root/Videos/OnTheSpot
