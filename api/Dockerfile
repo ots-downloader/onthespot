@@ -6,6 +6,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION="python" \
     PATH="/app/.venv/bin:$PATH"
 
 RUN apt-get update && \

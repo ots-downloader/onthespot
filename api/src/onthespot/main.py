@@ -3,19 +3,14 @@ import sys
 import threading
 import time
 import logging
-import uvicorn
+
 import uuid
 import re
 import asyncio
-from pydantic import BaseModel
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
-# Must be set before any protobuf/librespot imports.
-os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
 from .api.generic import generic_add_account
 from .api.apple_music import apple_music_add_account
 from .api.bandcamp import bandcamp_add_account
@@ -44,6 +39,13 @@ from .runtimedata import (
 )
 from .downloader import DownloadWorker, RetryWorker
 from .constants import ItemStatus
+
+import uvicorn
+from pydantic import BaseModel
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
 logger = get_logger("gui")
