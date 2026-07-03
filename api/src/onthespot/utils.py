@@ -354,6 +354,14 @@ def format_item_path(item, item_metadata):
     composer_full = item_metadata.get("composer", "")
     primary_composer = get_primary_composer(composer_full)
 
+    try:
+        safe_artist = sanitize_data(item_metadata.get("artists"))
+        safe_composer = sanitize_data(primary_composer)
+    except KeyError as e:
+        logger.error(f"No {e} found in metadata, leaving blank")
+        safe_artist = ""
+        safe_composer = ""
+
     item_path = path.format(
         # Universal
         service=sanitize_data(item.get("item_service")).title(),
@@ -364,8 +372,8 @@ def format_item_path(item, item_metadata):
             str(config.get("explicit_label")) if item_metadata.get("explicit") else ""
         ),
         # Audio
-        artist=sanitize_data(item_metadata.get("artists")),
-        composer=sanitize_data(primary_composer),
+        artist=safe_artist,
+        composer=safe_composer,
         album=sanitize_data(album),
         album_artist=sanitize_data(item_metadata.get("album_artists")),
         album_type=item_metadata.get("album_type", "single").title(),
