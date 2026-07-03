@@ -52,6 +52,7 @@ _api_host_locks_guard = threading.Lock()
 
 counter = itertools.count(start=1)
 
+
 def _get_host_lock(url):
     host = urlparse(url).netloc
     with _api_host_locks_guard:
@@ -352,7 +353,7 @@ def format_item_path(item, item_metadata):
     # Split composer
     composer_full = item_metadata.get("composer", "")
     primary_composer = get_primary_composer(composer_full)
-    
+
     item_path = path.format(
         # Universal
         service=sanitize_data(item.get("item_service")).title(),
@@ -833,14 +834,12 @@ def set_music_thumbnail(filename, metadata):
     """
     if not metadata.get("image_url"):
         return
-    
+
     target_path = os.path.abspath(filename)
     dirname = os.path.dirname(target_path)
     file_stem, filetype = os.path.splitext(os.path.basename(target_path))
 
-    temp_name = os.path.join(
-        dirname, "~" + file_stem + filetype
-    )
+    temp_name = os.path.join(dirname, "~" + file_stem + filetype)
 
     format = config.get("album_cover_format")
     image_path = os.path.join(dirname, f"cover.{format}")
@@ -855,9 +854,7 @@ def set_music_thumbnail(filename, metadata):
     _save_image(img, image_path, format)
 
     if not config.get("raw_media_download"):
-        if config.get("embed_cover") and config.get(
-            "windows_10_explorer_thumbnails"
-        ):
+        if config.get("embed_cover") and config.get("windows_10_explorer_thumbnails"):
             # music_tag renders covers visible in Windows Explorer; raw
             # mutagen/ffmpeg do not in this mode.
             _embed_with_music_tag(filename, image_path)
@@ -875,19 +872,24 @@ def set_music_thumbnail(filename, metadata):
                 command += ["-loglevel", "error", "-hide_banner", "-nostats"]
 
             command += [
-                "-i", image_path,
-                "-map", "0:a",
-                "-map", "1:v",
-                "-c", "copy",
-                "-disposition:v:0", "attached_pic",
-                "-metadata:s:v", "title=Cover",
-                "-metadata:s:v", "comment=Cover (front), -id3v2_version 1",
+                "-i",
+                image_path,
+                "-map",
+                "0:a",
+                "-map",
+                "1:v",
+                "-c",
+                "copy",
+                "-disposition:v:0",
+                "attached_pic",
+                "-metadata:s:v",
+                "title=Cover",
+                "-metadata:s:v",
+                "comment=Cover (front), -id3v2_version 1",
             ]
 
             command += [filename]
-            logger.debug(
-                f"Setting thumbnail with ffmpeg. Built commandline {command}"
-            )
+            logger.debug(f"Setting thumbnail with ffmpeg. Built commandline {command}")
             if os.name == "nt":
                 subprocess.check_call(
                     command,
@@ -896,9 +898,7 @@ def set_music_thumbnail(filename, metadata):
                     creationflags=subprocess.CREATE_NO_WINDOW,
                 )
             else:
-                subprocess.check_call(
-                    command, shell=False, stdin=subprocess.DEVNULL
-                )
+                subprocess.check_call(command, shell=False, stdin=subprocess.DEVNULL)
 
         elif config.get("embed_cover") and filetype == ".ogg":
             _embed_with_music_tag(filename, image_path)
@@ -914,14 +914,14 @@ def _save_image(img, image_path, format):
     """Convert and save image to file."""
     if img.mode != "RGB":
         img = img.convert("RGB")
-    
+
     # Handle jpg/jpeg format alias
     save_format = "jpeg" if format == "jpg" else format
-    
+
     buf = BytesIO()
     img.save(buf, format=save_format)
     buf.seek(0)
-    
+
     with open(image_path, "wb") as cover:
         cover.write(buf.read())
 
@@ -930,10 +930,11 @@ def _embed_with_music_tag(filename, image_path):
     """Embed cover using music_tag (Windows Explorer compatible)."""
     with open(image_path, "rb") as image_file:
         image_data = image_file.read()
-    
+
     tags = music_tag.load_file(filename)
     tags["artwork"] = image_data
     tags.save()
+
 
 # ---------------------------------------------------------------------------
 # ID3 fix-up

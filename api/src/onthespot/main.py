@@ -51,6 +51,7 @@ logger = get_logger("gui")
 # ONTHESPOT BOOTSTRAP
 # ---------------------------------------------------------------------------
 
+
 def add_item_to_download_list(item, item_status: str | None = None):
 
     playlist_name = ""
@@ -98,7 +99,6 @@ class QueueWorker:
                         item = pending.pop(local_id)
 
                     add_item_to_download_list(item)
-                    
 
                 except Exception as e:
                     error_msg = f"Unknown Exception for {item}: {str(e)}"
@@ -135,9 +135,21 @@ class QueueWorker:
         self.is_running = False
         self.thread.join()
 
-def notification_hook(title, message = "", url = "", ):
-    websocket_event(etype="Notification", event={"id":f"{uuid.uuid4()}","url": f"{url}", "title": f"{title}", "message": f"{message}"})
 
+def notification_hook(
+    title,
+    message="",
+    url="",
+):
+    websocket_event(
+        etype="Notification",
+        event={
+            "id": f"{uuid.uuid4()}",
+            "url": f"{url}",
+            "title": f"{title}",
+            "message": f"{message}",
+        },
+    )
 
 
 # define workers here to allow app to access them
@@ -151,6 +163,7 @@ fillaccountpool = FillAccountPool()
 
 # migrate possibly old configurations
 config.migration()
+
 
 ##ONTHESPOT BRIDGE FUNCTIONS
 def add_spotify_account():
@@ -174,7 +187,9 @@ def add_tidal_account():
     logger.info(
         f"Login Service Started head to <a style='color: #6495ed;' href='https://{verification_url}'>https://{verification_url}</a> to continue."
     )
-    notification_hook(title="Continue Login - Go to the URL ", url=f"https://{verification_url}")
+    notification_hook(
+        title="Continue Login - Go to the URL ", url=f"https://{verification_url}"
+    )
     login_worker = threading.Thread(
         target=add_tidal_account_worker, args=(device_code,)
     )
@@ -217,19 +232,21 @@ def search(search_term, search_filters: dict | None = None) -> None:
 
 def relogin():
     time.sleep(1)
-    global fillaccountpool 
+    global fillaccountpool
     fillaccountpool = FillAccountPool()
     fillaccountpool.start()
+
 
 # ---------------------------------------------------------------------------
 # FASTAPI INIT
 # ---------------------------------------------------------------------------
 
-#START ONTHESPOT WORKERS HERE
+
+# START ONTHESPOT WORKERS HERE
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"OnTheSpot Version: {config.get('version')}")  
-    parsing_worker.start() 
+    logger.info(f"OnTheSpot Version: {config.get('version')}")
+    parsing_worker.start()
     queueworker.start()
     downloadworker.start()
     if config.get("enable_retry_worker"):
@@ -245,6 +262,7 @@ async def lifespan(app: FastAPI):
     fillaccountpool.stop()
     logger.info("Application shutdown")
 
+
 app = FastAPI(lifespan=lifespan)
 # Define allowed origins
 origins = [
@@ -258,7 +276,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-) 
+)
+
 
 # Pydantic schemas of body data
 class AccountData(BaseModel):
@@ -266,10 +285,10 @@ class AccountData(BaseModel):
     token: str | None = None
 
 
-
 # ---------------------------------------------------------------------------
 # API ENDPOINTS
 # ---------------------------------------------------------------------------
+
 
 @app.get("/")
 def read_root():
@@ -277,6 +296,7 @@ def read_root():
 
 
 ##QUERY ENDPOINTS
+
 
 @app.post("/query/url")
 async def query_url(q: str | None = None, filters: dict | None = None):
@@ -286,6 +306,7 @@ async def query_url(q: str | None = None, filters: dict | None = None):
     websocket_event("QUEUE_UPDATE")
     return result
 
+
 @app.post("/spotify/mirror")
 async def mirror_spotify(state: bool = False):
     if state:
@@ -293,29 +314,36 @@ async def mirror_spotify(state: bool = False):
     else:
         spotifymirrorworker.stop()
 
+
 ## QUEUES ENDPOINTS
+
 
 @app.get("/queue/downloads")
 async def query_download_queue():
     return dict(sorted(download_queue.items()))
+
 
 @app.get("/queue/downloads/clear")
 async def remove_queue_items(status: str = "Completed"):
     with download_queue_lock:
         if status != "all":
             for key, item in download_queue.items():
-                if item["item_status"] == status or item["item_status"] == "Already Exists":
+                if (
+                    item["item_status"] == status
+                    or item["item_status"] == "Already Exists"
+                ):
                     download_queue.pop(key)
                     return
         else:
             download_queue.clear()
+
 
 @app.post("/queue/downloads/action")
 async def queue_action(lid: str, action: str):
     with download_queue_lock:
         for key, item in download_queue.items():
             if item["local_id"] == lid:
-                match (action):
+                match action:
                     case "retry":
                         item["item_status"] = ItemStatus.WAITING
                         return True
@@ -327,13 +355,15 @@ async def queue_action(lid: str, action: str):
                         return True
                     case _:
                         return False
-    
+
+
 @app.get("/queue/downloads/retryfailed")
 async def retry_failed_items():
     with download_queue_lock:
         for key, item in download_queue.items():
             if item["item_status"] in ["Failed", "Cancelled"]:
                 download_queue[key]["item_status"] = "Waiting"
+
 
 @app.get("/queue/downloads/download")
 async def download_file(lid):
@@ -344,6 +374,7 @@ async def download_file(lid):
             directory, file_name = os.path.split(file_path)
             break
     return FileResponse(file_path, media_type="audio/mpeg", filename=file_name)
+
 
 @app.get("/queue/pending")
 async def query_pending_queue():
@@ -357,6 +388,7 @@ async def query_parsing_queue():
 
 ## CONFIG ENDPOINTS
 
+
 @app.get("/config/get")
 async def get_config():
     return config
@@ -364,11 +396,11 @@ async def get_config():
 
 @app.post("/config/set")
 async def set_config(nkey, nvalue):
-    if nvalue in ['false', 'true']:
+    if nvalue in ["false", "true"]:
         match nvalue:
-            case 'false':
+            case "false":
                 nvalue = False
-            case 'true':
+            case "true":
                 nvalue = True
             case _:
                 pass
@@ -379,12 +411,14 @@ async def set_config(nkey, nvalue):
 async def save_config():
     return config.save()
 
+
 @app.post("/config/reset")
 async def reset_config():
     return config.reset()
- 
+
 
 # ACCOUNTS ENDPOINTS
+
 
 @app.post("/accounts/add")
 async def add_account(service: str, item: AccountData | None = None):
@@ -395,10 +429,10 @@ async def add_account(service: str, item: AccountData | None = None):
             found = True
         case "spotify":
             add_spotify_account()
-            #found = True
+            # found = True
         case "tidal":
             add_tidal_account()
-            #found = True
+            # found = True
         case "applemusic":
             apple_music_add_account(item.token)
             found = True
@@ -419,7 +453,7 @@ async def add_account(service: str, item: AccountData | None = None):
             found = True
         case "crunchyroll":
             crunchyroll_add_account(item.username, item.token)
-            #found = True
+            # found = True
         case _:
             raise NotImplementedError
     if found:
@@ -448,7 +482,8 @@ async def remove_account(luuid: str):
 async def get_accounts():
     return account_pool
 
-#LOGS ENDPOINTS
+
+# LOGS ENDPOINTS
 @app.get("/logs")
 async def get_logs():
     log_path = config.get("_log_file")
@@ -457,12 +492,12 @@ async def get_logs():
     with open(log_path, "r") as f:
         lines = f.readlines()
     for l in lines:
-        main = re.findall(r"(\[*.+\])( -> *.+)",l)
+        main = re.findall(r"(\[*.+\])( -> *.+)", l)
         try:
             message = main[0][1]
         except IndexError:
             message = ""
-        
+
         log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
         try:
             date = log_info[0][0][:-4]
@@ -474,80 +509,89 @@ async def get_logs():
             source = ""
             level = ""
             formatted_message = main if isinstance(message, str) else message
-        data.append({
-            "id": uuid.uuid4(),
-            "timestamp": date,
-            "level": level,
-            "message": formatted_message,
-        })
+        data.append(
+            {
+                "id": uuid.uuid4(),
+                "timestamp": date,
+                "level": level,
+                "message": formatted_message,
+            }
+        )
     return data
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("websocket connected")
-    
+
     try:
-        
         # Step 1: Send the initial HANDSHAKE with the current queue
         # The frontend accepts either an array or an object (it converts objects to arrays via Object.values)
-        await websocket.send_json({
-            "type": "HANDSHAKE",
-            "queue": download_queue
-        })
+        await websocket.send_json({"type": "HANDSHAKE", "queue": download_queue})
         loop = True
         while loop:
             if websocket_queue:
                 with websocket_queue_lock:
                     if websocket_queue:
-                        websocket_event_time, websocket_event_item = websocket_queue.popitem()
+                        websocket_event_time, websocket_event_item = (
+                            websocket_queue.popitem()
+                        )
                         websocket_event_type = websocket_event_item["type"]
                         websocket_payload = websocket_event_item["event"]
-                        if websocket_event_type == "LOG": #log Entry
+                        if websocket_event_type == "LOG":  # log Entry
                             # Send a LOG message
-                            await websocket.send_json({
-                                "type": "LOG",
-                                "line": websocket_payload
-                            })  
-                        elif websocket_event_type == "STATUS_CHANGE": #progress change on item
+                            await websocket.send_json(
+                                {"type": "LOG", "line": websocket_payload}
+                            )
+                        elif (
+                            websocket_event_type == "STATUS_CHANGE"
+                        ):  # progress change on item
                             # Update status of item_1 to 'downloading' and trigger a notification
-                            
-                            await websocket.send_json({
-                                "type": "STATUS_CHANGE",
-                                "item": websocket_payload,
-                                "notification": websocket_payload["item_status"]
-                            })
-                            
-                        elif websocket_event_type == "QUEUE_UPDATE": #queue update
+
+                            await websocket.send_json(
+                                {
+                                    "type": "STATUS_CHANGE",
+                                    "item": websocket_payload,
+                                    "notification": websocket_payload["item_status"],
+                                }
+                            )
+
+                        elif websocket_event_type == "QUEUE_UPDATE":  # queue update
                             # Add a new item to the queue and send a full QUEUE_UPDATE
-                            
-                            await websocket.send_json({
-                                "type": "QUEUE_UPDATE",
-                                "queue": download_queue
-                            })
-                        elif websocket_event_type == "Notification": #queue update
+
+                            await websocket.send_json(
+                                {"type": "QUEUE_UPDATE", "queue": download_queue}
+                            )
+                        elif websocket_event_type == "Notification":  # queue update
                             # Add a new item to the queue and send a full QUEUE_UPDATE
-                            
-                            await websocket.send_json({
-                                "type": "Notification",
-                                "content": websocket_payload,
-                            })
+
+                            await websocket.send_json(
+                                {
+                                    "type": "Notification",
+                                    "content": websocket_payload,
+                                }
+                            )
                         else:
                             # Keep the connection alive with simple heartbeat logs, or break/reset
-                            await websocket.send_json({
-                                "type": "LOG",
-                                "line": f"Unknown websocket event {websocket_event_type}"
-                            })
+                            await websocket.send_json(
+                                {
+                                    "type": "LOG",
+                                    "line": f"Unknown websocket event {websocket_event_type}",
+                                }
+                            )
                         await asyncio.sleep(0.5)
             else:
                 await asyncio.sleep(2)
-                await websocket.send_json({
-                                "type": "Keepalive",
-                            })
-                        
+                await websocket.send_json(
+                    {
+                        "type": "Keepalive",
+                    }
+                )
 
     except WebSocketDisconnect:
         print("Client disconnected")
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

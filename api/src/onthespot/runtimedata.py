@@ -101,13 +101,12 @@ websocket_queue_lock = Lock()
 
 # LOCK HELPERS
 
+
 # Event callback for websocket updates
-def websocket_event(etype: str, event = None):
+def websocket_event(etype: str, event=None):
     with websocket_queue_lock:
-        websocket_queue[str(time.time())] = {
-            "type": etype,
-            "event": event
-        }
+        websocket_queue[str(time.time())] = {"type": etype, "event": event}
+
 
 # ---------------------------------------------------------------------------
 # System-tray initialisation flag

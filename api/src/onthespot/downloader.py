@@ -89,13 +89,12 @@ class TrackUnavailableError(Exception):
     """Raised when a track has no playable version (not a connection issue)."""
 
 
-class RetryWorker():
+class RetryWorker:
     """Periodically resets failed download-queue items back to *Waiting*.
 
     The worker sleeps for ``retry_worker_delay`` minutes between scans so
     it does not busy-poll the queue.
     """
-
 
     def __init__(self, gui: bool = False) -> None:
         super().__init__()
@@ -127,7 +126,7 @@ class RetryWorker():
                 time.sleep(delay_minutes * 60)
 
 
-class DownloadWorker():
+class DownloadWorker:
     """Worker that downloads, converts, and tags one queue item at a time.
 
     Each instance runs in its own daemon thread.  Multiple instances may
@@ -186,15 +185,17 @@ class DownloadWorker():
         if not match:
             return
         new_value = round(float(match.group(1))) - 1
-        if new_value >= current + 10: #offset to avoid locking queue every 2 ms
+        if new_value >= current + 10:  # offset to avoid locking queue every 2 ms
             item["progress"] = new_value
             with download_queue_lock:
                 download_queue[item["local_id"]]["progress"] = new_value
         websocket_event("STATUS_CHANGE", item)
         if item["item_status"] == ItemStatus.CANCELLED:
             raise Exception("Download cancelled by user.")
-        
-    def _progress_hook(self, item: dict, progress: int, status: ItemStatus | None = None):
+
+    def _progress_hook(
+        self, item: dict, progress: int, status: ItemStatus | None = None
+    ):
         current = item.get("progress", 0)
         with download_queue_lock:
             download_queue[item["local_id"]]["progress"] = progress
@@ -203,6 +204,7 @@ class DownloadWorker():
                 download_queue[item["local_id"]]["item_status"] = status
                 item["item_status"] = status
         websocket_event("STATUS_CHANGE", item)
+
     # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
@@ -265,7 +267,7 @@ class DownloadWorker():
                         progress_item["artist"] = item_metadata.get("artists")
                         progress_item["thumbnail"] = item_metadata.get("image_url")
                         progress_item["album"] = item_metadata.get("album_name")
-                        
+
                         self._progress_hook(progress_item, 25)
                     except Exception as e:
                         logger.error(f"error emitting progress metadata {e}")
@@ -348,7 +350,6 @@ class DownloadWorker():
 
                 # ---- Post-processing ------------------------------------------
                 if service != "generic":
-                    
                     self._progress_hook(item, 50)
                     item["progress"] = 50
                     if item_type in ("track", "podcast_episode"):
@@ -382,7 +383,9 @@ class DownloadWorker():
                     item_progress["format"] = default_format
                     item_progress["length"] = item_metadata.get("length")
                     try:
-                        item_progress["file_size"] = str(os.path.getsize(item["file_path"]))
+                        item_progress["file_size"] = str(
+                            os.path.getsize(item["file_path"])
+                        )
                     except:
                         pass
                 except Exception as e:
@@ -422,7 +425,7 @@ class DownloadWorker():
                     delay = self._jittered_delay()
                     time.sleep(delay)
                     self._requeue_item(item)
-                    #remove possible trash files
+                    # remove possible trash files
                     for path in (temp_path, file_path, item.get("file_path", "")):
                         if isinstance(path, str) and path and os.path.exists(path):
                             os.remove(path)
@@ -495,8 +498,6 @@ class DownloadWorker():
                 self._progress_hook(item, 99, ItemStatus.ADDING_TO_M3U)
                 add_to_m3u_file(item, item_metadata)
 
-            
-
             item["item_status"] = ItemStatus.ALREADY_EXISTS
             item["available"] = True
             progress_item = item
@@ -517,7 +518,7 @@ class DownloadWorker():
             logger.info(f"File already exists — skipping download for id '{item_id}'")
             item["progress"] = 100
             time.sleep(0.2)
-            #self._requeue_item(item)
+            # self._requeue_item(item)
             return True  # caller should continue
 
         return False  # file not found; proceed with download
@@ -684,7 +685,11 @@ class DownloadWorker():
                 downloaded += len(chunk)
                 if chunk:
                     audio_file.write(chunk)
-                    self._progress_hook(item, int((downloaded / total_size) * 100), ItemStatus.DOWNLOADING)
+                    self._progress_hook(
+                        item,
+                        int((downloaded / total_size) * 100),
+                        ItemStatus.DOWNLOADING,
+                    )
                 if not chunk:
                     break
 
@@ -778,10 +783,12 @@ class DownloadWorker():
             if downloaded != total_size:
                 if item["item_status"] == ItemStatus.CANCELLED:
                     raise Exception("Download cancelled by user.")
-                self._progress_hook(item, int((downloaded / total_size) * 100), ItemStatus.DOWNLOADING)
+                self._progress_hook(
+                    item, int((downloaded / total_size) * 100), ItemStatus.DOWNLOADING
+                )
 
         bf_key = calcbfkey(song["SNG_ID"])
-        self._progress_hook(item, 99, ItemStatus.DECRYPTING )
+        self._progress_hook(item, 99, ItemStatus.DECRYPTING)
         with open(temp_path, "wb") as out_file:
             decryptfile(data_chunks, bf_key, out_file)
 
@@ -821,13 +828,18 @@ class DownloadWorker():
 
             # Check if manifest is JSON with direct URLs (common for AAC/MP4 tracks)
             import json as _json
+
             try:
                 manifest_json = _json.loads(mpd_data)
                 if "urls" in manifest_json and manifest_json["urls"]:
                     direct_url = manifest_json["urls"][0]
-                    logger.info(f"Tidal: Direct URL detected, downloading via requests: {direct_url[:80]}")
+                    logger.info(
+                        f"Tidal: Direct URL detected, downloading via requests: {direct_url[:80]}"
+                    )
                     headers = {"Authorization": f"Bearer {token['access_token']}"}
-                    resp = requests.get(direct_url, headers=headers, stream=True, timeout=60)
+                    resp = requests.get(
+                        direct_url, headers=headers, stream=True, timeout=60
+                    )
                     resp.raise_for_status()
                     with open(temp_path, "wb") as f:
                         for chunk in resp.iter_content(chunk_size=65536):

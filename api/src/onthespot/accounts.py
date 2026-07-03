@@ -25,7 +25,7 @@ logger = get_logger("accounts")
 _TOKENLESS_SERVICES = frozenset({"bandcamp", "youtube_music", "generic"})
 
 
-class AccountPoolLoader():
+class AccountPoolLoader:
     """Thread that authenticates every active account from the config.
 
     Emits :attr:`progress` for each account attempt and :attr:`finished` when
@@ -46,7 +46,7 @@ class AccountPoolLoader():
         logger.info("Stopping AccountPool Worker")
         self.is_running = False
         self.thread.join()
-    
+
     def run(self) -> None:
         """Iterate saved accounts, log each one in, and emit progress."""
         for account in config.get("accounts"):
@@ -62,8 +62,6 @@ class AccountPoolLoader():
             login_succeeded = login_fn(account)
         if login_succeeded:
             logger.info("Logins Completed")
-
-
 
 
 # Backwards-compatible alias used by the GUI code.

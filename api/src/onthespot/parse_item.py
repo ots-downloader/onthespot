@@ -302,7 +302,7 @@ def parse_url(url: str) -> bool | None:
 # ---------------------------------------------------------------------------
 
 
-class ParsingWorker():
+class ParsingWorker:
     """Background thread that drains the ``parsing`` queue.
 
     Each item in the queue represents a service collection (album, playlist,
@@ -314,7 +314,6 @@ class ParsingWorker():
     cannot be fetched (e.g. 404 or rate limit).  The GUI can connect to this
     signal to show an error dialog.
     """
-
 
     def __init__(self) -> None:
         super().__init__()
