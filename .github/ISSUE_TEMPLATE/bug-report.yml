@@ -51,10 +51,10 @@ body:
     validations:
       required: true
   - type: textarea
-      id: logs
-      attributes:
-        label: Application Logs
-        description: Logs can be found at "%localappdata%\Temp\onthespot\logs" on Windows or "~/.cache/onthespot/logs".
-      validations:
-        required: true
+    id: logs
+    attributes:
+      label: Application Logs
+      description: Logs can be found at "%localappdata%\Temp\onthespot\logs" on Windows or "~/.cache/onthespot/logs".
+    validations:
+      required: true
   
