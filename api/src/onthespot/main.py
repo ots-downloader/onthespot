@@ -55,7 +55,12 @@ logger = get_logger("gui")
 
 
 def add_item_to_download_list(item, item_status: str | None = None):
-
+    """
+    Adds an item to the download queue with the specified status.
+    
+    :param item: Dictionary containing item details.
+    :param item_status: Optional status for the item. Defaults to "Waiting" if not provided.
+    """
     playlist_name = ""
     playlist_by = ""
     if item["parent_category"] == "playlist":
@@ -84,15 +89,25 @@ def add_item_to_download_list(item, item_status: str | None = None):
 
 
 class QueueWorker:
+    """
+    A worker class that processes items in the pending queue and adds them to the download list.
+    """
+
     def __init__(self):
         super().__init__()
         self.is_running = True
         self.thread = threading.Thread(target=self.run)
 
     def start(self):
+        """
+        Starts the worker thread.
+        """
         self.thread.start()
 
     def run(self):
+        """
+        Continuously processes items in the pending queue until stopped.
+        """
         while self.is_running:
             if pending:
                 try:
@@ -133,6 +148,9 @@ class QueueWorker:
                 time.sleep(0.2)
 
     def stop(self):
+        """
+        Stops the worker thread and waits for it to finish.
+        """
         logger.info("Stopping Queue Worker")
         self.is_running = False
         self.thread.join()
@@ -143,6 +161,13 @@ def notification_hook(
     message="",
     url="",
 ):
+    """
+    Sends a notification event through the websocket queue.
+
+    :param title: The title of the notification.
+    :param message: Optional message for the notification. Defaults to an empty string.
+    :param url: Optional URL associated with the notification. Defaults to an empty string.
+    """
     websocket_event(
         etype="Notification",
         event={
@@ -163,12 +188,12 @@ spotifymirrorworker = MirrorSpotifyPlayback()
 retryworker = RetryWorker()
 fillaccountpool = FillAccountPool()
 
-# migrate possibly old configurations
-config.migration()
-
 
 ##ONTHESPOT BRIDGE FUNCTIONS
 def add_spotify_account():
+    """
+    Initiates the process to add a Spotify account.
+    """
     logger.info("Add spotify account clicked ")
     login_worker = threading.Thread(target=add_spotify_account_worker)
     login_worker.daemon = True
@@ -176,6 +201,9 @@ def add_spotify_account():
 
 
 def add_spotify_account_worker():
+    """
+    Worker function to add a Spotify account.
+    """
     if spotify_new_session():
         config.set("active_account_number", len(account_pool))
         config.save()
@@ -184,6 +212,9 @@ def add_spotify_account_worker():
 
 
 def add_tidal_account():
+    """
+    Initiates the process to add a Tidal account.
+    """
     logger.info("Add Tidal account clicked ")
     device_code, verification_url = tidal_add_account_pt1()
     logger.info(
@@ -200,6 +231,11 @@ def add_tidal_account():
 
 
 def add_tidal_account_worker(device_code):
+    """
+    Worker function to complete the Tidal account addition.
+
+    :param device_code: Device code required for Tidal login.
+    """
     if tidal_add_account_pt2(device_code):
         config.set("active_account_number", len(account_pool))
         config.save()
@@ -212,6 +248,13 @@ def add_tidal_account_worker(device_code):
 
 
 def search(search_term, search_filters: dict | None = None) -> None:
+    """
+    Performs a search with optional filters.
+
+    :param search_term: The term to search for.
+    :param search_filters: Optional dictionary of content types to filter the search results.
+    :return: Search results.
+    """
     if not search_filters:
         search_filters = {
             "tracks": True,
@@ -233,6 +276,9 @@ def search(search_term, search_filters: dict | None = None) -> None:
 
 
 def relogin():
+    """
+    Reloads the account pool to refresh accounts.
+    """
     time.sleep(1)
     global fillaccountpool
     fillaccountpool = FillAccountPool()
@@ -247,6 +293,11 @@ def relogin():
 # START ONTHESPOT WORKERS HERE
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Context manager for FastAPI application lifecycle events.
+
+    :param app: The FastAPI application instance.
+    """
     logger.info(f"OnTheSpot Version: {config.get('version')}")
     parsing_worker.start()
     queueworker.start()
@@ -294,6 +345,11 @@ class AccountData(BaseModel):
 
 @app.get("/")
 def read_root():
+    """
+    Root endpoint returning a greeting message.
+
+    :return: A dictionary with a greeting message.
+    """
     return {"Hello": "World"}
 
 
@@ -302,6 +358,13 @@ def read_root():
 
 @app.post("/query/url")
 async def query_url(q: str | None = None, filters: dict | None = None):
+    """
+    Endpoint to perform a URL-based search.
+
+    :param q: The search term.
+    :param filters: Optional dictionary of filters for the search.
+    :return: Search results.
+    """
     result = None
     if q:
         result = search(q, filters)
@@ -311,6 +374,11 @@ async def query_url(q: str | None = None, filters: dict | None = None):
 
 @app.post("/spotify/mirror")
 async def mirror_spotify(state: bool = False):
+    """
+    Endpoint to control Spotify mirroring.
+
+    :param state: Boolean indicating whether to start or stop mirroring.
+    """
     if state:
         spotifymirrorworker.start()
     else:
@@ -322,11 +390,21 @@ async def mirror_spotify(state: bool = False):
 
 @app.get("/queue/downloads")
 async def query_download_queue():
+    """
+    Endpoint to get the current download queue.
+
+    :return: Sorted dictionary of items in the download queue.
+    """
     return dict(sorted(download_queue.items()))
 
 
 @app.get("/queue/downloads/clear")
 async def remove_queue_items(status: str = "Completed"):
+    """
+    Endpoint to clear items from the download queue based on their status.
+
+    :param status: Status of items to be removed. Defaults to "Completed".
+    """
     with download_queue_lock:
         if status != "all":
             for key, item in download_queue.items():
@@ -342,6 +420,13 @@ async def remove_queue_items(status: str = "Completed"):
 
 @app.post("/queue/downloads/action")
 async def queue_action(lid: str, action: str):
+    """
+    Endpoint to perform actions on a specific item in the download queue.
+
+    :param lid: Local ID of the item.
+    :param action: Action to perform (e.g., retry, cancel, delete).
+    :return: Boolean indicating success or failure of the action.
+    """
     with download_queue_lock:
         for key, item in download_queue.items():
             if item["local_id"] == lid:
@@ -361,6 +446,9 @@ async def queue_action(lid: str, action: str):
 
 @app.get("/queue/downloads/retryfailed")
 async def retry_failed_items():
+    """
+    Endpoint to retry all failed or cancelled items in the download queue.
+    """
     with download_queue_lock:
         for key, item in download_queue.items():
             if item["item_status"] in ["Failed", "Cancelled"]:
@@ -369,6 +457,12 @@ async def retry_failed_items():
 
 @app.get("/queue/downloads/download")
 async def download_file(lid):
+    """
+    Endpoint to download a file by its local ID.
+
+    :param lid: Local ID of the item to download.
+    :return: File response containing the downloaded file.
+    """
     # Returns the file with appropriate headers
     for local_id, item in download_queue.items():
         if local_id == lid:
@@ -380,11 +474,21 @@ async def download_file(lid):
 
 @app.get("/queue/pending")
 async def query_pending_queue():
+    """
+    Endpoint to get the current pending queue.
+
+    :return: Dictionary of items in the pending queue.
+    """
     return pending
 
 
 @app.get("/queue/parsing")
 async def query_parsing_queue():
+    """
+    Endpoint to get the current parsing queue.
+
+    :return: Dictionary of items in the parsing queue.
+    """
     return parsing
 
 
@@ -393,11 +497,23 @@ async def query_parsing_queue():
 
 @app.get("/config/get")
 async def get_config():
+    """
+    Endpoint to get the current configuration.
+
+    :return: Current configuration settings.
+    """
     return config
 
 
 @app.post("/config/set")
 async def set_config(nkey, nvalue):
+    """
+    Endpoint to set a configuration setting.
+
+    :param nkey: Key of the configuration setting.
+    :param nvalue: Value for the configuration setting.
+    :return: Updated configuration setting.
+    """
     if nvalue in ["false", "true"]:
         match nvalue:
             case "false":
@@ -411,11 +527,21 @@ async def set_config(nkey, nvalue):
 
 @app.post("/config/save")
 async def save_config():
+    """
+    Endpoint to save the current configuration.
+
+    :return: Result of saving the configuration.
+    """
     return config.save()
 
 
 @app.post("/config/reset")
 async def reset_config():
+    """
+    Endpoint to reset the configuration to default settings.
+
+    :return: Result of resetting the configuration.
+    """
     return config.reset()
 
 
@@ -424,6 +550,13 @@ async def reset_config():
 
 @app.post("/accounts/add")
 async def add_account(service: str, item: AccountData | None = None):
+    """
+    Endpoint to add an account for a specific service.
+
+    :param service: The name of the service (e.g., "spotify", "tidal").
+    :param item: Optional data required for adding the account.
+    :return: Boolean indicating success or failure of account addition.
+    """
     found = False
     match service:
         case "generic":
@@ -466,6 +599,12 @@ async def add_account(service: str, item: AccountData | None = None):
 
 @app.post("/accounts/remove")
 async def remove_account(luuid: str):
+    """
+    Endpoint to remove an account by its UUID.
+
+    :param luuid: UUID of the account to be removed.
+    :return: Boolean indicating success or failure of account removal.
+    """
     index = None
     for idx, item in enumerate(account_pool):
         if item["uuid"] == luuid:
@@ -482,12 +621,22 @@ async def remove_account(luuid: str):
 
 @app.get("/accounts/get")
 async def get_accounts():
+    """
+    Endpoint to get the list of all accounts.
+
+    :return: List of accounts.
+    """
     return account_pool
 
 
 # LOGS ENDPOINTS
 @app.get("/logs")
 async def get_logs():
+    """
+    Endpoint to retrieve logs from the log file.
+
+    :return: List of log entries.
+    """
     log_path = config.get("_log_file")
     lines = None
     data = []
@@ -524,6 +673,11 @@ async def get_logs():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    """
+    Websocket endpoint for real-time communication.
+
+    :param websocket: The websocket connection.
+    """
     await websocket.accept()
     logger.info("websocket connected")
 
