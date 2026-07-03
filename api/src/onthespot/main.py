@@ -57,7 +57,7 @@ logger = get_logger("gui")
 def add_item_to_download_list(item, item_status: str | None = None):
     """
     Adds an item to the download queue with the specified status.
-    
+
     :param item: Dictionary containing item details.
     :param item_status: Optional status for the item. Defaults to "Waiting" if not provided.
     """
@@ -194,7 +194,7 @@ def add_spotify_account():
     """
     Initiates the process to add a Spotify account.
     """
-    logger.info("Add spotify account clicked ")
+    logger.info("Add spotify account clicked")
     login_worker = threading.Thread(target=add_spotify_account_worker)
     login_worker.daemon = True
     login_worker.start()
@@ -215,13 +215,15 @@ def add_tidal_account():
     """
     Initiates the process to add a Tidal account.
     """
-    logger.info("Add Tidal account clicked ")
+    logger.info("Add Tidal account clicked")
     device_code, verification_url = tidal_add_account_pt1()
     logger.info(
-        f"Login Service Started head to <a style='color: #6495ed;' href='https://{verification_url}'>https://{verification_url}</a> to continue."
+        "Login Service Started head to <a style='color: #6495ed;' href='https://%s'>https://%s</a> to continue.",
+        verification_url,
+        verification_url,
     )
     notification_hook(
-        title="Continue Login - Go to the URL ", url=f"https://{verification_url}"
+        title="Continue Login - Go to the URL", url=f"https://{verification_url}"
     )
     login_worker = threading.Thread(
         target=add_tidal_account_worker, args=(device_code,)
@@ -298,7 +300,7 @@ async def lifespan(app: FastAPI):
 
     :param app: The FastAPI application instance.
     """
-    logger.info(f"OnTheSpot Version: {config.get('version')}")
+    logger.info("OnTheSpot Version: %s", config.get("version"))
     parsing_worker.start()
     queueworker.start()
     downloadworker.start()
@@ -746,7 +748,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
 
     except WebSocketDisconnect:
-        print("Client disconnected")
+        logger.info("Client disconnected")
 
 
 if __name__ == "__main__":
