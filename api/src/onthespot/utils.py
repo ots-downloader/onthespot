@@ -228,8 +228,8 @@ def format_local_id(item_id):
     """Return a unique local ID for *item_id* that does not clash with any
     existing entry in the download queue or pending dict."""
     local_id = next(counter)
-    logger.info(f"NEW ID: {local_id}")
-    return local_id
+    logger.debug(f"NEW ID: {local_id}")
+    return str(local_id)
 
 
 # ---------------------------------------------------------------------------
