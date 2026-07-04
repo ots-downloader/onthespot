@@ -12,18 +12,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
-    libegl1 \
+    ca-certificates \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./app/
 COPY src ./app/
 
 WORKDIR /app
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    git \
-    && rm -rf /var/lib/apt/lists/*
 
 RUN uv sync --no-cache
 
