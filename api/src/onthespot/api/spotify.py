@@ -19,7 +19,7 @@ from ..runtimedata import (
     pending_lock,
 )
 from ..utils import make_call, conv_list_format, get_primary_composer
-from ..accounts import get_account_token
+
 
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
@@ -131,6 +131,9 @@ def spotify_playlist_call(token, url):
 
 
 class MirrorSpotifyPlayback:
+    # declare here to avoid Circular Import
+    from ..accounts import get_account_token
+    
     def __init__(self):
         super().__init__()
         self.thread = None
