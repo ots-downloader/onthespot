@@ -54,7 +54,7 @@ from .api.registry import (
     SERVICE_LYRICS_FUNCTIONS,
     get_metadata_function,
 )
-from .api.spotify import spotify_re_init_session
+
 from .api.tidal import tidal_get_mpd_data
 from .constants import ItemStatus
 from .otsconfig import config
@@ -636,7 +636,7 @@ class DownloadWorker:
         raise ValueError(f"No download handler for service '{service}'")
 
     def _reinit_spotify_session(self, token):
-
+        from .api.spotify import spotify_re_init_session
         for account in account_pool:
             if (
                 account.get("service") == "spotify"
