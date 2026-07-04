@@ -236,10 +236,16 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         <p className="text-xs md:text-sm text-gray-500 dark:text-neutral-400 truncate mt-0.5">
                           {item.artist}
                           {item.album && (
-                            <span className="text-gray-400 dark:text-neutral-500"> • {item.album}</span>
+                            <span className="text-gray-400 dark:text-neutral-500"> • {item.album} </span>
+                          )}
+                          {isCompleted && item.file_path && (
+                          <span className="text-sm md:text-xs text-gray-600 dark:text-neutral-600 truncate mt-0.5">
+                            • {item.file_path}
+                          </span>
                           )}
                         </p>
-
+                        {/* Path if completed */}
+                        
                         {/* Badges */}
                         <div className="flex flex-wrap items-center gap-2 mt-2">
                           {getStatusBadge(item.item_status)}
@@ -342,12 +348,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                   {/* Bottom Row: Path, Metrics & Expanded Progress Bar */}
                   <div className="flex flex-col gap-2.5 w-full mt-1">
                     
-                    {/* Path if completed */}
-                    {isCompleted && item.file_path && (
-                      <p className="text-[11px] md:text-xs text-gray-500 dark:text-neutral-500 truncate px-2.5 py-1.5 bg-gray-50 dark:bg-neutral-900/50 rounded-lg border border-gray-200 dark:border-neutral-800 font-mono mb-1">
-                        {item.file_path}
-                      </p>
-                    )}
+                    
 
                     {/* Detailed Metrics Layout */}
                     <div className="flex items-center justify-between text-xs text-gray-500 dark:text-neutral-400 font-medium px-0.5">
