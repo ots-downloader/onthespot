@@ -69,7 +69,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
 
   const handleDownloadFile = (item: DownloadQueueItem) => {
     if (item.file_path) {
-      const url = `${getTargetBackendUrl()}/queue/downloads/download?id=${encodeURIComponent(item.local_id)}`;
+      const url = `${getTargetBackendUrl()}/queue/downloads/download?lid=${encodeURIComponent(item.local_id)}`;
       window.open(url, '_blank');
     } else {
       alert("⚠️ File is still queued or downloading.");

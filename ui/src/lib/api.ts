@@ -119,7 +119,7 @@ export async function triggerRetryFailed(): Promise<{ success: boolean }> {
 
 export async function performQueueAction(local_id: string, action: 'cancel' | 'delete' | 'retry'): Promise<boolean> {
   try {
-    const res = await request(`/queue/downloads/action?id=${encodeURIComponent(local_id)}&action=${encodeURIComponent(action)}`, {
+    const res = await request(`/queue/downloads/action?lid=${encodeURIComponent(local_id)}&action=${encodeURIComponent(action)}`, {
       method: 'POST'
     });
     return res.ok;
