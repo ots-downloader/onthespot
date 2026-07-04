@@ -56,7 +56,7 @@ class Config:
         """
         self.__cfg_path = os.path.join(os.path.dirname(__file__), "otsconfig.json")
         self.__default_cfg_path = os.path.join(
-            os.path.dirname(__file__), "default_config.json"
+            os.path.dirname(__file__), "otsconfig_default.json"
         )
         self.session_uuid = str(uuid.uuid4())
 
