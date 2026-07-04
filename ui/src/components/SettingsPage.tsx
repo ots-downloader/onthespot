@@ -208,7 +208,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <span>WebUI Display Buttons</span>
           </button>
 
-        </div>
+        </div >
 
         {/* Section Panels */}
         <div className="lg:col-span-3 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 lg:p-8 shadow-xl flex flex-col gap-6">
@@ -232,15 +232,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 {renderToggle('mirror_spotify_playback', 'Mirror Spotify Playback', 'Mirror active Spotify desktop/mobile client playback')}
                 {renderToggle('enable_retry_worker', 'Enable Retry Worker', 'Automatically retry failed downloads after a set interval')}
                 {renderToggle('use_double_digit_path_numbers', 'Double Digit Track Numbers', 'Format track numbers as 01, 02 instead of 1, 2')}
+                {renderToggle('debug_mode', 'Enable Debug Mode', 'Enables verbose logging and internal debugging features in the application.')}
+                {renderToggle('close_to_tray', 'Close to System Tray', 'Minimize application to system tray on exit')}
+                {renderToggle('rotate_active_account_number', 'Rotate Active Account Number', 'Cycle through available accounts automatically')}
+                {renderInput('download_delay_variance', 'Download Delay Variance (s)', 'number', 'Random variance added to base download delay')}
+                {renderToggle('check_for_updates', 'Check for Updates', 'Automatically check for new application versions.', false)}
                 {renderToggle('use_webui_login', 'Require Web UI Login', 'Protect this dashboard with username and password - Coming Soon', true)}
+                {renderInput('language', 'Application Language', 'text', 'e.g., en_US')}
+                
               </div>
-
-              {config.use_webui_login && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-800">
-                  {renderInput('webui_username', 'Web UI Username', 'text')}
-                  {renderInput('webui_password', 'Web UI Password', 'text')}
-                </div>
-              )}
             </>
           )}
 
@@ -250,10 +250,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <h3 className="text-lg font-bold text-white font-sans">Audio Formatting & Output Paths</h3>
                 <p className="text-xs text-zinc-400 font-mono mt-1">Set root music folder, preferred codecs, bitrates, and folder formatters.</p>
               </div>
-
+              
+              
               {renderInput('audio_download_path', 'Audio Download Root Path', 'text', 'Absolute folder path on host filesystem')}
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {renderToggle('use_source_format', 'Use Source Format', 'Uses the best source format, do not use with custom bitrate.')}
+                {renderToggle('use_custom_file_bitrate', 'Use Custom Bitrate', 'Converts the file to the set bitrate, but still uses the best source to download')}
+
                 {renderSelect('track_file_format', 'Track Media Format', [
                   { val: 'flac', text: 'FLAC (Lossless HiRes)' },
                   { val: 'mp3', text: 'MP3 (Universal 320k)' },
@@ -261,22 +264,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   { val: 'opus', text: 'Opus (High Efficiency)' },
                   { val: 'wav', text: 'WAV (Uncompressed)' },
                   { val: 'ogg', text: 'Vorbis Ogg' }
-                ])}
+                ], "Download will be converted to this format if use source format is disabled.")}
 
+                
                 {renderSelect('file_bitrate', 'Converted File Bitrate', [
                   { val: '320k', text: '320 kbps (Maximum Quality)' },
                   { val: '256k', text: '256 kbps (High)' },
                   { val: '192k', text: '192 kbps (Medium)' },
                   { val: '128k', text: '128 kbps (Standard)' }
-                ])}
+                ], "Download will be converted to this bitrate if use custom bitrate is enabled.")}
+                
+                
               </div>
 
-              {renderInput('track_path_formatter', 'Track Path Formatter', 'text', 'Available variables: {album_artist}, {album}, {year}, {track_number}, {name}')}
-              {renderInput('playlist_path_formatter', 'Playlist Path Formatter', 'text', 'Available variables: {playlist_name}, {playlist_owner}, {playlist_number}, {artist}')}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-800">
+                
+                {renderInput('track_path_formatter', 'Track Path Formatter', 'text', 'Available variables: {album_artist}, {album}, {year}, {track_number}, {name}')}
+                {renderInput('playlist_path_formatter', 'Playlist Path Formatter', 'text', 'Available variables: {playlist_name}, {playlist_owner}, {playlist_number}, {artist}')}
+              </div>
 
-              <div className="flex flex-col gap-3 pt-2">
+              <div className="flex flex-col gap-3 pt-2 border-t border-zinc-800">
+                {renderSelect('m3u_format', 'M3U Playlist Format', [
+                  { val: 'm3u8', text: 'M3U8' },
+                  { val: 'm3u', text: 'M3U (Standard)' }
+                ], 'Format for generated M3U playlists')}
                 {renderToggle('create_m3u_file', 'Create M3U Playlist File', 'Generate standard M3U8 file alongside playlist items')}
-                {renderToggle('save_album_cover', 'Save Cover Art File', 'Save folder.jpg or cover.png inside album directory')}
+                {renderToggle('save_album_cover', 'Save Cover Art To Folder', 'Save folder.jpg or cover.png inside album directory')}
                 {renderToggle('download_lyrics', 'Download Lyrics', 'Fetch synchronized or plain lyrics')}
                 {config.download_lyrics && renderToggle('save_lrc_file', 'Save .LRC Lyrics File', 'Export synced lyrics as standalone .lrc file next to track')}
               </div>
@@ -305,8 +318,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 ])}
               </div>
 
-              {renderInput('movie_path_formatter', 'Movie Path Formatter', 'text')}
-              {renderInput('show_path_formatter', 'TV Show Path Formatter', 'text')}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-800">
+                {renderInput('movie_path_formatter', 'Movie Path Formatter', 'text')}
+                {renderInput('show_path_formatter', 'TV Show Path Formatter', 'text')}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-800">
+                {renderInput('preferred_audio_language', 'Preferred Audio Language Code', 'text', 'e.g., en-US')}
+                {renderInput('preferred_subtitle_language', 'Preferred Subtitle Language Code', 'text', 'e.g., en-US')}
+              </div>
 
               <div className="flex flex-col gap-3 pt-2">
                 {renderToggle('download_subtitles', 'Download Subtitles', 'Extract and multiplex subtitles or save .srt')}
@@ -348,7 +368,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <h3 className="text-lg font-bold text-white font-sans">ID3 Metadata Tag Embedding</h3>
                 <p className="text-xs text-zinc-400 font-mono mt-1">Select exactly which metadata tags to inject into downloaded music tracks.</p>
               </div>
-
+              <div className="grid grid-cols-1 gap-3">
+                {renderSelect('album_cover_format', 'Covert Art Format', [
+                  { val: 'png', text: 'png (Better Quality, Bigger File' },
+                  { val: 'jpeg', text: 'jpeg (Lower Quality, Smaller File' },
+                ])}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {renderToggle('embed_cover', 'Embed Cover Art')}
                 {renderToggle('embed_artist', 'Embed Artist')}
@@ -368,8 +393,27 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 {renderToggle('embed_producers', 'Embed Producers')}
                 {renderToggle('embed_writers', 'Embed Writers')}
                 {renderToggle('embed_explicit', 'Embed Explicit Tag')}
+                {renderToggle('embed_composer', 'Embed Composer')}
+                {renderToggle('embed_description', 'Embed Description')}
+                {renderToggle('embed_language', 'Embed Language')}
+                {renderToggle('embed_url', 'Embed URL')}
+                
               </div>
-
+              <div className="border-b border-zinc-800 pb-4">
+                <p className="text-xs text-zinc-400 font-mono mt-1">Spotify Only - Require enabled Audio Features API calls from Metadata Settings</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                
+                {renderToggle('embed_timesignature', 'Embed Timesignature')}
+                {renderToggle('embed_acousticness', 'Embed Acousticness')}
+                {renderToggle('embed_danceability', 'Embed Danceability')}
+                {renderToggle('embed_energy', 'Embed Energy')}
+                {renderToggle('embed_instrumentalness', 'Embed Instrumentalness')}
+                {renderToggle('embed_liveness', 'Embed Liveness')}
+                {renderToggle('embed_loudness', 'Embed Loudness')}
+                {renderToggle('embed_speechiness', 'Embed Speechiness')}
+                {renderToggle('embed_valence', 'Embed Valence')}
+              </div>
               <div className="pt-4 border-t border-zinc-800">
                 {renderInput('metadata_separator', 'Metadata Value Separator', 'text', 'Separator for multi-value tags (e.g. "; " for multiple artists)')}
               </div>
@@ -386,9 +430,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-2">
                 <h4 className="text-xs font-mono font-bold text-emerald-400 mb-2">⚡ API Rate Limit Optimization</h4>
                 <div className="flex flex-col gap-2.5">
-                  {renderToggle('cache_metadata_in_queue', 'Pass Metadata from Queue to Download Worker', 'Reduces Spotify API calls by ~50%')}
+                  {renderToggle('cache_metadata_in_queue', 'Cache API Calls', 'Reduces Spotify API calls by ~50% albums and collections')}
                   {renderToggle('fetch_genre_metadata', 'Fetch Genre from Artist Endpoint', 'Adds +1 API call per track')}
-                  {renderToggle('fetch_extended_album_metadata', 'Fetch Record Label & Copyright', 'Adds +1 API call per track')}
+                  {renderToggle('fetch_extended_album_metadata', 'Fetch Extra Album Metadata', 'Adds +1 API call per track')}
+                  {renderToggle('fetch_audio_features', 'Fetch Audio Features(Bpm, Energy, ecc)', 'Adds +1 API call per track')}
+                  {renderToggle('fetch_track_credits', 'Fetch Record Label & Copyright', 'Adds +1 API call per track')}
+                  {renderInput('spotify_webapi_override_client_id', 'Spotify Client ID Override', 'text')}
+                  {renderInput('spotify_webapi_override_client_secret', 'Spotify Client Secret Override', 'text')}
                 </div>
               </div>
 
@@ -401,6 +449,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 {renderToggle('enable_search_podcasts', 'Search Podcasts')}
                 {renderToggle('enable_search_episodes', 'Search Episodes')}
                 {renderToggle('enable_search_audiobooks', 'Search Audiobooks')}
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-zinc-800">
+                <h4 className="text-sm font-bold text-white font-sans mb-2">API Search Configuration</h4>
+                {renderInput('search_prefix', 'Default Search Prefix', 'text', 'Prefix used when searching (e.g., "the")')}
               </div>
             </>
           )}
@@ -429,10 +482,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </>
           )}
 
-        </div>
+        </div >
 
-      </div>
+      </div >
 
-    </div>
+    </div >
   );
 };

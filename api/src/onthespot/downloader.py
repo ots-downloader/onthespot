@@ -1277,7 +1277,7 @@ class DownloadWorker:
                 item_metadata.update(extra)
 
         # Rename temp file to final path with correct extension
-        if config.get("raw_media_download"):
+        if config.get("raw_media_download") or config.get("use_source_format"):
             final_path = file_path + default_format
         elif item_type == "track":
             final_path = file_path + "." + config.get("track_file_format")
