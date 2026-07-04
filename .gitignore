@@ -153,3 +153,6 @@ debug_*.py
 run_dev.ps1
 
 uv.lock
+
+node_modules/
+package-lock.json

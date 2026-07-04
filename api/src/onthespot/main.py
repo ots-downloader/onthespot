@@ -675,6 +675,19 @@ async def get_logs():
     return data
 
 
+@app.get("/logs/download")
+async def get_logs():
+    """
+    Returns the log file
+
+    :return: List of log entries.
+    """
+    log_path = config.get("_log_file")
+    directory, file_name = os.path.split(log_path)
+    return FileResponse(file_path, media_type="text/plain", filename=file_name)
+
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """

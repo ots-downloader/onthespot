@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal, RefreshCw, Search, Trash2, ArrowDownCircle, PauseCircle, PlayCircle, ShieldAlert, Info, AlertTriangle, Cpu } from 'lucide-react';
 import { LogEntry } from '../types';
+import { getTargetBackendUrl } from '../lib/api';
 
 interface LogViewerProps {
   logs: LogEntry[];
@@ -8,7 +9,7 @@ interface LogViewerProps {
   onClear: () => void;
 }
 
-type LogLevelFilter = 'ALL' | 'INFO' | 'WARNING' | 'ERROR' | 'GUI';
+type LogLevelFilter = 'ALL' | 'INFO' | 'WARNING' | 'ERROR';
 
 export const LogViewer: React.FC<LogViewerProps> = ({
   logs,
@@ -20,20 +21,6 @@ export const LogViewer: React.FC<LogViewerProps> = ({
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-refresh timer
-  useEffect(() => {
-    const t = setInterval(() => {
-      onRefresh();
-    }, 5000);
-    return () => clearInterval(t);
-  }, [onRefresh]);
-
-  // Auto scroll effect
-  useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [logs, autoScroll]);
 
   const filteredLogs = logs.filter(l => {
     if (levelFilter !== 'ALL' && l.level !== levelFilter) return false;
@@ -41,11 +28,15 @@ export const LogViewer: React.FC<LogViewerProps> = ({
     return true;
   });
 
+  const handleDownloadFile = () => {
+      const url = `${getTargetBackendUrl()}/logs/download}`;
+      window.open(url, '_blank');
+    };
+
   const getLevelBadge = (lvl: string) => {
     switch (lvl) {
       case 'ERROR': return <span className="text-rose-400 font-bold bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/20">[ERROR]</span>;
       case 'WARNING': return <span className="text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">[WARN] </span>;
-      case 'GUI': return <span className="text-cyan-400 font-bold bg-cyan-500/10 px-1.5 py-0.2 rounded border border-cyan-500/20">[GUI]  </span>;
       default: return <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">[INFO] </span>;
     }
   };
@@ -58,14 +49,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2.5">
             <Terminal className="w-6 h-6 text-emerald-400 animate-pulse" />
-            <span>Server Log Viewer</span>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-emerald-400 border border-zinc-700">
-              Live Streaming WS
-            </span>
+            <span>Server Log Viewer</span>       
           </h2>
-          <p className="text-xs text-zinc-400 font-mono mt-1">
-            onthespot.log • Continuously reloading from FastAPI uvicorn daemon threads
-          </p>
         </div>
 
         {/* Controls */}
@@ -83,14 +68,9 @@ export const LogViewer: React.FC<LogViewerProps> = ({
           </div>
 
           <button
-            onClick={() => setAutoScroll(!autoScroll)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${autoScroll
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-              : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-              }`}
-          >
-            {autoScroll ? <PauseCircle className="w-4 h-4 text-emerald-400" /> : <PlayCircle className="w-4 h-4" />}
-            <span>Auto-Scroll {autoScroll ? 'ON' : 'OFF'}</span>
+            onClick={() => handleDownloadFile()}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition-all border flex items-center gap-1.5 cursor-pointer bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700`}
+          >Download
           </button>
 
           <button
@@ -113,7 +93,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 
       {/* Level Filter Pills */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
-        {(['ALL', 'INFO', 'WARNING', 'ERROR', 'GUI'] as LogLevelFilter[]).map((lvl) => (
+        {(['ALL', 'INFO', 'WARNING', 'ERROR'] as LogLevelFilter[]).map((lvl) => (
           <button
             key={lvl}
             onClick={() => setLevelFilter(lvl)}

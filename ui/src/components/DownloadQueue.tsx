@@ -75,6 +75,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
       alert("⚠️ File is still queued or downloading.");
     }
   };
+  
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Downloading':
