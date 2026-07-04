@@ -130,7 +130,7 @@ def spotify_playlist_call(token, url):
     return resp
 
 
-class MirrorSpotifyPlayback:
+class MirrorSpotifyPlayback():
     # declare here to avoid Circular Import
     from ..accounts import get_account_token
     
