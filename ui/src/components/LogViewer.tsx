@@ -29,7 +29,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
   });
 
   const handleDownloadFile = () => {
-      const url = `${getTargetBackendUrl()}/logs/download}`;
+      const url = `${getTargetBackendUrl()}/logs/download`;
       window.open(url, '_blank');
     };
 

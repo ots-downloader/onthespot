@@ -685,7 +685,7 @@ async def get_logs():
     """
     log_path = config.get("_log_file")
     directory, file_name = os.path.split(log_path)
-    return FileResponse(file_path, media_type="text/plain", filename=file_name)
+    return FileResponse(log_path, media_type="text/plain", filename=file_name)
 
 
 
