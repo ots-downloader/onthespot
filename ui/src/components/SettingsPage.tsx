@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, RotateCcw, Sliders, Music, Film, Tag, Search, Eye, Cpu, Shield, Check, Loader2 } from 'lucide-react';
+import { Save, RotateCcw, Sliders, Music, Film, Tag, Search, Eye, Cpu, Check, Loader2 } from 'lucide-react';
 import { OTSConfig } from '../types';
 
 interface SettingsPageProps {
@@ -24,8 +24,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   if (!config) {
     return (
-      <div className="p-20 text-center text-zinc-500 font-mono">
-        Loading OTSConfig from FastAPI endpoint...
+      <div className="p-20 flex justify-center items-center text-gray-500 dark:text-neutral-500 font-sans text-sm">
+        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+        Loading configuration...
       </div>
     );
   }
@@ -49,75 +50,104 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   };
 
   const triggerReset = async () => {
-    if (confirm("⚠️ Are you sure you want to reset all OnTheSpot settings to factory template defaults?")) {
+    if (confirm("Are you sure you want to reset all settings to defaults?")) {
       setResetting(true);
       await onReset();
       setResetting(false);
     }
   };
 
-  const renderToggle = (key: string, label: string, desc?: string, disabled: boolean = false) => (
-    <div key={key} className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 transition-colors">
-      <div className="pr-4">
-        <label className="text-sm font-semibold text-zinc-200 font-sans cursor-pointer">{label}</label>
-        {desc && <p className="text-xs text-zinc-400 font-mono mt-0.5">{desc}</p>}
+  // Material Design 3 Styled Switch
+  const renderToggle = (key: string, label: string, desc?: string, disabled: boolean = false) => {
+    const isChecked = config[key];
+    return (
+      <div key={key} className="flex items-start justify-between py-3">
+        <div className="pr-4 flex-1">
+          <label className="text-sm font-medium text-gray-900 dark:text-neutral-100 cursor-pointer select-none" onClick={() => !disabled && handleToggle(key, isChecked)}>
+            {label}
+          </label>
+          {desc && <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1 leading-relaxed">{desc}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={() => handleToggle(key, isChecked)}
+          disabled={disabled}
+          className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 mt-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 dark:focus:ring-offset-[#1a1a1a] ${
+            isChecked 
+              ? 'bg-blue-600' 
+              : 'bg-gray-300 dark:bg-neutral-600'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          <span
+            className={`absolute top-[2px] left-[2px] w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-sm ${
+              isChecked ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={() => handleToggle(key, config[key])}
-        disabled={disabled}
-        className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${config[key] ? 'bg-emerald-500 shadow-lg shadow-emerald-500/20' : 'bg-zinc-800'
-          }`}
-      >
-        <span
-          className={`w-5 h-5 rounded-full absolute top-0.5 transition-transform shadow ${config[key] ? 'left-5.5' : 'left-0.5'
-            } ${disabled ? ' bg-gray-600' : ' bg-white'}`}
-        />
-      </button>
-    </div>
-  );
+    );
+  };
 
+  // Material Design 3 Styled Input
   const renderInput = (key: string, label: string, type: 'text' | 'number' = 'text', desc?: string) => (
-    <div key={key} className="flex flex-col gap-1.5 p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/80">
-      <label className="text-sm font-semibold text-zinc-200 font-sans">{label}</label>
-      {desc && <p className="text-xs text-zinc-400 font-mono mb-1">{desc}</p>}
+    <div key={key} className="flex flex-col gap-1.5 py-2 w-full">
+      <label className="text-sm font-medium text-gray-900 dark:text-neutral-100">{label}</label>
       <input
         type={type}
         value={config[key] ?? ""}
         onChange={(e) => handleTextChange(key, type === 'number' ? Number(e.target.value) : e.target.value)}
-        className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-emerald-400 outline-none focus:border-emerald-500"
+        className="w-full bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-neutral-100 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-500 transition-all placeholder-gray-400"
       />
+      {desc && <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5 leading-relaxed">{desc}</p>}
     </div>
   );
 
+  // Material Design 3 Styled Select
   const renderSelect = (key: string, label: string, options: { val: string | number; text: string }[], desc?: string) => (
-    <div key={key} className="flex flex-col gap-1.5 p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/80">
-      <label className="text-sm font-semibold text-zinc-200 font-sans">{label}</label>
-      {desc && <p className="text-xs text-zinc-400 font-mono mb-1">{desc}</p>}
+    <div key={key} className="flex flex-col gap-1.5 py-2 w-full">
+      <label className="text-sm font-medium text-gray-900 dark:text-neutral-100">{label}</label>
       <select
         value={config[key] ?? options[0].val}
         onChange={(e) => handleTextChange(key, e.target.value)}
-        className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-emerald-400 outline-none focus:border-emerald-500 cursor-pointer"
+        className="w-full bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-neutral-100 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-500 transition-all cursor-pointer appearance-none"
       >
         {options.map((opt) => (
           <option key={String(opt.val)} value={opt.val}>{opt.text}</option>
         ))}
       </select>
+      {desc && <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5 leading-relaxed">{desc}</p>}
     </div>
   );
 
-  return (
-    <div className="max-w-7xl mx-auto p-4 lg:p-8 flex flex-col gap-8 animate-[fadeIn_0.3s_ease-out]">
+  const NavButton = ({ id, icon: Icon, label }: { id: SettingsSection, icon: any, label: string }) => {
+    const isActive = section === id;
+    return (
+      <button
+        onClick={() => setSection(id)}
+        className={`flex items-center gap-3 px-4 py-3 rounded-full text-sm font-medium transition-colors w-full text-left shrink-0 lg:shrink ${
+          isActive 
+            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
+            : 'text-gray-600 hover:bg-gray-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
+        }`}
+      >
+        <Icon className="w-[18px] h-[18px]" />
+        <span>{label}</span>
+      </button>
+    );
+  };
 
-      {/* Header Bar */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+  return (
+    <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6 font-sans">
+      
+      {/* App Bar / Header */}
+      <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-neutral-800/60 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2">
-            <Sliders className="w-6 h-6 text-emerald-400" />
-            <span>OTSConfig Settings Sync</span>
+          <h2 className="text-xl font-medium text-gray-900 dark:text-neutral-100 flex items-center gap-2">
+            <Sliders className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            System Configuration
           </h2>
-          <p className="text-xs text-zinc-400 font-mono mt-1">
-            All modifications sync automatically with FastAPI engine state • {config.version}
+          <p className="text-sm text-gray-500 dark:text-neutral-400 mt-1">
+            Configurations sync automatically with FastAPI engine state • Version {config.version}
           </p>
         </div>
 
@@ -125,7 +155,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <button
             onClick={triggerReset}
             disabled={resetting}
-            className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-rose-600/30 text-zinc-300 hover:text-rose-200 border border-zinc-700/80 hover:border-rose-500/50 text-xs font-mono font-bold transition-all flex items-center gap-2 cursor-pointer"
+            className="px-5 py-2.5 rounded-full text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 text-sm font-medium transition-colors flex items-center gap-2"
           >
             <RotateCcw className="w-4 h-4" />
             <span>{resetting ? 'Resetting...' : 'Factory Reset'}</span>
@@ -134,12 +164,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <button
             onClick={triggerSave}
             disabled={saving}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-mono font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
+            className="px-6 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : savedSuccess ? (
-              <Check className="w-4 h-4 text-white" />
+              <Check className="w-4 h-4" />
             ) : (
               <Save className="w-4 h-4" />
             )}
@@ -148,115 +178,74 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
       </div>
 
-      {/* Settings Navigation Sidebar + Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      {/* Main Layout Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        
+        {/* Navigation Sidebar */}
+        <div className="lg:col-span-1 flex flex-row lg:flex-col overflow-x-auto no-scrollbar gap-1 bg-white dark:bg-[#1a1a1a] p-2 rounded-2xl border border-gray-200 dark:border-neutral-800/60 shadow-sm lg:sticky top-24">
+          <NavButton id="general" icon={Cpu} label="General & Workers" />
+          <NavButton id="audio" icon={Music} label="Audio Outputs" />
+          <NavButton id="video" icon={Film} label="Video Media" />
+          <NavButton id="metadata" icon={Tag} label="ID3 Tagging" />
+          <NavButton id="search" icon={Search} label="Search API" />
+          <NavButton id="display" icon={Eye} label="Display Settings" />
+        </div>
 
-        {/* Navigation Tabs */}
-        <div className="lg:col-span-1 flex lg:flex-col overflow-x-auto no-scrollbar gap-2 bg-zinc-900/60 p-2 rounded-2xl border border-zinc-800 h-fit sticky top-24">
-
-          <button
-            onClick={() => setSection('general')}
-            className={`flex items-center gap-3 p-3 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shrink-0 w-auto lg:w-full text-left ${section === 'general' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800'
-              }`}
-          >
-            <Cpu className="w-4 h-4" />
-            <span>General & Workers</span>
-          </button>
-
-          <button
-            onClick={() => setSection('audio')}
-            className={`flex items-center gap-3 p-3 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shrink-0 w-auto lg:w-full text-left ${section === 'audio' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800'
-              }`}
-          >
-            <Music className="w-4 h-4" />
-            <span>Audio & Formats</span>
-          </button>
-
-          <button
-            onClick={() => setSection('video')}
-            className={`flex items-center gap-3 p-3 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shrink-0 w-auto lg:w-full text-left ${section === 'video' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800'
-              }`}
-          >
-            <Film className="w-4 h-4" />
-            <span>Video & Subtitles</span>
-          </button>
-
-          <button
-            onClick={() => setSection('metadata')}
-            className={`flex items-center gap-3 p-3 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shrink-0 w-auto lg:w-full text-left ${section === 'metadata' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800'
-              }`}
-          >
-            <Tag className="w-4 h-4" />
-            <span>ID3 Metadata Embedding</span>
-          </button>
-
-          <button
-            onClick={() => setSection('search')}
-            className={`flex items-center gap-3 p-3 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shrink-0 w-auto lg:w-full text-left ${section === 'search' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800'
-              }`}
-          >
-            <Search className="w-4 h-4" />
-            <span>Search & API Limits</span>
-          </button>
-
-          <button
-            onClick={() => setSection('display')}
-            className={`flex items-center gap-3 p-3 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shrink-0 w-auto lg:w-full text-left ${section === 'display' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800'
-              }`}
-          >
-            <Eye className="w-4 h-4" />
-            <span>WebUI Display Buttons</span>
-          </button>
-
-        </div >
-
-        {/* Section Panels */}
-        <div className="lg:col-span-3 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 lg:p-8 shadow-xl flex flex-col gap-6">
-
+        {/* Content Panels */}
+        <div className="lg:col-span-3 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-neutral-800/60 rounded-2xl p-6 md:p-8 shadow-sm flex flex-col">
+          
+          {/* GENERAL SECTION */}
           {section === 'general' && (
-            <>
-              <div className="border-b border-zinc-800 pb-4">
-                <h3 className="text-lg font-bold text-white font-sans">System Variables & Workers</h3>
-                <p className="text-xs text-zinc-400 font-mono mt-1">Configure worker threads, download delays, and global application options.</p>
+            <div className="animate-[fadeIn_0.2s_ease-out]">
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">System Variables & Workers</h3>
+                <p className="text-sm text-gray-500 mt-1">Configure worker threads, download delays, and global application options.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mb-6">
                 {renderInput('maximum_download_workers', 'Maximum Download Workers', 'number', 'Concurrent song conversion threads')}
                 {renderInput('maximum_queue_workers', 'Maximum Queue Workers', 'number', 'Concurrent playlist item parsing threads')}
                 {renderInput('download_delay', 'Download Delay (seconds)', 'number', 'Wait time between consecutive download requests')}
                 {renderInput('download_chunk_size', 'Download Chunk Size (bytes)', 'number', 'Streaming media chunk size')}
               </div>
 
-              <div className="flex flex-col gap-3 pt-2">
+              <div className="divide-y divide-gray-100 dark:divide-neutral-800/60 border-t border-gray-100 dark:border-neutral-800/60">
                 {renderToggle('raw_media_download', 'Raw Media Download', 'Skip media conversion and ID3 metadata writing')}
-                {renderToggle('mirror_spotify_playback', 'Mirror Spotify Playback', 'Mirror active Spotify desktop/mobile client playback')}
-                {renderToggle('enable_retry_worker', 'Enable Retry Worker', 'Automatically retry failed downloads after a set interval')}
+                {renderToggle('mirror_spotify_playback', 'Mirror Spotify Playback', 'Mirror active Spotify client playback')}
+                {renderToggle('enable_retry_worker', 'Enable Retry Worker', 'Automatically retry failed downloads')}
                 {renderToggle('use_double_digit_path_numbers', 'Double Digit Track Numbers', 'Format track numbers as 01, 02 instead of 1, 2')}
-                {renderToggle('debug_mode', 'Enable Debug Mode', 'Enables verbose logging and internal debugging features in the application.')}
+                {renderToggle('debug_mode', 'Enable Debug Mode', 'Enables verbose logging and internal application debugging features')}
                 {renderToggle('close_to_tray', 'Close to System Tray', 'Minimize application to system tray on exit')}
                 {renderToggle('rotate_active_account_number', 'Rotate Active Account Number', 'Cycle through available accounts automatically')}
-                {renderInput('download_delay_variance', 'Download Delay Variance (s)', 'number', 'Random variance added to base download delay')}
-                {renderToggle('check_for_updates', 'Check for Updates', 'Automatically check for new application versions.', false)}
-                {renderToggle('use_webui_login', 'Require Web UI Login', 'Protect this dashboard with username and password - Coming Soon', true)}
-                {renderInput('language', 'Application Language', 'text', 'e.g., en_US')}
-                
+                <div className="py-2">
+                  {renderInput('download_delay_variance', 'Download Delay Variance (s)', 'number', 'Random variance added to base download delay')}
+                </div>
+                {renderToggle('check_for_updates', 'Check for Updates', 'Automatically check for new application versions', false)}
+                {renderToggle('use_webui_login', 'Require Web UI Login', 'Protect dashboard with credential authorization (Coming Soon)', true)}
+                <div className="py-2">
+                  {renderInput('language', 'Application Language', 'text', 'Default interface locale (e.g., en_US)')}
+                </div>
               </div>
-            </>
+            </div>
           )}
 
+          {/* AUDIO SECTION */}
           {section === 'audio' && (
-            <>
-              <div className="border-b border-zinc-800 pb-4">
-                <h3 className="text-lg font-bold text-white font-sans">Audio Formatting & Output Paths</h3>
-                <p className="text-xs text-zinc-400 font-mono mt-1">Set root music folder, preferred codecs, bitrates, and folder formatters.</p>
+            <div className="animate-[fadeIn_0.2s_ease-out]">
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">Audio Formatting & Output</h3>
+                <p className="text-sm text-gray-500 mt-1">Set root music folder, preferred codecs, bitrates, and folder formatters.</p>
               </div>
-              
-              
-              {renderInput('audio_download_path', 'Audio Download Root Path', 'text', 'Absolute folder path on host filesystem')}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {renderToggle('use_source_format', 'Use Source Format', 'Uses the best source format, do not use with custom bitrate.')}
-                {renderToggle('use_custom_file_bitrate', 'Use Custom Bitrate', 'Converts the file to the set bitrate, but still uses the best source to download')}
 
+              <div className="mb-6">
+                {renderInput('audio_download_path', 'Audio Download Root Path', 'text', 'Absolute folder path on host filesystem')}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mb-6">
+                <div className="sm:col-span-2 divide-y divide-gray-100 dark:divide-neutral-800/60 mb-2 border-b border-gray-100 dark:border-neutral-800/60">
+                  {renderToggle('use_source_format', 'Use Source Format', 'Uses the best source quality and format directly')}
+                  {renderToggle('use_custom_file_bitrate', 'Use Custom Bitrate', 'Enforces files to output using target bitrate selections')}
+                </div>
                 {renderSelect('track_file_format', 'Track Media Format', [
                   { val: 'flac', text: 'FLAC (Lossless HiRes)' },
                   { val: 'mp3', text: 'MP3 (Universal 320k)' },
@@ -264,53 +253,52 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   { val: 'opus', text: 'Opus (High Efficiency)' },
                   { val: 'wav', text: 'WAV (Uncompressed)' },
                   { val: 'ogg', text: 'Vorbis Ogg' }
-                ], "Download will be converted to this format if use source format is disabled.")}
-
-                
+                ], "Download container if standard source formats are disabled.")}
                 {renderSelect('file_bitrate', 'Converted File Bitrate', [
                   { val: '320k', text: '320 kbps (Maximum Quality)' },
                   { val: '256k', text: '256 kbps (High)' },
                   { val: '192k', text: '192 kbps (Medium)' },
                   { val: '128k', text: '128 kbps (Standard)' }
-                ], "Download will be converted to this bitrate if use custom bitrate is enabled.")}
-                
-                
+                ], "Download bitrate conversion output when custom bitrates are enabled.")}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-800">
-                
-                {renderInput('track_path_formatter', 'Track Path Formatter', 'text', 'Available variables: {album_artist}, {album}, {year}, {track_number}, {name}')}
-                {renderInput('playlist_path_formatter', 'Playlist Path Formatter', 'text', 'Available variables: {playlist_name}, {playlist_owner}, {playlist_number}, {artist}')}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mb-6 pt-6 border-t border-gray-100 dark:border-neutral-800/60">
+                {renderInput('track_path_formatter', 'Track Path Formatter', 'text', 'Variables: {album_artist}, {album}, {year}, {track_number}, {name}')}
+                {renderInput('playlist_path_formatter', 'Playlist Path Formatter', 'text', 'Variables: {playlist_name}, {playlist_owner}, {playlist_number}, {artist}')}
               </div>
 
-              <div className="flex flex-col gap-3 pt-2 border-t border-zinc-800">
-                {renderSelect('m3u_format', 'M3U Playlist Format', [
-                  { val: 'm3u8', text: 'M3U8' },
-                  { val: 'm3u', text: 'M3U (Standard)' }
-                ], 'Format for generated M3U playlists')}
-                {renderToggle('create_m3u_file', 'Create M3U Playlist File', 'Generate standard M3U8 file alongside playlist items')}
-                {renderToggle('save_album_cover', 'Save Cover Art To Folder', 'Save folder.jpg or cover.png inside album directory')}
-                {renderToggle('download_lyrics', 'Download Lyrics', 'Fetch synchronized or plain lyrics')}
-                {config.download_lyrics && renderToggle('save_lrc_file', 'Save .LRC Lyrics File', 'Export synced lyrics as standalone .lrc file next to track')}
+              <div className="divide-y divide-gray-100 dark:divide-neutral-800/60 pt-6 border-t border-gray-100 dark:border-neutral-800/60">
+                <div className="py-2">
+                  {renderSelect('m3u_format', 'M3U Playlist Format', [
+                    { val: 'm3u8', text: 'M3U8' },
+                    { val: 'm3u', text: 'M3U (Standard)' }
+                  ], 'Format wrapper for generated local playlist files')}
+                </div>
+                {renderToggle('create_m3u_file', 'Create M3U Playlist File', 'Generate playlist index files next to downloaded items')}
+                {renderToggle('save_album_cover', 'Save Cover Art To Folder', 'Save folder.jpg or cover.png inside album directories')}
+                {renderToggle('download_lyrics', 'Download Lyrics', 'Fetch synchronized or plain-text lyric files')}
+                {config.download_lyrics && renderToggle('save_lrc_file', 'Save .LRC Lyrics File', 'Export synced lyric timestamps as standalone .lrc assets')}
               </div>
-            </>
+            </div>
           )}
 
+          {/* VIDEO SECTION */}
           {section === 'video' && (
-            <>
-              <div className="border-b border-zinc-800 pb-4">
-                <h3 className="text-lg font-bold text-white font-sans">Video, Movies & Anime Settings</h3>
-                <p className="text-xs text-zinc-400 font-mono mt-1">Configure resolution preferences and container formatting for Crunchyroll and Generic video.</p>
+            <div className="animate-[fadeIn_0.2s_ease-out]">
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">Video, Movies & Anime Settings</h3>
+                <p className="text-sm text-gray-500 mt-1">Configure resolution preferences and container formatting for video media.</p>
               </div>
 
-              {renderInput('video_download_path', 'Video Download Root Path', 'text')}
+              <div className="mb-6">
+                {renderInput('video_download_path', 'Video Download Root Path', 'text')}
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mb-6">
                 {renderSelect('movie_file_format', 'Movie Container Format', [
                   { val: 'mkv', text: 'MKV (Matroska Container)' },
                   { val: 'mp4', text: 'MP4 (Standard Video)' }
                 ])}
-
                 {renderSelect('preferred_video_resolution', 'Preferred Video Resolution', [
                   { val: 1080, text: '1080p (Full HD)' },
                   { val: 720, text: '720p (HD)' },
@@ -318,63 +306,60 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 ])}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mb-6 pt-6 border-t border-gray-100 dark:border-neutral-800/60">
                 {renderInput('movie_path_formatter', 'Movie Path Formatter', 'text')}
                 {renderInput('show_path_formatter', 'TV Show Path Formatter', 'text')}
+                {renderInput('preferred_audio_language', 'Preferred Audio Language Code', 'text', 'Target stream language code (e.g., en-US)')}
+                {renderInput('preferred_subtitle_language', 'Preferred Subtitle Language Code', 'text', 'Target subtitle language code (e.g., en-US)')}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-800">
-                {renderInput('preferred_audio_language', 'Preferred Audio Language Code', 'text', 'e.g., en-US')}
-                {renderInput('preferred_subtitle_language', 'Preferred Subtitle Language Code', 'text', 'e.g., en-US')}
+              <div className="divide-y divide-gray-100 dark:divide-neutral-800/60 pt-6 border-t border-gray-100 dark:border-neutral-800/60">
+                {renderToggle('download_subtitles', 'Download Subtitles', 'Extract and embed soft subtitles or save external .srt components')}
+                {renderToggle('download_chapters', 'Download Video Chapters', 'Preserve internal chapter segment markers')}
+                {renderToggle('download_all_available_audio', 'Download All Available Audio Tracks', 'Include alternative language audio dubs')}
               </div>
 
-              <div className="flex flex-col gap-3 pt-2">
-                {renderToggle('download_subtitles', 'Download Subtitles', 'Extract and multiplex subtitles or save .srt')}
-                {renderToggle('download_chapters', 'Download Video Chapters', 'Preserve chapter markers in MKV/MP4 files')}
-                {renderToggle('download_all_available_audio', 'Download All Available Audio Tracks', 'Include multi-language dubs if present')}
-              </div>
+              {/* V2A Section */}
+              <div className="mt-8 pt-8 border-t border-gray-100 dark:border-neutral-800/60">
+                <div className="bg-blue-50 dark:bg-blue-900/10 rounded-2xl p-6 border border-blue-100 dark:border-blue-900/30">
+                  <h4 className="text-base font-medium text-gray-900 dark:text-neutral-100 mb-1">Video to Audio Extraction (V2A)</h4>
+                  <p className="text-sm text-gray-500 dark:text-neutral-400 mb-4">Strip output and save audio streams only when downloading video sources.</p>
+                  
+                  {renderToggle('v2a_enable', 'Enable Audio Extraction', 'Discard video components and convert tracks to designated format')}
 
-              <div className="border-t border-zinc-800 pt-5 mt-2">
-                <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-4">
-                  <div>
-                    <h4 className="text-sm font-bold text-white font-sans">Video to Audio Extraction (V2A)</h4>
-                    <p className="text-xs text-zinc-400 font-mono mt-0.5">Extract and save only the audio stream when downloading video sources.</p>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    {renderToggle('v2a_enable', 'Save Only Audio from Video (V2A)', 'Discard video stream and convert output to audio format')}
-
-                    {config.v2a_enable && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-zinc-800/80 animate-[fadeIn_0.2s_ease-out]">
-                        {renderSelect('v2a_preferred_codec', 'Preferred Audio Codec', [
-                          { val: 'opus', text: 'Opus (High Efficiency)' },
-                          { val: 'm4a', text: 'M4A / AAC' },
-                          { val: 'mp3', text: 'MP3 (Standard)' },
-                          { val: 'flac', text: 'FLAC (Lossless)' },
-                          { val: 'wav', text: 'WAV (Uncompressed)' }
-                        ], 'Format of extracted audio track')}
-                        {renderInput('v2a_preferred_bitrate', 'Preferred Audio Bitrate (kbps)', 'number', 'e.g. 192, 256, 320')}
-                      </div>
-                    )}
-                  </div>
+                  {config.v2a_enable && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 mt-6 pt-6 border-t border-blue-200/50 dark:border-blue-800/30 animate-[fadeIn_0.2s_ease-out]">
+                      {renderSelect('v2a_preferred_codec', 'Preferred Audio Codec', [
+                        { val: 'opus', text: 'Opus (High Efficiency)' },
+                        { val: 'm4a', text: 'M4A / AAC' },
+                        { val: 'mp3', text: 'MP3 (Standard)' },
+                        { val: 'flac', text: 'FLAC (Lossless)' },
+                        { val: 'wav', text: 'WAV (Uncompressed)' }
+                      ], 'Output file compression profile')}
+                      {renderInput('v2a_preferred_bitrate', 'Preferred Audio Bitrate (kbps)', 'number', 'Target bitrate limit (e.g., 256, 320)')}
+                    </div>
+                  )}
                 </div>
               </div>
-            </>
+            </div>
           )}
 
+          {/* METADATA SECTION */}
           {section === 'metadata' && (
-            <>
-              <div className="border-b border-zinc-800 pb-4">
-                <h3 className="text-lg font-bold text-white font-sans">ID3 Metadata Tag Embedding</h3>
-                <p className="text-xs text-zinc-400 font-mono mt-1">Select exactly which metadata tags to inject into downloaded music tracks.</p>
+            <div className="animate-[fadeIn_0.2s_ease-out]">
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">ID3 Metadata Tagging</h3>
+                <p className="text-sm text-gray-500 mt-1">Select exactly which metadata tags to inject into downloaded music tracks.</p>
               </div>
-              <div className="grid grid-cols-1 gap-3">
-                {renderSelect('album_cover_format', 'Covert Art Format', [
-                  { val: 'png', text: 'png (Better Quality, Bigger File' },
-                  { val: 'jpeg', text: 'jpeg (Lower Quality, Smaller File' },
+
+              <div className="mb-6 max-w-md">
+                {renderSelect('album_cover_format', 'Cover Art Compression Format', [
+                  { val: 'png', text: 'PNG (Lossless Quality, Larger Size)' },
+                  { val: 'jpeg', text: 'JPEG (Efficient Compression, Smaller Size)' }
                 ])}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 divide-y sm:divide-y-0 divide-gray-100 dark:divide-neutral-800/60 mb-8 border-t border-gray-100 dark:border-neutral-800/60 pt-4">
                 {renderToggle('embed_cover', 'Embed Cover Art')}
                 {renderToggle('embed_artist', 'Embed Artist')}
                 {renderToggle('embed_album', 'Embed Album')}
@@ -397,80 +382,87 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 {renderToggle('embed_description', 'Embed Description')}
                 {renderToggle('embed_language', 'Embed Language')}
                 {renderToggle('embed_url', 'Embed URL')}
-                
-              </div>
-              <div className="border-b border-zinc-800 pb-4">
-                <p className="text-xs text-zinc-400 font-mono mt-1">Spotify Only - Require enabled Audio Features API calls from Metadata Settings</p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                
-                {renderToggle('embed_timesignature', 'Embed Timesignature')}
-                {renderToggle('embed_acousticness', 'Embed Acousticness')}
-                {renderToggle('embed_danceability', 'Embed Danceability')}
-                {renderToggle('embed_energy', 'Embed Energy')}
-                {renderToggle('embed_instrumentalness', 'Embed Instrumentalness')}
-                {renderToggle('embed_liveness', 'Embed Liveness')}
-                {renderToggle('embed_loudness', 'Embed Loudness')}
-                {renderToggle('embed_speechiness', 'Embed Speechiness')}
-                {renderToggle('embed_valence', 'Embed Valence')}
-              </div>
-              <div className="pt-4 border-t border-zinc-800">
-                {renderInput('metadata_separator', 'Metadata Value Separator', 'text', 'Separator for multi-value tags (e.g. "; " for multiple artists)')}
-              </div>
-            </>
-          )}
-
-          {section === 'search' && (
-            <>
-              <div className="border-b border-zinc-800 pb-4">
-                <h3 className="text-lg font-bold text-white font-sans">Search Categories & API Call Reduction</h3>
-                <p className="text-xs text-zinc-400 font-mono mt-1">Optimize Spotify/Tidal API rate limits and toggle enabled catalog categories.</p>
               </div>
 
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 mb-2">
-                <h4 className="text-xs font-mono font-bold text-emerald-400 mb-2">⚡ API Rate Limit Optimization</h4>
-                <div className="flex flex-col gap-2.5">
-                  {renderToggle('cache_metadata_in_queue', 'Cache API Calls', 'Reduces Spotify API calls by ~50% albums and collections')}
-                  {renderToggle('fetch_genre_metadata', 'Fetch Genre from Artist Endpoint', 'Adds +1 API call per track')}
-                  {renderToggle('fetch_extended_album_metadata', 'Fetch Extra Album Metadata', 'Adds +1 API call per track')}
-                  {renderToggle('fetch_audio_features', 'Fetch Audio Features(Bpm, Energy, ecc)', 'Adds +1 API call per track')}
-                  {renderToggle('fetch_track_credits', 'Fetch Record Label & Copyright', 'Adds +1 API call per track')}
-                  {renderInput('spotify_webapi_override_client_id', 'Spotify Client ID Override', 'text')}
-                  {renderInput('spotify_webapi_override_client_secret', 'Spotify Client Secret Override', 'text')}
+              <div className="pt-6 border-t border-gray-100 dark:border-neutral-800/60 mb-6">
+                <h4 className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-4">Spotify Specific Fields (Requires Audio Features API)</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 divide-y sm:divide-y-0 divide-gray-100 dark:divide-neutral-800/60">
+                  {renderToggle('embed_timesignature', 'Embed Time Signature')}
+                  {renderToggle('embed_acousticness', 'Embed Acousticness')}
+                  {renderToggle('embed_danceability', 'Embed Danceability')}
+                  {renderToggle('embed_energy', 'Embed Energy')}
+                  {renderToggle('embed_instrumentalness', 'Embed Instrumentalness')}
+                  {renderToggle('embed_liveness', 'Embed Liveness')}
+                  {renderToggle('embed_loudness', 'Embed Loudness')}
+                  {renderToggle('embed_speechiness', 'Embed Speechiness')}
+                  {renderToggle('embed_valence', 'Embed Valence')}
                 </div>
               </div>
 
-              <h4 className="text-sm font-bold text-white font-sans mt-2">Enabled Search Categories</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {renderToggle('enable_search_tracks', 'Search Tracks')}
-                {renderToggle('enable_search_albums', 'Search Albums')}
-                {renderToggle('enable_search_playlists', 'Search Playlists')}
-                {renderToggle('enable_search_artists', 'Search Artists')}
-                {renderToggle('enable_search_podcasts', 'Search Podcasts')}
-                {renderToggle('enable_search_episodes', 'Search Episodes')}
-                {renderToggle('enable_search_audiobooks', 'Search Audiobooks')}
+              <div className="pt-6 border-t border-gray-100 dark:border-neutral-800/60 max-w-md">
+                {renderInput('metadata_separator', 'Metadata Value Separator', 'text', 'Separation character for multi-value tags (e.g. "; ")')}
               </div>
-
-              <div className="mt-4 pt-3 border-t border-zinc-800">
-                <h4 className="text-sm font-bold text-white font-sans mb-2">API Search Configuration</h4>
-                {renderInput('search_prefix', 'Default Search Prefix', 'text', 'Prefix used when searching (e.g., "the")')}
-              </div>
-            </>
+            </div>
           )}
 
-          {section === 'display' && (
-            <>
-              <div className="border-b border-zinc-800 pb-4">
-                <h3 className="text-lg font-bold text-white font-sans">Web UI Display Buttons & Layout</h3>
-                <p className="text-xs text-zinc-400 font-mono mt-1">Customize dashboard thumbnails, action icons, and notification popups.</p>
+          {/* SEARCH SECTION */}
+          {section === 'search' && (
+            <div className="animate-[fadeIn_0.2s_ease-out]">
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">Search & API Configuration</h3>
+                <p className="text-sm text-gray-500 mt-1">Optimize third-party platform API limits and toggle library source scopes.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 rounded-2xl p-6 mb-8">
+                <h4 className="text-base font-medium text-orange-800 dark:text-orange-400 mb-4 flex items-center gap-2">
+                  <Sliders className="w-4 h-4" /> API Call Reduction Settings
+                </h4>
+                <div className="divide-y divide-orange-100 dark:divide-orange-900/30">
+                  {renderToggle('cache_metadata_in_queue', 'Cache API Calls', 'Reduces target client catalog queries by up to 50%')}
+                  {renderToggle('fetch_genre_metadata', 'Fetch Genre from Artist Endpoint', 'Requires +1 additional query per processed track')}
+                  {renderToggle('fetch_extended_album_metadata', 'Fetch Extra Album Metadata', 'Requires +1 additional query per processed track')}
+                  {renderToggle('fetch_audio_features', 'Fetch Audio Features', 'Requires +1 additional query per processed track')}
+                  {renderToggle('fetch_track_credits', 'Fetch Record Label & Copyright', 'Requires +1 additional query per processed track')}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
+                    {renderInput('spotify_webapi_override_client_id', 'Spotify Client ID Override', 'text')}
+                    {renderInput('spotify_webapi_override_client_secret', 'Spotify Client Secret Override', 'text')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-8">
+                <h4 className="text-base font-medium text-gray-900 dark:text-neutral-100 mb-4">Enabled Search Categories</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 divide-y sm:divide-y-0 divide-gray-100 dark:divide-neutral-800/60 border border-gray-200 dark:border-neutral-800/60 rounded-xl p-4">
+                  {renderToggle('enable_search_tracks', 'Search Tracks')}
+                  {renderToggle('enable_search_albums', 'Search Albums')}
+                  {renderToggle('enable_search_playlists', 'Search Playlists')}
+                  {renderToggle('enable_search_artists', 'Search Artists')}
+                  {renderToggle('enable_search_podcasts', 'Search Podcasts')}
+                  {renderToggle('enable_search_episodes', 'Search Episodes')}
+                  {renderToggle('enable_search_audiobooks', 'Search Audiobooks')}
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100 dark:border-neutral-800/60 max-w-md">
+                {renderInput('search_prefix', 'Default Search Prefix', 'text', 'Fallback search prefix parameter (e.g., "the")')}
+              </div>
+            </div>
+          )}
+
+          {/* DISPLAY SECTION */}
+          {section === 'display' && (
+            <div className="animate-[fadeIn_0.2s_ease-out]">
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">Web UI & Display Controls</h3>
+                <p className="text-sm text-gray-500 mt-1">Customize dashboard thumbnails, action controls, and notification popups.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 mb-8 max-w-2xl">
                 {renderInput('thumbnail_size', 'Thumbnail Size (px)', 'number')}
                 {renderInput('max_search_results', 'Max Search Results per Category', 'number')}
               </div>
 
-              <div className="flex flex-col gap-3 pt-2">
+              <div className="divide-y divide-gray-100 dark:divide-neutral-800/60 pt-4 border-t border-gray-100 dark:border-neutral-800/60">
                 {renderToggle('show_search_thumbnails', 'Show Thumbnails in Search View')}
                 {renderToggle('show_download_thumbnails', 'Show Thumbnails in Download Queue')}
                 {renderToggle('download_open_btn', 'Show "Open File" Button in Queue')}
@@ -479,13 +471,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 {renderToggle('download_delete_btn', 'Show "Cancel / Delete" Button in Queue')}
                 {renderToggle('disable_download_popups', 'Disable Download Popups / Toasts')}
               </div>
-            </>
+            </div>
           )}
 
-        </div >
-
-      </div >
-
-    </div >
+        </div>
+      </div>
+    </div>
   );
 };

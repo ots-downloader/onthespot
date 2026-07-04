@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Download, Settings, Users, Terminal, Disc, Activity, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Search, Download, Settings, Users, Terminal, Disc } from 'lucide-react';
 
 export type NavTab = 'dashboard' | 'queue' | 'settings' | 'accounts' | 'logs';
 
@@ -23,116 +23,85 @@ export const Navbar: React.FC<NavbarProps> = ({
   accountCount,
   wsConnected,
   version,
-  totalDownloadedItems,
-  totalDownloadedData
 }) => {
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  
+  const TabButton = ({ 
+    id, label, icon: Icon, count, indicator 
+  }: { 
+    id: NavTab, label: string, icon: React.ElementType, count?: number, indicator?: boolean 
+  }) => {
+    const isActive = activeTab === id;
+    
+    return (
+      <button
+        onClick={() => onTabChange(id)}
+        className={`relative flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
+          isActive
+            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+            : 'text-gray-600 hover:bg-gray-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
+        }`}
+      >
+        <div className="relative">
+          <Icon className="w-[18px] h-[18px]" />
+          {indicator && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-neutral-900" />
+          )}
+        </div>
+        <span>{label}</span>
+        
+        {count !== undefined && count > 0 && (
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+            isActive 
+              ? 'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-100' 
+              : 'bg-gray-200 text-gray-700 dark:bg-neutral-700 dark:text-neutral-300'
+          }`}>
+            {count}
+          </span>
+        )}
+      </button>
+    );
   };
 
   return (
-    <header className="bg-[#18181B] border-b border-zinc-800 sticky top-0 z-40 px-4 lg:px-8 py-3.5 select-none shadow-xl">
+    <header className="bg-white dark:bg-[#141414] border-b border-gray-200 dark:border-neutral-800/60 sticky top-0 z-40 px-4 md:px-6 py-3 select-none">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
 
         {/* Logo & Status */}
         <div className="flex items-center justify-between md:justify-start gap-4">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => onTabChange('dashboard')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-400/30">
-              <Disc className="w-6 h-6 text-white animate-[spin_8s_linear_infinite]" />
+          <div 
+            className="flex items-center gap-3 cursor-pointer group" 
+            onClick={() => onTabChange('dashboard')}
+          >
+            <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-500/20 transition-colors">
+              <Disc className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-sans font-bold text-lg tracking-tight text-white flex items-center gap-1.5">
-                  OnTheSpot <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">{version || 'v2.0'}</span>
+                <h1 className="font-sans font-semibold text-lg tracking-tight text-gray-900 dark:text-neutral-100">
+                  OnTheSpot
                 </h1>
-              </div>
-              <p className="text-xs text-zinc-400 font-mono flex items-center gap-1.5">
-                <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${wsConnected ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                  {wsConnected ? 'WS Sync Active' : 'Connecting WS...'}
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">
+                  {version || 'v2.0'}
                 </span>
-              </p>
+              </div>
+              
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-orange-500'}`} />
+                <span className="text-xs text-gray-500 dark:text-neutral-500 font-medium">
+                  {wsConnected ? 'Connected' : 'Connecting...'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="flex items-center overflow-x-auto no-scrollbar gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
-
-          <button
-            onClick={() => onTabChange('dashboard')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer shrink-0 ${activeTab === 'dashboard'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-semibold'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-          >
-            <Search className="w-4 h-4" />
-            <span>Search & Parse</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('queue')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer shrink-0 ${activeTab === 'queue'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-semibold'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-          >
-            <div className="relative">
-              <Download className="w-4 h-4" />
-              {activeDownloads > 0 && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-              )}
-            </div>
-            <span>Download Queue</span>
-            {queueCount > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${activeTab === 'queue' ? 'bg-white/20 text-white' : 'bg-zinc-800 text-zinc-300'
-                }`}>
-                {queueCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => onTabChange('settings')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer shrink-0 ${activeTab === 'settings'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-semibold'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-          >
-            <Settings className="w-4 h-4 animate-[spin_15s_linear_infinite]" />
-            <span>OTS Settings</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('accounts')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer shrink-0 ${activeTab === 'accounts'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-semibold'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Accounts</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${activeTab === 'accounts' ? 'bg-white/20 text-white' : 'bg-zinc-800 text-zinc-300'
-              }`}>
-              {accountCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('logs')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer shrink-0 ${activeTab === 'logs'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-semibold'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-              }`}
-          >
-            <Terminal className="w-4 h-4" />
-            <span>Live Logs</span>
-          </button>
-
+        <nav className="flex items-center overflow-x-auto no-scrollbar gap-1 py-1">
+          <TabButton id="dashboard" label="Search" icon={Search} />
+          <TabButton id="queue" label="Queue" icon={Download} count={queueCount} indicator={activeDownloads > 0} />
+          <TabButton id="settings" label="Settings" icon={Settings} />
+          <TabButton id="accounts" label="Accounts" icon={Users} count={accountCount} />
+          <TabButton id="logs" label="Logs" icon={Terminal} />
         </nav>
 
       </div>

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Terminal, RefreshCw, Search, Trash2, ArrowDownCircle, PauseCircle, PlayCircle, ShieldAlert, Info, AlertTriangle, Cpu } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Terminal, RefreshCw, Search, Trash2, Download } from 'lucide-react';
 import { LogEntry } from '../types';
 import { getTargetBackendUrl } from '../lib/api';
 
@@ -18,9 +18,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 }) => {
   const [levelFilter, setLevelFilter] = useState<LogLevelFilter>('ALL');
   const [search, setSearch] = useState("");
-  const [autoScroll, setAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-
 
   const filteredLogs = logs.filter(l => {
     if (levelFilter !== 'ALL' && l.level !== levelFilter) return false;
@@ -29,119 +27,120 @@ export const LogViewer: React.FC<LogViewerProps> = ({
   });
 
   const handleDownloadFile = () => {
-      const url = `${getTargetBackendUrl()}/logs/download`;
-      window.open(url, '_blank');
-    };
+    const url = `${getTargetBackendUrl()}/logs/download`;
+    window.open(url, '_blank');
+  };
 
   const getLevelBadge = (lvl: string) => {
+    const baseClass = "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider";
     switch (lvl) {
-      case 'ERROR': return <span className="text-rose-400 font-bold bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/20">[ERROR]</span>;
-      case 'WARNING': return <span className="text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">[WARN] </span>;
-      default: return <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">[INFO] </span>;
+      case 'ERROR': 
+        return <span className={`${baseClass} bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400`}>Error</span>;
+      case 'WARNING': 
+        return <span className={`${baseClass} bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400`}>Warn</span>;
+      default: 
+        return <span className={`${baseClass} bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400`}>Info</span>;
     }
   };
 
+  const iconBtnClass = "p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-800 dark:text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-neutral-700";
+
   return (
-    <div className="max-w-7xl mx-auto p-4 lg:p-8 flex flex-col gap-6 animate-[fadeIn_0.3s_ease-out] h-[calc(100vh-140px)]">
-
-      {/* Top Bar */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shrink-0">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2.5">
-            <Terminal className="w-6 h-6 text-emerald-400 animate-pulse" />
-            <span>Server Log Viewer</span>       
-          </h2>
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center flex-wrap gap-2.5">
-          {/* Search */}
-          <div className="relative bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 flex items-center gap-2 focus-within:border-emerald-500 w-full sm:w-64">
-            <Search className="w-4 h-4 text-zinc-500 shrink-0" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter log lines..."
-              className="bg-transparent text-xs text-white placeholder-zinc-600 outline-none w-full font-mono"
-            />
+    <div className="max-w-7xl mx-auto p-4 md:p-6 h-[calc(100vh-80px)] flex flex-col font-sans">
+      {/* Material Card Surface */}
+      <div className="bg-white dark:bg-[#141414] rounded-2xl shadow-sm border border-gray-200 dark:border-neutral-800/60 flex flex-col h-full overflow-hidden">
+        
+        {/* App Bar / Toolbar */}
+        <div className="px-4 py-4 md:px-6 border-b border-gray-100 dark:border-neutral-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+          
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-full">
+              <Terminal className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-neutral-100 tracking-tight">
+              Server Logs
+            </h2>
           </div>
 
-          <button
-            onClick={() => handleDownloadFile()}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition-all border flex items-center gap-1.5 cursor-pointer bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700`}
-          >Download
-          </button>
+          {/* Actions & Search */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex items-center bg-gray-50 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-full px-4 py-2 w-full md:w-64 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
+              <Search className="w-4 h-4 text-gray-400 shrink-0" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search logs..."
+                className="bg-transparent text-sm text-gray-900 dark:text-neutral-100 placeholder-gray-500 outline-none w-full ml-2"
+              />
+            </div>
 
-          <button
-            onClick={onRefresh}
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors border border-zinc-700 cursor-pointer"
-            title="Manual force reload logs"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={onClear}
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-rose-600/20 text-zinc-400 hover:text-rose-300 transition-colors border border-zinc-700 cursor-pointer"
-            title="Clear UI buffer"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            <div className="flex items-center gap-1">
+              <button onClick={handleDownloadFile} className={iconBtnClass} title="Download Logs">
+                <Download className="w-5 h-5" />
+              </button>
+              <button onClick={onRefresh} className={iconBtnClass} title="Refresh Logs">
+                <RefreshCw className="w-5 h-5" />
+              </button>
+              <button onClick={onClear} className={iconBtnClass} title="Clear Buffer">
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Level Filter Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
-        {(['ALL', 'INFO', 'WARNING', 'ERROR'] as LogLevelFilter[]).map((lvl) => (
-          <button
-            key={lvl}
-            onClick={() => setLevelFilter(lvl)}
-            className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer border ${levelFilter === lvl
-              ? 'bg-zinc-800 text-white font-bold border-zinc-600'
-              : 'bg-zinc-950 text-zinc-500 border-zinc-900 hover:text-zinc-300'
+        {/* Filter Chips */}
+        <div className="px-4 py-3 md:px-6 flex items-center gap-2 border-b border-gray-100 dark:border-neutral-800/60 overflow-x-auto no-scrollbar shrink-0 bg-gray-50/50 dark:bg-[#141414]">
+          {(['ALL', 'INFO', 'WARNING', 'ERROR'] as LogLevelFilter[]).map((lvl) => (
+            <button
+              key={lvl}
+              onClick={() => setLevelFilter(lvl)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${
+                levelFilter === lvl
+                  ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-neutral-200 dark:text-neutral-900 dark:border-neutral-200'
+                  : 'bg-transparent text-gray-600 border-gray-200 hover:bg-gray-100 dark:text-neutral-400 dark:border-neutral-800 dark:hover:bg-neutral-800'
               }`}
-          >
-            {lvl}
-          </button>
-        ))}
-        <span className="text-xs font-mono text-zinc-500 ml-auto hidden sm:inline">
-          Showing {filteredLogs.length} of {logs.length} lines
-        </span>
-      </div>
+            >
+              {lvl}
+            </button>
+          ))}
+          <span className="text-sm text-gray-500 dark:text-neutral-500 ml-auto hidden sm:block">
+            {filteredLogs.length} of {logs.length} entries
+          </span>
+        </div>
 
-      {/* Terminal Output Window */}
-      <div
-        ref={scrollRef}
-        className="flex-1 bg-[#09090B] border border-zinc-800 rounded-2xl p-4 sm:p-6 overflow-y-auto font-mono text-xs shadow-2xl relative select-text"
-      >
-        {filteredLogs.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-zinc-600">
-            No logs match filter "{levelFilter}" {search && `with term "${search}"`}.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1.5 leading-relaxed">
-            {/* Reverse because logs come newest first or oldest first */}
-            {[...filteredLogs].map((entry) => (
-              <div key={entry.id} className="flex items-start gap-2.5 hover:bg-white/5 px-2 py-1 rounded transition-colors break-all group">
-                <span className="text-zinc-600 select-none shrink-0 text-[11px]">
-                  {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '12:00:00'}
-                </span>
-                <span className="shrink-0 select-none">
-                  {getLevelBadge(entry.level)}
-                </span>
-                <span className={`flex-1 ${entry.level === 'ERROR' ? 'text-rose-300 font-semibold' :
-                  entry.level === 'WARNING' ? 'text-amber-200' :
-                    entry.level === 'GUI' ? 'text-cyan-200' : 'text-zinc-300'
-                  }`}>
-                  {entry.message}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        {/* Log Lines Area */}
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50/30 dark:bg-[#0f0f0f] font-mono text-sm selection:bg-blue-200 dark:selection:bg-blue-900/50"
+        >
+          {filteredLogs.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-gray-500 dark:text-neutral-500 font-sans">
+              No logs match filter "{levelFilter}" {search && `with term "${search}"`}.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {[...filteredLogs].map((entry) => (
+                <div 
+                  key={entry.id} 
+                  className="flex items-start gap-3 py-1.5 px-2 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors group break-words"
+                >
+                  <span className="text-gray-400 dark:text-neutral-600 select-none shrink-0 text-xs mt-0.5 w-[72px]">
+                    {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '12:00:00'}
+                  </span>
+                  <span className="shrink-0 mt-[1px]">
+                    {getLevelBadge(entry.level)}
+                  </span>
+                  <span className="flex-1 text-gray-700 dark:text-neutral-300 leading-relaxed">
+                    {entry.message}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
+      </div>
     </div>
   );
 };

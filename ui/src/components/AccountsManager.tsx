@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Plus, Trash2, Key, Shield, CheckCircle2, RefreshCw, Sparkles, ExternalLink, Music2, Disc, Lock } from 'lucide-react';
+import { Users, Plus, Trash2, Key, Shield, Loader2, Server } from 'lucide-react';
 import { AccountItem } from '../types';
 
 interface AccountsManagerProps {
@@ -32,107 +32,97 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   };
 
   const getServiceColor = (srv: string) => {
+    const base = "font-medium capitalize text-xs px-2.5 py-0.5 rounded-full";
     switch (srv.toLowerCase()) {
-      case 'spotify': return 'border-[#1DB954]/50 bg-[#1DB954]/10 text-[#1ed760]';
-      case 'tidal': return 'border-cyan-500/50 bg-cyan-500/10 text-cyan-400';
-      case 'soundcloud': return 'border-orange-500/50 bg-orange-500/10 text-orange-400';
-      case 'bandcamp': return 'border-blue-500/50 bg-blue-500/10 text-blue-400';
+      case 'spotify': return `${base} bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300`;
+      case 'tidal': return `${base} bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300`;
+      case 'soundcloud': return `${base} bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300`;
+      case 'bandcamp': return `${base} bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300`;
       case 'apple_music':
-      case 'applemusic': return 'border-rose-500/50 bg-rose-500/10 text-rose-400';
+      case 'applemusic': return `${base} bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300`;
       case 'youtube_music':
-      case 'youtube': return 'border-red-500/50 bg-red-500/10 text-red-400';
-      default: return 'border-zinc-700 bg-zinc-800 text-zinc-300';
+      case 'youtube': return `${base} bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300`;
+      default: return `${base} bg-gray-100 text-gray-800 dark:bg-neutral-800 dark:text-neutral-300`;
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 lg:p-8 flex flex-col gap-8 animate-[fadeIn_0.3s_ease-out]">
-
+    <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6 font-sans">
+      
       {/* Top Banner */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 lg:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+      <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm border border-gray-200 dark:border-neutral-800/60">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white font-sans flex items-center gap-2.5">
-            <Users className="w-6 h-6 text-emerald-400" />
-            <span>Account Pool Manager</span>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
+          <h2 className="text-xl font-medium text-gray-900 dark:text-neutral-100 flex items-center gap-2">
+            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            Account Pool Manager
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 ml-2">
               {accounts.length} active workers
             </span>
           </h2>
-          <p className="text-xs text-zinc-400 font-mono mt-1">
-            Accounts in this pool are rotated to parse metadata and download audio streams without hitting IP rate limits.
+          <p className="text-sm text-gray-500 dark:text-neutral-400 mt-1">
+            Accounts are automatically rotated to distribute API load and bypass rate limits.
           </p>
         </div>
 
         <button
           onClick={() => setShowModal(true)}
-          className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold px-5 py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer shrink-0 text-xs font-mono"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full transition-colors flex items-center justify-center gap-2 text-sm font-medium shrink-0 focus:ring-2 focus:ring-blue-500/50 outline-none"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Service Account</span>
+          <span>Add Account</span>
         </button>
       </div>
 
       {/* Account Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {accounts.map((acc) => {
           const colorClass = getServiceColor(acc.service);
 
           return (
             <div
               key={acc.uuid}
-              className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-6 flex flex-col justify-between shadow-xl transition-all hover:border-zinc-700 relative group"
+              className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-neutral-800/60 rounded-2xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow"
             >
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold uppercase border ${colorClass}`}>
+                  <span className={colorClass}>
                     {acc.service.replace('_', ' ')}
                   </span>
-
-                  <div className="flex items-center gap-1.5 text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>Active</span>
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/10 px-2.5 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    Active
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center font-bold font-mono text-lg text-zinc-300">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center text-lg font-medium text-gray-700 dark:text-neutral-300">
                     {acc.service.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-bold text-white text-base font-sans truncate">
+                    <h4 className="font-medium text-gray-900 dark:text-neutral-100 text-base truncate">
                       {acc.username || `${acc.service}_public_worker`}
                     </h4>
-                    <p className="text-xs text-zinc-500 font-mono truncate">
-                      UUID: {acc.uuid}
+                    <p className="text-xs text-gray-500 dark:text-neutral-500 truncate mt-0.5" title={acc.uuid}>
+                      {acc.uuid}
                     </p>
                   </div>
                 </div>
 
-                {acc.login && (
-                  <div className="bg-zinc-950 rounded-xl p-3 border border-zinc-800/80 mb-4 text-[11px] font-mono text-zinc-400 flex flex-col gap-1">
-                    {Object.entries(acc.login).map(([k, v]) => (
-                      <div key={k} className="flex justify-between truncate">
-                        <span className="text-zinc-600">{k}:</span>
-                        <span className="text-zinc-300 truncate pl-2">{String(v)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                
               </div>
 
               {/* Action Footer */}
-              <div className="flex items-center justify-between pt-4 border-t border-zinc-800/80 text-xs font-mono">
-                <span className="text-zinc-500 flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5 text-emerald-500" /> Auth Token Stored
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-neutral-800">
+                <span className="text-gray-500 dark:text-neutral-500 text-xs flex items-center gap-1.5">
+                  <Shield className="w-4 h-4 text-gray-400" /> Authenticated
                 </span>
 
                 <button
                   onClick={() => onRemoveAccount(acc.uuid)}
-                  className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 p-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                  title="Remove worker account"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-red-500/20"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Remove</span>
+                  <Trash2 className="w-4 h-4" />
+                  Remove
                 </button>
               </div>
             </div>
@@ -140,25 +130,30 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         })}
       </div>
 
-      {/* Add Account Modal */}
+      {/* Standard Material Dialog */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 lg:p-8 shadow-2xl relative">
-            <h3 className="text-xl font-bold text-white font-sans mb-2 flex items-center gap-2">
-              <Key className="w-5 h-5 text-emerald-400" />
-              <span>Add Account to Worker Pool</span>
-            </h3>
-            <p className="text-xs text-zinc-400 font-mono mb-6 leading-relaxed">
-              Authenticate Spotify Librespot, Tidal OAuth, Apple Music Developer Token, SoundCloud OAuth, Qobuz, Deezer, or Crunchyroll.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-[#1c1c1c] rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative overflow-hidden animate-[slideIn_0.2s_ease-out]">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-full">
+                <Server className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h3 className="text-xl font-medium text-gray-900 dark:text-neutral-100">
+                Add Worker Account
+              </h3>
+            </div>
+            
+            <p className="text-sm text-gray-500 dark:text-neutral-400 mb-6">
+              Authenticate Spotify Librespot, Tidal OAuth, Apple Music, SoundCloud, or other supported services.
             </p>
 
             <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
               <div>
-                <label className="text-xs font-mono font-bold text-zinc-400 uppercase mb-1 block">Platform Service</label>
+                <label className="text-xs font-medium text-gray-700 dark:text-neutral-300 mb-1.5 block">Platform Service</label>
                 <select
                   value={service}
                   onChange={(e) => setService(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-white font-mono outline-none focus:border-emerald-500 cursor-pointer"
+                  className="w-full bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-neutral-100 focus:ring-2 focus:ring-blue-500/50 outline-none transition-shadow"
                 >
                   <option value="generic">Generic (Free)</option>
                   <option value="spotify">Spotify (zeroconf - Premium + DevAPI)</option>
@@ -174,48 +169,48 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-mono font-bold text-zinc-400 uppercase mb-1 block">Username / Account Email (Optional)</label>
+                <label className="text-xs font-medium text-gray-700 dark:text-neutral-300 mb-1.5 block">Username / Email (Optional)</label>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. samuel.brizzi94"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-white font-mono outline-none focus:border-emerald-500"
+                  placeholder="e.g. user@example.com"
+                  className="w-full bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-neutral-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-mono font-bold text-zinc-400 uppercase mb-1 block">OAuth Bearer Token / Cookie (Optional)</label>
+                <label className="text-xs font-medium text-gray-700 dark:text-neutral-300 mb-1.5 block">Access Token / Cookie (Optional)</label>
                 <input
                   type="password"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder="Paste personal access token or leave blank for browser session"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-white font-mono outline-none focus:border-emerald-500"
+                  placeholder="Paste secure token"
+                  className="w-full bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-neutral-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow"
                 />
               </div>
 
-              <div className="flex items-center gap-3 mt-4 pt-4 border-t border-zinc-800">
+              <div className="flex items-center justify-end gap-2 mt-6 pt-6 border-t border-gray-100 dark:border-neutral-800">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold transition-all cursor-pointer"
+                  className="px-5 py-2 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-neutral-300 dark:hover:bg-neutral-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold transition-all shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  {loading ? 'Adding...' : 'Save Account'}
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {loading ? 'Saving...' : 'Add Account'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 };
