@@ -677,7 +677,7 @@ async def get_logs():
 
 
 @app.get("/logs/download")
-async def get_logs():
+async def download_logs():
     """
     Returns the log file
 
