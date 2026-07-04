@@ -664,7 +664,6 @@ async def get_logs():
             source = ""
             level = ""
             formatted_message = main if message is None else message
-            logger.error("error extracting log data from string")
         data.append(
             {
                 "id": uuid.uuid4(),
