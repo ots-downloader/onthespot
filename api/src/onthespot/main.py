@@ -649,19 +649,22 @@ async def get_logs():
         try:
             message = main[0][1]
         except IndexError:
-            message = ""
+            logger.error("error finding match in log %s", l)
+            message = None
 
         log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
         try:
             date = log_info[0][0][:-4]
             source = log_info[0][2]
             level = log_info[0][3]
-            formatted_message = main if isinstance(message, str) else source + message
+            formatted_message = main if message is None else source + message
+            
         except IndexError:
             date = ""
             source = ""
             level = ""
-            formatted_message = main if isinstance(message, str) else message
+            formatted_message = main if message is None else message
+            logger.error("error extracting log data from string")
         data.append(
             {
                 "id": uuid.uuid4(),
