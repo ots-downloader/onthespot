@@ -652,7 +652,7 @@ async def get_logs():
             logger.error("error finding match in log %s", l)
             message = None
 
-        log_info = re.findall(r"\[( *.+?) :: ( *.+?) :: (\w.+) :: (\w.+)]", main[0][0])
+        log_info = re.findall(r"\[(.+?) :: (\w+?) :: (.+) :: (\w.+)]", main[0][0])
         try:
             date = log_info[0][0][:-4]
             source = log_info[0][2]
