@@ -2,12 +2,12 @@ import base64
 import json
 import os
 import re
-import requests
 import threading
 import time
 import traceback
 import uuid
-from librespot.audio.decoders import AudioQuality
+
+import requests
 from librespot.core import Session
 from librespot.zeroconf import ZeroconfServer
 from ..otsconfig import config, cache_dir
@@ -19,6 +19,7 @@ from ..runtimedata import (
     pending_lock,
 )
 from ..utils import make_call, conv_list_format, get_primary_composer
+from ..accounts import get_account_token
 
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
@@ -70,11 +71,11 @@ def spotify_get_oauth_token():
                 timeout=15,
             )
         except requests.exceptions.RequestException as e:
-            logger.error(f"[OAUTH] Token request failed: {str(e)}")
+            logger.error("[OAUTH] Token request failed: %s", str(e))
             return None
         if resp.status_code != 200:
             logger.error(
-                f"[OAUTH] Failed to get access token: {resp.status_code} - {resp.text}"
+                "Failed to get access token: %d - %s", resp.status_code, resp.text
             )
             return None
         try:
@@ -82,7 +83,7 @@ def spotify_get_oauth_token():
             access_token = data["access_token"]
             expires_in = data.get("expires_in", 3600)
         except (ValueError, KeyError) as e:
-            logger.error(f"[OAUTH] Malformed token response: {str(e)}")
+            logger.error("[OAUTH] Malformed token response: %s", str(e))
             return None
         _oauth_token_cache["access_token"] = access_token
         _oauth_token_cache["client_id"] = client_id
@@ -129,7 +130,7 @@ def spotify_playlist_call(token, url):
     return resp
 
 
-class MirrorSpotifyPlayback():
+class MirrorSpotifyPlayback:
     def __init__(self):
         super().__init__()
         self.thread = None
@@ -154,9 +155,6 @@ class MirrorSpotifyPlayback():
             logger.warning("SpotifyMirrorPlayback is not running.")
 
     def run(self):
-        # Circular Import
-        from ..accounts import get_account_token
-
         while self.is_running:
             time.sleep(5)
             try:
@@ -172,7 +170,7 @@ class MirrorSpotifyPlayback():
                         "Authorization": f"Bearer {token.get('user-read-currently-playing')}"
                     },
                 )
-            except:
+            except Exception:
                 logger.info("Session Expired, reinitializing...")
                 parsing_index = config.get("active_account_number")
                 spotify_re_init_session(account_pool[parsing_index])
@@ -220,7 +218,8 @@ class MirrorSpotifyPlayback():
                                 "playlist_number": "?",
                             }
                         logger.info(
-                            f"Mirror Spotify Playback added track to download queue: https://open.spotify.com/track/{item_id}"
+                            "Mirror Spotify Playback added track to download queue: https://open.spotify.com/track/%s",
+                            item_id,
                         )
                         continue
                 else:
@@ -252,70 +251,82 @@ def spotify_new_session():
         time.sleep(1)
         if zs.has_valid_session():
             logger.info(
-                f"Grabbed {zs._ZeroconfServer__session} for {zs._ZeroconfServer__session.username()}"
+                "Grabbed %s for %s",
+                zs._ZeroconfServer__session,
+                zs._ZeroconfServer__session.username(),
             )
             if zs._ZeroconfServer__session.username() in config.get("accounts"):
                 logger.info("Account already exists")
                 return False
-            else:
-                # I wish there was a way to get credentials without saving to
-                # a file and parsing it but not currently sure how.
-                try:
-                    with open(session_json_path, "r") as file:
-                        zeroconf_login = json.load(file)
-                except FileNotFoundError as e:
-                    logger.error(
-                        f"Error: {str(e)} The file {session_json_path} was not found.\nTraceback: {traceback.format_exc()}"
-                    )
-                except json.JSONDecodeError as e:
-                    logger.error(
-                        f"Error: {str(e)} Failed to decode JSON from the file.\nTraceback: {traceback.format_exc()}"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Unknown Error: {str(e)}\nTraceback: {traceback.format_exc()}"
-                    )
-                cfg_copy = config.get("accounts").copy()
-                new_user = {
-                    "uuid": uuid_uniq,
-                    "service": "spotify",
-                    "active": True,
-                    "login": {
-                        "username": zeroconf_login["username"],
-                        "credentials": zeroconf_login["credentials"],
-                        "type": zeroconf_login["type"],
-                    },
-                }
-                zs.close()
-                cfg_copy.append(new_user)
-                config.set("accounts", cfg_copy)
-                config.save()
-                logger.info("New account added to config.")
-                return True
+            try:
+                with open(session_json_path, "r") as file:
+                    zeroconf_login = json.load(file)
+            except FileNotFoundError as e:
+                logger.error(
+                    "Error: %s The file %s was not found.\nTraceback: %s",
+                    str(e),
+                    session_json_path,
+                    traceback.format_exc(),
+                )
+                return False
+            except json.JSONDecodeError as e:
+                logger.error(
+                    "Error: %s Failed to decode JSON from the file.\nTraceback: %s",
+                    str(e),
+                    traceback.format_exc(),
+                )
+                return False
+            except Exception as e:
+                logger.error(
+                    "Unknown Error: %s\nTraceback: %s", str(e), traceback.format_exc()
+                )
+                return False
+            cfg_copy = config.get("accounts").copy()
+            new_user = {
+                "uuid": uuid_uniq,
+                "service": "spotify",
+                "active": True,
+                "login": {
+                    "username": zeroconf_login["username"],
+                    "credentials": zeroconf_login["credentials"],
+                    "type": zeroconf_login["type"],
+                },
+            }
+            zs.close()
+            cfg_copy.append(new_user)
+            config.set("accounts", cfg_copy)
+            config.save()
+            logger.info("New account added to config.")
+            return True
 
 
 def spotify_login_user(account):
     try:
         # I'd prefer to use 'Session.Builder().stored(credentials).create but
         # I can't get it to work, loading from credentials file instead.
-        uuid = account["uuid"]
+        luuid = account["uuid"]
         username = account["login"]["username"]
 
         session_dir = os.path.join(cache_dir(), "sessions")
         os.makedirs(session_dir, exist_ok=True)
-        session_json_path = os.path.join(session_dir, f"ots_login_{uuid}.json")
+        session_json_path = os.path.join(session_dir, f"ots_login_{luuid}.json")
         try:
             with open(session_json_path, "w") as file:
                 json.dump(account["login"], file)
             logger.info(
-                f"Login information for '{username[:4]}*******' written to {session_json_path}"
+                "Login information for %s written to %s",
+                username[:4] + "****" if username else "",
+                session_json_path,
             )
         except IOError as e:
             logger.error(
-                f"Error writing to file {session_json_path}: {str(e)}\nTraceback: {traceback.format_exc()}"
+                "Error writing to file %s: %s\nTraceback: %s",
+                session_json_path,
+                str(e),
+                traceback.format_exc(),
             )
 
-        config = (
+        lconfig = (
             Session.Configuration.Builder()
             .set_stored_credential_file(session_json_path)
             .build()
@@ -324,22 +335,24 @@ def spotify_login_user(account):
         session = None
         try:
             session = (
-                Session.Builder(conf=config).stored_file(session_json_path).create()
+                Session.Builder(conf=lconfig).stored_file(session_json_path).create()
             )
         except Exception:
             time.sleep(3)
             session = (
-                Session.Builder(conf=config).stored_file(session_json_path).create()
+                Session.Builder(conf=lconfig).stored_file(session_json_path).create()
             )
         logger.debug("Session created")
-        logger.info(f"Login successful for user '{username[:4]}*******'")
+        logger.info(
+            "Login successful for user '%s'", username[:4] + "****" if username else ""
+        )
         account_type = session.get_user_attribute("type")
         bitrate = "160k"
         if account_type == "premium":
             bitrate = "320k"
         account_pool.append(
             {
-                "uuid": uuid,
+                "uuid": luuid,
                 "username": username,
                 "service": "spotify",
                 "status": "active",
@@ -354,11 +367,11 @@ def spotify_login_user(account):
         return True
     except Exception as e:
         logger.error(
-            f"Unknown Exception: {str(e)}\nTraceback: {traceback.format_exc()}"
+            "Unknown Exception: %s\nTraceback: %s", str(e), traceback.format_exc()
         )
         account_pool.append(
             {
-                "uuid": uuid,
+                "uuid": luuid,
                 "username": username,
                 "service": "spotify",
                 "status": "error",
@@ -385,7 +398,7 @@ def spotify_re_init_session(account, dead_session=None):
             try:
                 old_session.close()
             except Exception as e:
-                logger.debug(f"Failed to close old session: {e}")
+                logger.debug("Failed to close old session: %s", str(e))
             account["login"]["session"] = ""
         result = {}
 
@@ -414,7 +427,7 @@ def spotify_re_init_session(account, dead_session=None):
             return
         session = result.get("session")
         if session is None:
-            logger.error(f"Failed to re init session ! {result.get('error')}")
+            logger.error("Failed to re init session! %s", str(result.get("error")))
             return
         logger.debug("Session re init done")
         account_type = result["account_type"]
@@ -432,7 +445,8 @@ def spotify_get_token(parsing_index):
         token = None
     if not token or isinstance(token, str):
         logger.info(
-            f"No valid session for {account_pool[parsing_index]['username']}, attempting to reinit session."
+            "No valid session for %s, attempting to reinit session.",
+            account_pool[parsing_index]["username"],
         )
         spotify_re_init_session(account_pool[parsing_index])
         token = account_pool[parsing_index]["login"]["session"]
@@ -440,7 +454,7 @@ def spotify_get_token(parsing_index):
 
 
 def spotify_get_artist_album_ids(token, artist_id):
-    logger.info(f"Getting album ids for artist: '{artist_id}'")
+    logger.info("Getting album ids for artist: %s", artist_id)
     items = []
     offset = 0
     limit = 50
@@ -463,7 +477,7 @@ def spotify_get_artist_album_ids(token, artist_id):
 
 
 def spotify_get_playlist_data(token, playlist_id):
-    logger.info(f"Get playlist data for playlist: {playlist_id}")
+    logger.info("Get playlist data for playlist: %s", playlist_id)
     resp = spotify_playlist_call(token, f"{BASE_URL}/playlists/{playlist_id}")
     if not resp:
         raise Exception(f"Failed to fetch playlist data for '{playlist_id}'")
@@ -487,8 +501,8 @@ def spotify_get_lyrics(token, item_id, item_type, metadata, filepath):
             )
 
             resp = make_call(url, headers=headers)
-            if resp == None:
-                logger.info(f"Failed to find lyrics for {item_type}: {item_id}")
+            if resp is None:
+                logger.info("Failed to find lyrics for %s: %s", item_type, item_id)
                 return None
 
             if not config.get("only_download_plain_lyrics"):
@@ -551,20 +565,21 @@ def spotify_get_lyrics(token, item_id, item_type, metadata, filepath):
                                 f"[{minutes:0>2.0f}:{seconds:05.2f}] {line['text']['sentence']['text']}"
                             )
                         except KeyError as e:
-                            logger.debug(
-                                f"Invalid line: {str(e)} likely title, skipping.."
-                            )
+                            logger.debug("Invalid line: %s", str(e))
                 else:
                     logger.info("Unsynced episode lyrics, please open a bug report.")
 
         except requests.exceptions.RequestException as e:
             # Lyrics are optional - a 404 (or any request error) just means no
             # lyrics are available, so log it and continue the download without them.
-            logger.info(f"No lyrics available for {item_type} {item_id}: {str(e)}")
+            logger.info("No lyrics available for %s %s: %s", item_type, item_id, str(e))
             return None
         except (KeyError, IndexError) as e:
             logger.error(
-                f"KeyError/Index Error. Failed to get lyrics for {item_id}: {str(e)}\nTraceback: {traceback.format_exc()}"
+                "Failed to get lyrics for %s: %s\nTraceback: %s",
+                item_id,
+                str(e),
+                traceback.format_exc(),
             )
 
         merged_lyrics = "\n".join(lyrics)
@@ -591,7 +606,7 @@ def spotify_get_lyrics(token, item_id, item_type, metadata, filepath):
 
 
 def spotify_get_playlist_items(token, playlist_id):
-    logger.info(f"Getting items in playlist: '{playlist_id}'")
+    logger.info("Getting items in playlist: %s", playlist_id)
     items = []
     offset = 0
     limit = 100
@@ -653,7 +668,7 @@ def spotify_get_your_episodes(token):
 
 
 def spotify_get_album_track_ids(token, album_id):
-    logger.info(f"Getting tracks from album: {album_id}")
+    logger.info("Getting tracks from album: %s", album_id)
     tracks = []
     offset = 0
     limit = 50
@@ -686,7 +701,7 @@ def spotify_get_search_results(
     filter_playlists=True,
     search_prefix="",
 ):
-    logger.info(f"Get search result for term '{search_term}'")
+    logger.info("Get search result for term '%s'", search_term)
 
     headers = spotify_get_auth_header(token)
 
@@ -712,13 +727,13 @@ def spotify_get_search_results(
             f"{BASE_URL}/search", params=params, headers=headers, skip_cache=True
         )
     except requests.exceptions.RequestException as e:
-        logger.error(f"Spotify search failed for '{search_term}': {str(e)}")
+        logger.error("Spotify search failed for '%s': %s", search_term, str(e))
         return []
 
     # None/non-dict (permanent error) or an API error payload (e.g. {'error': ...}).
     if not isinstance(data, dict) or "error" in data:
         logger.error(
-            f"Spotify search did not return results for '{search_term}': {data}"
+            "Spotify search did not return results for '%s': %s", search_term, str(data)
         )
         return []
 
@@ -799,7 +814,7 @@ def spotify_get_search_results(
                 )
             except (KeyError, IndexError, TypeError) as e:
                 logger.warning(
-                    f"Skipping malformed '{item_type}' search result: {str(e)}"
+                    "Skipping malformed '%s' search result: %s", item_type, str(e)
                 )
                 continue
     return search_results
@@ -817,7 +832,7 @@ def spotify_get_track_metadata(token, item_id):
         api_total_calls += 1
     call_num = 1
     logger.info(
-        f"[API Call {call_num}/{api_total_calls}] Fetching track data for track_id={item_id}"
+        "Fetching track data for track_id=%s (Call %d/%d)", item_id, call_num, api_total_calls
     )
 
     headers = spotify_get_auth_header(token)
@@ -1032,7 +1047,8 @@ def spotify_get_track_metadata(token, item_id):
 
 
 def spotify_get_podcast_episode_metadata(token, episode_id):
-    logger.info(f"Get episode info for episode by id '{episode_id}'")
+    logger.info("Get episode info for episode by id %s", episode_id)
+
     headers = spotify_get_auth_header(token)
     episode_data = make_call(f"{BASE_URL}/episodes/{episode_id}", headers=headers)
     if not episode_data:
@@ -1088,7 +1104,8 @@ def spotify_get_podcast_episode_metadata(token, episode_id):
 
 
 def spotify_get_podcast_episode_ids(token, show_id):
-    logger.info(f"Getting show episodes: {show_id}'")
+    logger.info("Getting show episodes: %s", show_id)
+
     episodes = []
     offset = 0
     limit = 50

@@ -26,6 +26,7 @@ import subprocess
 import threading
 import time
 import traceback
+import json as _json
 
 import requests
 from librespot.audio.decoders import AudioQuality, VorbisOnlyAudioQuality
@@ -35,7 +36,6 @@ from yt_dlp import YoutubeDL
 from .accounts import get_account_token
 from .api.apple_music import (
     apple_music_get_decryption_key,
-    apple_music_get_lyrics,
     apple_music_get_webplayback_info,
 )
 from .api.crunchyroll import (
@@ -52,9 +52,9 @@ from .api.deezer import (
 from .api.qobuz import qobuz_get_file_url
 from .api.registry import (
     SERVICE_LYRICS_FUNCTIONS,
-    SERVICE_METADATA_FUNCTIONS,
     get_metadata_function,
 )
+from .api.spotify import spotify_re_init_session
 from .api.tidal import tidal_get_mpd_data
 from .constants import ItemStatus
 from .otsconfig import config
@@ -64,8 +64,6 @@ from .runtimedata import (
     download_queue_lock,
     get_logger,
     temp_download_path,
-    websocket_queue,
-    websocket_queue_lock,
     websocket_event,
 )
 from .utils import (
@@ -87,6 +85,10 @@ _MAX_PATH_LENGTH = 260
 
 class TrackUnavailableError(Exception):
     """Raised when a track has no playable version (not a connection issue)."""
+
+
+class DownloadCancelled(Exception):
+    """Raised when user cancels the download"""
 
 
 class RetryWorker:
@@ -117,7 +119,7 @@ class RetryWorker:
             if download_queue:
                 with download_queue_lock:
                     for local_id, item in download_queue.items():
-                        logger.debug(f"Retrying: {local_id}")
+                        logger.debug("Retrying", extra={"local_id": local_id})
                         if item["item_status"] == ItemStatus.FAILED:
                             item["item_status"] = ItemStatus.WAITING
 
@@ -191,12 +193,11 @@ class DownloadWorker:
                 download_queue[item["local_id"]]["progress"] = new_value
         websocket_event("STATUS_CHANGE", item)
         if item["item_status"] == ItemStatus.CANCELLED:
-            raise Exception("Download cancelled by user.")
+            raise DownloadCancelled("Download cancelled by user.")
 
     def _progress_hook(
         self, item: dict, progress: int, status: ItemStatus | None = None
     ):
-        current = item.get("progress", 0)
         with download_queue_lock:
             download_queue[item["local_id"]]["progress"] = progress
             item["progress"] = progress
@@ -270,7 +271,7 @@ class DownloadWorker:
 
                         self._progress_hook(progress_item, 25)
                     except Exception as e:
-                        logger.error(f"error emitting progress metadata {e}")
+                        logger.error("error emitting progress metadata", exc_info=e)
                     # YouTube Music album number shim
                     if (
                         service == "youtube_music"
@@ -286,7 +287,7 @@ class DownloadWorker:
                     )
                     if "Max retries" in str(exc) or "exhausted" in str(exc):
                         error_msg += " (Rate limit exceeded — please try again later or reduce concurrent downloads)"
-                    logger.error(error_msg + f"\nTraceback: {traceback.format_exc()}")
+                    logger.error(error_msg, exc_info=exc)
                     item["item_status"] = ItemStatus.FAILED
                     self._progress_hook(item, 0, item["item_status"])
                     self._requeue_item(item)
@@ -311,7 +312,7 @@ class DownloadWorker:
 
                 # ---- Playability check ----------------------------------------
                 if not item_metadata.get("is_playable", True):
-                    logger.error(f"Track is unavailable, track id '{item_id}'")
+                    logger.error("Track is unavailable", extra={"track_id": item_id})
                     item["item_status"] = ItemStatus.UNAVAILABLE
                     self._progress_hook(item, 0, item["item_status"])
                     self._requeue_item(item)
@@ -334,14 +335,14 @@ class DownloadWorker:
                         file_path,
                     )
                 except TrackUnavailableError:
-                    logger.error(f"Track is unavailable, track id '{item_id}'")
+                    logger.error("Track is unavailable", extra={"track_id": item_id})
                     item["item_status"] = ItemStatus.UNAVAILABLE
                     self._progress_hook(item, 0, item["item_status"])
                     self._requeue_item(item)
                     continue
                 except RuntimeError as exc:
                     logger.error(
-                        f"Download failed (likely rate limited): {item}, Error: {exc}\n{traceback.format_exc()}"
+                        "Download failed", extra={"item": item, "error": str(exc)}
                     )
                     item["item_status"] = ItemStatus.FAILED
                     self._progress_hook(item, 0, item["item_status"])
@@ -386,10 +387,10 @@ class DownloadWorker:
                         item_progress["file_size"] = str(
                             os.path.getsize(item["file_path"])
                         )
-                    except:
+                    except Exception as e:
                         pass
                 except Exception as e:
-                    logger.error(f"error emitting progress metadata {e}")
+                    logger.error("error emitting progress metadata", exc_info=e)
                 self._progress_hook(item_progress, 100, item["item_status"])
                 item["progress"] = 100
                 try:
@@ -407,13 +408,15 @@ class DownloadWorker:
                     pass
 
                 delay = self._jittered_delay()
-                logger.info(f"Waiting {delay}s before next download")
+                logger.info("Waiting", extra={"delay": delay})
                 time.sleep(delay)
                 self._requeue_item(item)
 
             except Exception as exc:
                 logger.error(
-                    f"Unknown Exception: {exc}\nTraceback: {traceback.format_exc()}"
+                    "Unknown Exception: %s\nTraceback: %s, ",
+                    exc,
+                    traceback.format_exc(),
                 )
                 if item is not None:
                     if item["item_status"] != ItemStatus.CANCELLED:
@@ -504,7 +507,7 @@ class DownloadWorker:
             try:
                 try:
                     progress_item["file_size"] = os.path.getsize(item["file_path"])
-                except:
+                except Exception:
                     pass
                 progress_item["length"] = item_metadata.get("length")
                 progress_item["name"] = item_metadata.get("title")
@@ -513,9 +516,9 @@ class DownloadWorker:
                 progress_item["album"] = item_metadata.get("album_name")
                 progress_item["available"] = True
             except Exception as e:
-                logger.error(f"error emitting progress metadata {e}")
+                logger.error("error emitting progress metadata", exc_info=e)
             self._progress_hook(progress_item, 100, ItemStatus.ALREADY_EXISTS)
-            logger.info(f"File already exists — skipping download for id '{item_id}'")
+            logger.info("File already exists", extra={"track_id": item_id})
             item["progress"] = 100
             time.sleep(0.2)
             # self._requeue_item(item)
@@ -633,7 +636,6 @@ class DownloadWorker:
         raise ValueError(f"No download handler for service '{service}'")
 
     def _reinit_spotify_session(self, token):
-        from .api.spotify import spotify_re_init_session
 
         for account in account_pool:
             if (
@@ -678,7 +680,7 @@ class DownloadWorker:
         with open(temp_path, "wb") as audio_file:
             while downloaded < total_size:
                 if item["item_status"] == ItemStatus.CANCELLED:
-                    raise Exception("Download cancelled by user.")
+                    raise DownloadCancelled("Download cancelled by user.")
                 chunk = stream.input_stream.stream().read(
                     config.get("download_chunk_size")
                 )
@@ -750,7 +752,8 @@ class DownloadWorker:
             url = track_data["data"][0]["media"][0]["sources"][0]["url"]
         except KeyError as exc:
             logger.error(
-                f"Unable to select Deezer quality, falling back to 128 kbps. Error: {exc}\n{traceback.format_exc()}"
+                "Unable to select Deezer quality",
+                extra={"error": str(exc), "traceback": traceback.format_exc()},
             )
             song_quality = 1
             song_format = "MP3_128"
@@ -759,14 +762,13 @@ class DownloadWorker:
             url_key = genurlkey(
                 song["SNG_ID"], song["MD5_ORIGIN"], song["MEDIA_VERSION"], song_quality
             )
-            url = "https://e-cdns-proxy-%s.dzcdn.net/mobile/1/%s" % (
-                song["MD5_ORIGIN"][0],
-                url_key.decode(),
-            )
+            url = f"https://e-cdns-proxy-{song['MD5_ORIGIN'][0]}.dzcdn.net/mobile/1/{url_key.decode()}"
 
         response = requests.get(url, stream=True)
         if response.status_code != 200:
-            logger.info(f"Deezer download failed: HTTP {response.status_code}")
+            logger.info(
+                "Deezer download failed", extra={"status_code": response.status_code}
+            )
             item["item_status"] = ItemStatus.FAILED
             self._requeue_item(item)
             return default_format, bitrate
@@ -782,7 +784,7 @@ class DownloadWorker:
             data_chunks += chunk
             if downloaded != total_size:
                 if item["item_status"] == ItemStatus.CANCELLED:
-                    raise Exception("Download cancelled by user.")
+                    raise DownloadCancelled("Download cancelled by user.")
                 self._progress_hook(
                     item, int((downloaded / total_size) * 100), ItemStatus.DOWNLOADING
                 )
@@ -823,18 +825,17 @@ class DownloadWorker:
             mpd_data = tidal_get_mpd_data(token, item_id)
             if not mpd_data:
                 raise RuntimeError(
-                    f"Tidal: Failed to get MPD manifest for track {itemid}"
+                    f"Tidal: Failed to get MPD manifest for track {item_id}"
                 )
 
             # Check if manifest is JSON with direct URLs (common for AAC/MP4 tracks)
-            import json as _json
 
             try:
                 manifest_json = _json.loads(mpd_data)
                 if "urls" in manifest_json and manifest_json["urls"]:
                     direct_url = manifest_json["urls"][0]
                     logger.info(
-                        f"Tidal: Direct URL detected, downloading via requests: {direct_url[:80]}"
+                        "Tidal: Direct URL detected", extra={"url": direct_url[:80]}
                     )
                     headers = {"Authorization": f"Bearer {token['access_token']}"}
                     resp = requests.get(
@@ -936,7 +937,7 @@ class DownloadWorker:
                 audio_file.write(chunk)
                 if total_size > 0 and downloaded != total_size:
                     if item["item_status"] == ItemStatus.CANCELLED:
-                        raise Exception("Download cancelled by user.")
+                        raise DownloadCancelled("Download cancelled by user.")
                     self._progress_hook(item, int((downloaded / total_size) * 100))
 
         return default_format, bitrate
@@ -955,7 +956,10 @@ class DownloadWorker:
             None,
         )
         if not stream_url:
-            logger.error(f"Apple Music playback info invalid: {webplayback_info}")
+            logger.error(
+                "Apple Music playback info invalid",
+                extra={"webplayback_info": webplayback_info},
+            )
             raise RuntimeError("No valid Apple Music stream URL found.")
 
         decryption_key = apple_music_get_decryption_key(token, stream_url, item_id)
@@ -1042,15 +1046,13 @@ class DownloadWorker:
                     token, version["guid"], mpd_url, stream_token
                 )
             except Exception as exc:
-                logger.error(exc)
+                logger.error(str(exc), exc_info=exc)
                 continue
 
             token = get_account_token(item_metadata.get("item_service", "crunchyroll"))
             headers["Authorization"] = f"Bearer {token}"
 
             # Video
-            if self.gui:
-                self.progress.emit(item, self.tr("Downloading Video"), 1)
             ydl_video_opts = dict(ydl_base_opts)
             ydl_video_opts["http_headers"] = headers
             ydl_video_opts["outtmpl"] = temp_path + f" - {lang}.%(ext)s.%(ext)s"
@@ -1072,8 +1074,6 @@ class DownloadWorker:
             # Audio
             token = get_account_token(item_metadata.get("item_service", "crunchyroll"))
             headers["Authorization"] = f"Bearer {token}"
-            if self.gui:
-                self.progress.emit(item, self.tr("Downloading Audio"), 1)
             ydl_audio_opts = dict(ydl_base_opts)
             ydl_audio_opts["http_headers"] = headers
             ydl_audio_opts["outtmpl"] = temp_path + f" - {lang}.%(ext)s.%(ext)s"
@@ -1094,8 +1094,6 @@ class DownloadWorker:
 
             # Chapters
             if not config.get("raw_media_download") and config.get("download_chapters"):
-                if self.gui:
-                    self.progress.emit(item, self.tr("Downloading Chapters"), 1)
                 chapter_file = temp_path + f" - {lang}.txt"
                 if not os.path.exists(chapter_file):
                     resp = requests.get(
@@ -1121,9 +1119,6 @@ class DownloadWorker:
                                 "language": lang,
                             }
                         )
-
-        if self.gui:
-            self.progress.emit(item, self.tr("Decrypting"), 99)
 
         for enc_file in encrypted_files:
             decrypted_path = os.path.splitext(enc_file["path"])[0]
@@ -1157,8 +1152,6 @@ class DownloadWorker:
         # Subtitles
         if config.get("download_subtitles"):
             item["item_status"] = ItemStatus.DOWNLOADING_SUBTITLES
-            if self.gui:
-                self.progress.emit(item, self.tr("Downloading Subtitles"), 99)
             preferred_sub_langs = config.get("preferred_subtitle_language").split(",")
             seen_langs = []
             for sub in subtitle_formats:
@@ -1265,7 +1258,9 @@ class DownloadWorker:
         if not os.path.exists(temp_path) or os.path.getsize(temp_path) < 4096:
             size = os.path.getsize(temp_path) if os.path.exists(temp_path) else 0
             logger.error(
-                f"Downloaded temp file is missing or too small ({size} bytes): {temp_path}"
+                "Downloaded temp file is missing or too small (%s bytes): %s",
+                size,
+                temp_path,
             )
             if os.path.exists(temp_path):
                 os.remove(temp_path)
