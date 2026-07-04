@@ -130,22 +130,16 @@ class Config:
         self.set(
             "_log_file",
             os.path.join(
-                "/root/.config/onthespot",
+                self.get("video_download_path"),
                 "logs",
                 self.session_uuid,
                 "onthespot.log",
             ),
         )
-        self.set(
-            "_cache_dir",
-            os.path.join(
-                "/root/.config/onthespot",
-                "cache",
-            ),
-        )
+        self.set("_cache_dir", self.get("video_download_path"))
+
         try:
             os.makedirs(os.path.dirname(self.get("_log_file")), exist_ok=True)
-            os.makedirs(os.path.dirname(self.get("_cache_dir")), exist_ok=True)
         except (FileNotFoundError, PermissionError):
             fallback_logdir = os.path.abspath(
                 os.path.join(".logs", self.session_uuid, "onthespot.log")
