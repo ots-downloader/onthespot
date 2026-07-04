@@ -132,7 +132,7 @@ def spotify_playlist_call(token, url):
 
 class MirrorSpotifyPlayback():
     # declare here to avoid Circular Import
-    from ..accounts import get_account_token
+    
     
     def __init__(self):
         super().__init__()
@@ -158,6 +158,8 @@ class MirrorSpotifyPlayback():
             logger.warning("SpotifyMirrorPlayback is not running.")
 
     def run(self):
+
+        get_account_token = spotify_get_token
         while self.is_running:
             time.sleep(5)
             try:
