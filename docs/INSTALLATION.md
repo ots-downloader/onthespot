@@ -1,29 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Installation Options
 
 > **Note:** This project consists of two parts — a backend API (FastAPI) and a frontend UI (Vite). You can choose to run them together using Docker Compose, or separately from source code.
@@ -41,28 +15,41 @@ This is the easiest way to get started — no need to install Node.js or Python 
 ### Steps
 
 1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd <repo-folder>
-   ```
-
-2. **Configure the app URL**
-   Open `compose.yml` and update the `VITE_APP_URL` environment variable to match your desired domain or localhost address:
+     #### Git:
+      ```bash
+      git clone <your-repo-url>
+      cd <repo-folder>
+      ```
+     #### Zip:
+     Download the zip from the release page and extract in some folder
+  
+3. **Configure the variables**
+   Open `compose.yml` and update the `VITE_API_URL` environment variable to match the ip/domain of the machine in which the app is running:
    ```yaml
-   VITE_APP_URL: http://localhost:5173
+   VITE_API_URL: http://localhost:6767
    ```
+   **Change Download Variables** (optional) 
+   By default the app saves data into the root folder where the docker compose lives.
+   You can change the folder mapped to thi changing the values in the compose file.
+   ```
+   volumes:
+      - YOURFOLDERPATH:/root/Music/OnTheSpot
+      - YOURFOLDERPATH:/root/Videos/OnTheSpot
+      - YOURFOLDERPATH:/root/.config/onthespot
+   ```   
 
-3. **Start the containers**
+5. **Start the containers**
    From the project root, run:
    ```bash
    docker compose up --build
    ```
 
-4. **Access the application**
-   - Frontend: `http://<your-app-url>`
-   - Backend API: `http://localhost:8000` (if exposed)
+6. **Access the application**
+   - Frontend: `http://yourip:6768`
+   - Backend AP DocsI: `http://yourip:6767/docs`
 
-5. **Stop when done**
+7. **Stop when done** (optional)
+   you won't loose data, only the download queue list.
    ```bash
    docker compose down
    ```
@@ -85,7 +72,7 @@ If you prefer to run the app directly on your machine, follow these steps.
    uv run fastapi run
    ```
 
-2. The backend will start on `http://localhost:8000`.
+2. The backend will start on `http://localhost:6767`.
 
 ### Frontend UI (`/ui`)
 
@@ -137,7 +124,7 @@ If you want to run the app in the background without keeping a terminal open, us
 |-------|----------|
 | `VITE_APP_URL` is undefined in the frontend | Check that `compose.yml` has the correct environment variable set |
 | Backend won't start | Ensure Python 3.10+ and uv are installed; run `uv sync` first |
-| Frontend shows blank page | Verify the backend API URL matches what's configured in Vite |
+| Frontend shows blank page | Verify the VITE_API_URL is correct |
 | Docker containers fail to build | Run `docker compose pull` to refresh images, then rebuild |
 
 ---
