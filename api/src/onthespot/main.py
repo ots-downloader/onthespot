@@ -284,7 +284,7 @@ def relogin():
     time.sleep(1)
     global fillaccountpool
     fillaccountpool = FillAccountPool()
-    account_pool: list = []
+    account_pool.clear()
     fillaccountpool.start()
 
 
