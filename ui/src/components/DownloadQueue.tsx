@@ -169,19 +169,19 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
       </div>
 
       {/* Filter Chips */}
-      <div className="flex items-center overflow-x-auto no-scrollbar gap-2 p-1">
+      <div className="flex items-center overflow-x-auto no-scrollbar gap-3">
         {(['All', 'Downloading', 'Waiting', 'Downloaded', 'Failed', 'Cancelled'] as StatusFilter[]).map((pill) => (
           <button
             key={pill}
             onClick={() => setFilter(pill)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer shrink-0 flex items-center gap-2 whitespace-nowrap border ${
+            className={`px-4 py-2.5 rounded-full text-sm font-medium transition-colors cursor-pointer shrink-0 flex items-center gap-2 whitespace-nowrap border ${
               filter === pill
                 ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
                 : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-[#1a1a1a] dark:text-neutral-400 dark:border-neutral-800/60 dark:hover:bg-neutral-800'
             }`}
           >
             <span>{pill}</span>
-            <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+            <span className={`px-2 py-0.5 rounded-full text-xs ${
               filter === pill 
                 ? 'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-100' 
                 : 'bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400'
