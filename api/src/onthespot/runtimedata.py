@@ -15,6 +15,7 @@ import os
 import sys
 import time
 import tracemalloc
+import uuid
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 from threading import Lock
@@ -103,9 +104,9 @@ websocket_queue_lock = Lock()
 
 
 # Event callback for websocket updates
-def websocket_event(etype: str, event=None):
+def websocket_event(etype: str, event=""):
     with websocket_queue_lock:
-        websocket_queue[str(time.time())] = {"type": etype, "event": event}
+        websocket_queue[uuid.uuid4()] = {"type": etype, "event": event}
 
 
 # ---------------------------------------------------------------------------
