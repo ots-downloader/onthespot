@@ -19,7 +19,7 @@ import uuid
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 from threading import Lock
-from collection import deque
+from collections import deque
 from .otsconfig import config
 
 # ---------------------------------------------------------------------------
