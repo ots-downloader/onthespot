@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Download, Settings, Users, Terminal, Disc } from 'lucide-react';
+import { Search, Download, Settings, Users, Terminal, Disc, Moon, Sun } from 'lucide-react';
 
 export type NavTab = 'dashboard' | 'queue' | 'settings' | 'accounts' | 'logs';
 
@@ -102,13 +102,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button 
             onClick={toggleTheme}
-            className="p-2 rounded-full text-gray-600 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors"
+            className="p-2 rounded-full text-gray-600 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 transition-all"
             aria-label="Toggle theme"
           >
-            {isDarkMode ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/></svg>
+            {isDarkMode === "dark" ? (
+              <Moon className="w-5 h-5" />
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9h-18a6 6 0 0 0 9-9z"/><path d="M4.5 12l.5 2.5"/></svg>
+              <Sun className="w-5 h-5" />
             )}
           </button>
         </div>
