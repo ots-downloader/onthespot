@@ -256,7 +256,7 @@ class DownloadWorker:
                 try:
                     metadata_fn = get_metadata_function(service, item_type)
                     item_metadata = metadata_fn(token, item_id)
-                    item["available"] = True
+
                     try:
                         progress_item = item
                         progress_item["name"] = item_metadata.get("title")
@@ -497,7 +497,7 @@ class DownloadWorker:
                 add_to_m3u_file(item, item_metadata)
 
             item["item_status"] = ItemStatus.ALREADY_EXISTS
-            item["available"] = True
+
             progress_item = item
             try:
                 try:
@@ -509,10 +509,10 @@ class DownloadWorker:
                 progress_item["artist"] = item_metadata.get("artists")
                 progress_item["thumbnail"] = item_metadata.get("image_url")
                 progress_item["album"] = item_metadata.get("album_name")
-                progress_item["available"] = True
+                self._progress_hook(progress_item, 100, ItemStatus.ALREADY_EXISTS)
             except Exception as e:
                 logger.error("error emitting progress metadata", exc_info=e)
-            self._progress_hook(progress_item, 100, ItemStatus.ALREADY_EXISTS)
+
             logger.info("File already exists", extra={"track_id": item_id})
             item["progress"] = 100
             time.sleep(0.2)

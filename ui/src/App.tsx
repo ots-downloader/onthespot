@@ -111,9 +111,6 @@ export default function App() {
           setNotifications(prevItems => [newNotif, ...prevItems]);
         }
         if (data.notification) {
-          if (item.available === false) {
-            return
-          }
           const newNotif: NotificationBannerItem = {
             id: item.local_id,
             title: item.name,
