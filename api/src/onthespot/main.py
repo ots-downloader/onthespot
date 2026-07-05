@@ -768,7 +768,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     break  
     except WebSocketDisconnect:
         logger.info("Client disconnected")
-        break
 
 
 if __name__ == "__main__":
