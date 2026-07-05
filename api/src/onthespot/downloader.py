@@ -176,7 +176,7 @@ class DownloadWorker:
                 del download_queue[local_id]
                 download_queue[local_id] = item
                 download_queue[local_id]["available"] = True
-                self._progress_hook(download_queue[local_id], 0, item["item_status"])
+                self._progress_hook(download_queue[local_id], item["item_progress"], item["item_status"])
             except KeyError:
                 # Item was cleared from the queue while we were processing it.
                 pass
@@ -526,7 +526,7 @@ class DownloadWorker:
         except Exception as e:
             logger.error("Error checking for existing file", extra={"track_id": item_id}, exc_info=True)
             raise
-        
+
     def _overwrite_metadata(
         self, item, item_metadata, service, item_id, item_type, token, file_path
     ):
