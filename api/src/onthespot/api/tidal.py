@@ -10,10 +10,10 @@ from ..runtimedata import account_pool, get_logger
 from ..utils import conv_list_format, make_call
 
 logger = get_logger("api.tidal")
-CLIENT_ID = b64decode("ZlgySnhkbW50WldLMGl4VA==").decode("utf-8")
-CLIENT_SECRET = b64decode(
-    "MU5uOUFmREFqeHJnSkZKYktOV0xlQXlLR1ZHbUlOdVhQUExIVlhBdnhBZz0="
-).decode("utf-8")
+CLIENT_ID = base64.b64decode("NE4zbjZRMXg5NUxMNUs3cA==").decode("iso-8859-1")
+CLIENT_SECRET = base64.b64decode(
+    "b0tPWGZKVzM3MWNYNnhhWjBQeWhnR05CZE5MbEJaZDRBS0tZb3VnTWppaz0=",
+).decode("iso-8859-1")
 AUTH = (CLIENT_ID, CLIENT_SECRET)
 AUTH_URL = "https://auth.tidal.com/v1/oauth2"
 BASE_URL = "https://api.tidal.com/v1"

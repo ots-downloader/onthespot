@@ -848,7 +848,7 @@ class DownloadWorker:
                         for chunk in resp.iter_content(chunk_size=65536):
                             if chunk:
                                 f.write(chunk)
-                    mime = manifest_json.get("mimeType", "audio/mp4")
+                    mime = manifest_json.get("codecs", "audio/mp4")
                     default_format = ".flac" if "flac" in mime else ".m4a"
                     bitrate = "1411k"
                     return default_format, bitrate
