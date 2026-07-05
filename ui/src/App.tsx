@@ -34,6 +34,8 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [notifications, setNotifications] = useState<NotificationBannerItem[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState<'light' | 'dark'>('dark');
+
 
   // Initial load
   const loadData = useCallback(async () => {
@@ -43,7 +45,11 @@ export default function App() {
       fetchAccounts(),
       fetchServerLogs()
     ]);
-    if (cfg) setConfig(cfg._Config__config);
+    if (cfg) {
+        setConfig(cfg._Config__config);
+        // Initialize theme based on config if available
+        setIsDarkMode(cfg._Config__config.theme === 'dark' ? 'dark' : 'light');
+    }
     if (qData) setQueue(qData);
     if (accData) setAccounts(accData);
     if (logData) setLogs(logData);
@@ -51,7 +57,24 @@ export default function App() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    if (isDarkMode === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [loadData, isDarkMode]);
+
+  const toggleTheme = async () => {
+    const newTheme = isDarkMode === 'dark' ? 'light' : 'dark';
+    setIsDarkMode(newTheme);
+    if (config) {
+        await updateOTSConfigValue('theme', newTheme);
+        setConfig(prev => prev ? ({ ...prev, theme: newTheme }) : null);
+        await saveOTSConfig(); // Persist the change
+    }
+  };
+
+
 
   // WebSocket real-time subscription
   useEffect(() => {
@@ -215,7 +238,7 @@ export default function App() {
   const activeDownloadsCount = queue.filter(i => i.item_status === 'Downloading').length;
 
   return (
-    <div className="min-h-screen bg-[#121214] text-zinc-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
+<div className={`min-h-screen flex flex-col antialiased selection:bg-emerald-500 selection:text-white dark:bg-zinc-950 bg-[#121214] text-zinc-100 bg-white text-zinc-900`}>
 
       {/* Top sticky navbar */}
       <Navbar
@@ -228,6 +251,8 @@ export default function App() {
         version={config?.version || 'v2.0.0alpha1'}
         totalDownloadedItems={config?.total_downloaded_items || queue.filter(i => i.item_status === 'Downloaded').length}
         totalDownloadedData={config?.total_downloaded_data || 0}
+        isDarkMode={isDarkMode}
+        toggleTheme={toggleTheme}
       />
 
       {/* Main Tab Content */}

@@ -13,6 +13,8 @@ interface NavbarProps {
   version: string;
   totalDownloadedItems: number;
   totalDownloadedData: number;
+  isDarkMode: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -23,6 +25,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   accountCount,
   wsConnected,
   version,
+  totalDownloadedItems,
+  totalDownloadedData,
+  isDarkMode,
+  toggleTheme,
 }) => {
   
   const TabButton = ({ 
@@ -75,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-500/20 transition-colors">
               <Disc className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
-            <div>
+            <div >
               <div className="flex items-center gap-2">
                 <h1 className="font-sans font-semibold text-lg tracking-tight text-gray-900 dark:text-neutral-100">
                   OnTheSpot
@@ -93,6 +99,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
           </div>
+
+          <button 
+            onClick={toggleTheme}
+            className="p-2 rounded-full text-gray-600 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors"
+            aria-label="Toggle theme"
+          >
+            {isDarkMode ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9h-18a6 6 0 0 0 9-9z"/><path d="M4.5 12l.5 2.5"/></svg>
+            )}
+          </button>
         </div>
 
         {/* Navigation Tabs */}
