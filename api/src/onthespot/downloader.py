@@ -176,6 +176,7 @@ class DownloadWorker:
                 del download_queue[local_id]
                 download_queue[local_id] = item
                 download_queue[local_id]["available"] = True
+                self._progress_hook(download_queue[local_id], 0, item["item_status"])
             except KeyError:
                 # Item was cleared from the queue while we were processing it.
                 pass
@@ -187,9 +188,9 @@ class DownloadWorker:
         if not match:
             return
         new_value = round(float(match.group(1))) - 1
-        if new_value >= current + 10:  # offset to avoid locking queue every 2 ms
+        if new_value >= current + 20:  # offset to avoid locking queue every 2 ms
             item["progress"] = new_value
-        websocket_event("STATUS_CHANGE", item)
+            websocket_event("STATUS_CHANGE", item)
         if item["item_status"] == ItemStatus.CANCELLED:
             raise DownloadCancelled("Download cancelled by user.")
 
@@ -284,7 +285,7 @@ class DownloadWorker:
                         error_msg += " (Rate limit exceeded — please try again later or reduce concurrent downloads)"
                     logger.error(error_msg, exc_info=exc)
                     item["item_status"] = ItemStatus.FAILED
-                    self._progress_hook(item, 0, item["item_status"])
+                    
                     self._requeue_item(item)
                     continue
 
@@ -332,7 +333,7 @@ class DownloadWorker:
                 except TrackUnavailableError:
                     logger.error("Track is unavailable", extra={"track_id": item_id})
                     item["item_status"] = ItemStatus.UNAVAILABLE
-                    self._progress_hook(item, 0, item["item_status"])
+                    
                     self._requeue_item(item)
                     continue
                 except RuntimeError as exc:
@@ -340,7 +341,7 @@ class DownloadWorker:
                         "Download failed", extra={"item": item, "error": str(exc)}
                     )
                     item["item_status"] = ItemStatus.FAILED
-                    self._progress_hook(item, 0, item["item_status"])
+                    
                     self._requeue_item(item)
                     continue
 
@@ -469,59 +470,63 @@ class DownloadWorker:
 
         Returns ``True`` if the caller should ``continue`` to the next item.
         """
-        file_directory = os.path.dirname(file_path)
-        base_stem = os.path.basename(file_path)
-        subtitle_exts = {".lrc", ".ass", ".srt", ".vtt"}
+        try:
+            file_directory = os.path.dirname(file_path)
+            base_stem = os.path.basename(file_path)
+            subtitle_exts = {".lrc", ".ass", ".srt", ".vtt"}
 
-        for entry in os.listdir(file_directory):
-            entry_stem, entry_ext = os.path.splitext(entry)
-            if not os.path.isfile(os.path.join(file_directory, entry)):
-                continue
-            if entry_stem != base_stem or entry_ext in subtitle_exts:
-                continue
+            for entry in os.listdir(file_directory):
+                entry_stem, entry_ext = os.path.splitext(entry)
+                if not os.path.isfile(os.path.join(file_directory, entry)):
+                    continue
+                if entry_stem != base_stem or entry_ext in subtitle_exts:
+                    continue
 
-            # Existing file found
-            item["file_path"] = os.path.join(file_directory, entry)
+                # Existing file found
+                item["file_path"] = os.path.join(file_directory, entry)
 
-            if item_type in ("track", "podcast_episode") and config.get(
-                "overwrite_existing_metadata"
-            ):
-                self._overwrite_metadata(
-                    item, item_metadata, service, item_id, item_type, token, file_path
-                )
+                if item_type in ("track", "podcast_episode") and config.get(
+                    "overwrite_existing_metadata"
+                ):
+                    self._overwrite_metadata(
+                        item, item_metadata, service, item_id, item_type, token, file_path
+                    )
 
-            if (
-                config.get("create_m3u_file")
-                and item.get("parent_category") == "playlist"
-            ):
-                self._progress_hook(item, 99, ItemStatus.ADDING_TO_M3U)
-                add_to_m3u_file(item, item_metadata)
+                if (
+                    config.get("create_m3u_file")
+                    and item.get("parent_category") == "playlist"
+                ):
+                    self._progress_hook(item, 99, ItemStatus.ADDING_TO_M3U)
+                    add_to_m3u_file(item, item_metadata)
 
-            item["item_status"] = ItemStatus.ALREADY_EXISTS
+                item["item_status"] = ItemStatus.ALREADY_EXISTS
 
-            progress_item = item
-            try:
+                progress_item = item
                 try:
-                    progress_item["file_size"] = os.path.getsize(item["file_path"])
-                except Exception:
-                    pass
-                progress_item["length"] = item_metadata.get("length")
-                progress_item["name"] = item_metadata.get("title")
-                progress_item["artist"] = item_metadata.get("artists")
-                progress_item["thumbnail"] = item_metadata.get("image_url")
-                progress_item["album"] = item_metadata.get("album_name")
-                self._progress_hook(progress_item, 100, ItemStatus.ALREADY_EXISTS)
-            except Exception as e:
-                logger.error("error emitting progress metadata", exc_info=e)
+                    try:
+                        progress_item["file_size"] = os.path.getsize(item["file_path"])
+                    except Exception:
+                        pass
+                    progress_item["length"] = item_metadata.get("length")
+                    progress_item["name"] = item_metadata.get("title")
+                    progress_item["artist"] = item_metadata.get("artists")
+                    progress_item["thumbnail"] = item_metadata.get("image_url")
+                    progress_item["album"] = item_metadata.get("album_name")
+                    self._progress_hook(progress_item, 100, ItemStatus.ALREADY_EXISTS)
+                except Exception as e:
+                    logger.error("error emitting progress metadata", exc_info=e)
 
-            logger.info("File already exists", extra={"track_id": item_id})
-            item["progress"] = 100
-            time.sleep(0.2)
-            # self._requeue_item(item)
-            return True  # caller should continue
+                logger.info("File already exists", extra={"track_id": item_id})
+                item["progress"] = 100
+                time.sleep(0.2)
+                # self._requeue_item(item)
+                return True  # caller should continue
 
-        return False  # file not found; proceed with download
-
+            return False  # file not found; proceed with download
+        except Exception as e:
+            logger.error("Error checking for existing file", extra={"track_id": item_id}, exc_info=True)
+            raise
+        
     def _overwrite_metadata(
         self, item, item_metadata, service, item_id, item_type, token, file_path
     ):
