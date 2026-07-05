@@ -19,7 +19,6 @@ import uuid
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 from threading import Lock
-from collections import deque
 from .otsconfig import config
 
 # ---------------------------------------------------------------------------
@@ -89,7 +88,7 @@ parsing: dict = {}
 pending: dict = {}
 
 #: Active download queue (local_id → item dict).
-download_queue = deque()
+download_queue: dict = {}
 
 # Websocket Events
 websocket_queue: dict = {}

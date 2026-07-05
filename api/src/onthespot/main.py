@@ -708,7 +708,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if len(websocket_queue) > 0:
                 with websocket_queue_lock:
                     websocket_event_time, websocket_event_item = (
-                        websocket_queue.popleft()
+                        websocket_queue.popitem()
                     )
                     websocket_event_type = websocket_event_item["type"]
                     websocket_payload = websocket_event_item["event"]
@@ -768,7 +768,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     break  
     except WebSocketDisconnect:
         logger.info("Client disconnected")
-        
+        break
 
 
 if __name__ == "__main__":
