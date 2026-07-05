@@ -189,8 +189,6 @@ class DownloadWorker:
         new_value = round(float(match.group(1))) - 1
         if new_value >= current + 10:  # offset to avoid locking queue every 2 ms
             item["progress"] = new_value
-            with download_queue_lock:
-                download_queue[item["local_id"]]["progress"] = new_value
         websocket_event("STATUS_CHANGE", item)
         if item["item_status"] == ItemStatus.CANCELLED:
             raise DownloadCancelled("Download cancelled by user.")
@@ -198,12 +196,9 @@ class DownloadWorker:
     def _progress_hook(
         self, item: dict, progress: int, status: ItemStatus | None = None
     ):
-        with download_queue_lock:
-            download_queue[item["local_id"]]["progress"] = progress
-            item["progress"] = progress
-            if status:
-                download_queue[item["local_id"]]["item_status"] = status
-                item["item_status"] = status
+        item["progress"] = progress
+        if status:
+            item["item_status"] = status
         websocket_event("STATUS_CHANGE", item)
 
     # ------------------------------------------------------------------
@@ -637,6 +632,7 @@ class DownloadWorker:
 
     def _reinit_spotify_session(self, token):
         from .api.spotify import spotify_re_init_session
+
         for account in account_pool:
             if (
                 account.get("service") == "spotify"

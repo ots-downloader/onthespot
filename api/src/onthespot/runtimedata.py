@@ -41,7 +41,7 @@ _stdout_handler = logging.StreamHandler(sys.stdout)
 _file_handler.setFormatter(_log_formatter)
 _stdout_handler.setFormatter(_log_formatter)
 
-log_level = int(os.environ.get("LOG_LEVEL", 20))
+log_level = "DEBUG"
 
 
 def get_logger(name: str) -> logging.Logger:

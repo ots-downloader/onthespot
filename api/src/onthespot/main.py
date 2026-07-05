@@ -10,7 +10,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
-
+# os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 from .api.generic import generic_add_account
 from .api.apple_music import apple_music_add_account
 from .api.bandcamp import bandcamp_add_account
@@ -184,7 +184,7 @@ def notification_hook(
 parsing_worker = ParsingWorker()
 queueworker = QueueWorker()
 downloadworker = DownloadWorker()
-spotifymirrorworker = MirrorSpotifyPlayback()
+# spotifymirrorworker = MirrorSpotifyPlayback()
 retryworker = RetryWorker()
 fillaccountpool = FillAccountPool()
 
@@ -375,17 +375,17 @@ async def query_url(q: str | None = None, filters: dict | None = None):
     return result
 
 
-@app.post("/spotify/mirror")
-async def mirror_spotify(state: bool = False):
-    """
-    Endpoint to control Spotify mirroring.
-
-    :param state: Boolean indicating whether to start or stop mirroring.
-    """
-    if state:
-        spotifymirrorworker.start()
-    else:
-        spotifymirrorworker.stop()
+## @app.post("/spotify/mirror")
+## async def mirror_spotify(state: bool = False):
+##     """
+##     Endpoint to control Spotify mirroring.
+##
+##     :param state: Boolean indicating whether to start or stop mirroring.
+##     """
+##     if state:
+##         spotifymirrorworker.start()
+##     else:
+##         spotifymirrorworker.stop()
 
 
 ## QUEUES ENDPOINTS
@@ -659,7 +659,7 @@ async def get_logs():
             source = log_info[0][2]
             level = log_info[0][3]
             formatted_message = main if message is None else source + message
-            
+
         except IndexError:
             date = ""
             source = ""
@@ -688,7 +688,6 @@ async def download_logs():
     return FileResponse(log_path, media_type="text/plain", filename=file_name)
 
 
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """
@@ -705,56 +704,50 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.send_json({"type": "HANDSHAKE", "queue": download_queue})
         loop = True
         while loop:
-            if websocket_queue:
+            if len(websocket_queue) > 0:
                 with websocket_queue_lock:
-                    if websocket_queue:
-                        websocket_event_time, websocket_event_item = (
-                            websocket_queue.popitem()
+                    websocket_event_time, websocket_event_item = (
+                        websocket_queue.popitem()
+                    )
+                    websocket_event_type = websocket_event_item["type"]
+                    websocket_payload = websocket_event_item["event"]
+                    if (
+                        websocket_event_type == "STATUS_CHANGE"
+                    ):  # progress change on item
+                        # Update status of item_1 to 'downloading' and trigger a notification
+
+                        await websocket.send_json(
+                            {
+                                "type": "STATUS_CHANGE",
+                                "item": websocket_payload,
+                                "notification": websocket_payload["item_status"],
+                            }
                         )
-                        websocket_event_type = websocket_event_item["type"]
-                        websocket_payload = websocket_event_item["event"]
-                        if websocket_event_type == "LOG":  # log Entry
-                            # Send a LOG message
-                            await websocket.send_json(
-                                {"type": "LOG", "line": websocket_payload}
-                            )
-                        elif (
-                            websocket_event_type == "STATUS_CHANGE"
-                        ):  # progress change on item
-                            # Update status of item_1 to 'downloading' and trigger a notification
 
-                            await websocket.send_json(
-                                {
-                                    "type": "STATUS_CHANGE",
-                                    "item": websocket_payload,
-                                    "notification": websocket_payload["item_status"],
-                                }
-                            )
+                    elif websocket_event_type == "QUEUE_UPDATE":  # queue update
+                        # Add a new item to the queue and send a full QUEUE_UPDATE
 
-                        elif websocket_event_type == "QUEUE_UPDATE":  # queue update
-                            # Add a new item to the queue and send a full QUEUE_UPDATE
+                        await websocket.send_json(
+                            {"type": "QUEUE_UPDATE", "queue": download_queue}
+                        )
+                    elif websocket_event_type == "Notification":  # queue update
+                        # Add a new item to the queue and send a full QUEUE_UPDATE
 
-                            await websocket.send_json(
-                                {"type": "QUEUE_UPDATE", "queue": download_queue}
-                            )
-                        elif websocket_event_type == "Notification":  # queue update
-                            # Add a new item to the queue and send a full QUEUE_UPDATE
-
-                            await websocket.send_json(
-                                {
-                                    "type": "Notification",
-                                    "content": websocket_payload,
-                                }
-                            )
-                        else:
-                            # Keep the connection alive with simple heartbeat logs, or break/reset
-                            await websocket.send_json(
-                                {
-                                    "type": "LOG",
-                                    "line": f"Unknown websocket event {websocket_event_type}",
-                                }
-                            )
-                        await asyncio.sleep(0.5)
+                        await websocket.send_json(
+                            {
+                                "type": "Notification",
+                                "content": websocket_payload,
+                            }
+                        )
+                    else:
+                        # Keep the connection alive with simple heartbeat logs, or break/reset
+                        await websocket.send_json(
+                            {
+                                "type": "LOG",
+                                "line": f"Unknown websocket event {websocket_event_type}",
+                            }
+                        )
+                    await asyncio.sleep(0.5)
             else:
                 await asyncio.sleep(2)
                 await websocket.send_json(
