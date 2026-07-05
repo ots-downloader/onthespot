@@ -282,7 +282,7 @@ class DownloadWorker:
                         f"Failed to fetch metadata for '{item_id}', Error: {exc}"
                     )
                     if "Max retries" in str(exc) or "exhausted" in str(exc):
-                        error_msg += " (Rate limit exceeded — please try again later or reduce concurrent downloads)"
+                        error_msg += " (Rate limit exceeded - please try again later or reduce concurrent downloads)"
                     logger.error(error_msg, exc_info=exc)
                     item["item_status"] = ItemStatus.FAILED
                     
