@@ -384,9 +384,10 @@ class DownloadWorker:
                         )
                     except Exception as e:
                         pass
+                    self._progress_hook(item_progress, 100, item["item_status"])
                 except Exception as e:
                     logger.error("error emitting progress metadata", exc_info=e)
-                self._progress_hook(item_progress, 100, item["item_status"])
+                
                 item["progress"] = 100
                 try:
                     config.set(

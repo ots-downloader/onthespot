@@ -100,23 +100,22 @@ export default function App() {
         } else if (data.type === 'Keepalive') {
           return
         } else if (data.type === 'Notification') {
-          const content: NotificationContent = data.content
           const newNotif: NotificationBannerItem = {
-            id: content.id,
-            title: content.title,
-            message: data.notification,
-            url: content.url,
-            status: "",
+            id: data.content?.id || crypto.randomUUID(),           // Use notification.id or generate one
+            title: data.content?.title || '',            // Safe access with optional chaining
+            message: data.content?.message || '',        // Safe access
+            url: data.content?.url || '',                // Safe access
+            status: '',                                       // No status from backend yet
           };
           setNotifications(prevItems => [newNotif, ...prevItems]);
         }
         if (data.notification) {
           const newNotif: NotificationBannerItem = {
-            id: item.local_id,
-            title: item.name,
-            message: data.notification,
-            status: item.item_status as any,
-            thumbnail: item.thumbnail,
+            id: data.item?.local_id || crypto.randomUUID(),            // Use item.local_id if available
+            title: data.item?.name || '',                     // Safe access with optional chaining
+            message: data.notification,                       // Backend sends this directly
+            status: (data.item?.item_status as any) || '',   // Safe cast
+            thumbnail: data.item?.thumbnail || '',            // Safe access
             timestamp: new Date()
           };
           setNotifications(prevItems => {
@@ -140,25 +139,6 @@ export default function App() {
     };
   }, []);
 
-  const handleNotificationPush = (newNotif) => {
-    let newnot = []
-    try {
-      notifications.forEach((notif) => {
-        if (notif.id == newNotif.id) {
-          newnot.push(newNotif)
-          console.log(notif.id + 'new')
-        } else {
-          newnot.push(notif)
-          console.log(notif.id + 'old')
-        }
-      });
-    } catch (error) {
-      newnot.push(newNotif)
-      console.error("Caught error:", error.message);
-    } finally {
-      setNotifications(newnot);
-    }
-  };
 
   const handleDismissNotification = (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
