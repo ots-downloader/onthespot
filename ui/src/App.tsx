@@ -52,6 +52,8 @@ export default function App() {
     if (qData) setQueue(qData);
     if (accData) setAccounts(accData);
     if (logData) setLogs(logData);
+    
+    setWsConnected(true);
   }, []);
 
   useEffect(() => {
