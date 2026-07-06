@@ -1,79 +1,135 @@
 # Installation Options
 
-## 1. Install Through Prebuilt Releases (Recommended)
+> **Note:** This project consists of two parts — a backend API (FastAPI) and a frontend UI (Vite). You can choose to run them together using Docker Compose, or separately from source code.
 
-This is the easiest way to get started.
+---
 
-1. **Download the Latest Release**
+## Option 1: Run with Docker Compose (Recommended for Beginners)
 
-   - Visit our [GitHub Releases Page](https://github.com/justin025/onthespot/releases).
-   - Look for the latest version suitable for your operating system:
-     - **Windows Users**: Download the `.exe` file.
-     - **MacOS Users**: Download the `.dmg` file associated with your mac (x86_64 for intel, arm64 for apple silicone).
-     - **Linux Users**: Download the `.AppImage` or `tar.gz` file.
+This is the easiest way to get started — no need to install Node.js or Python manually!
 
-2. **Install OnTheSpot**
+### Prerequisites
+- [Docker](https://www.docker.com/get-started/) installed on your machine
+- A text editor (optional, just for editing environment variables)
 
-   - **Windows**: Run the downloaded `.exe`.
-   - **MacOS**: Open the `.dmg`, follow the instructions listed in README.txt, and drag `OnTheSpot.app` into your `Applications` folder.
-   - **Linux**: Make the `.AppImage` executable and run it, alternatively extract the tar.gz and execute the binary.
+### Steps
 
-> [!TIP]
-> For MacOS, if you encounter security warnings, right-click the app and select "Open" from the context menu to bypass the gatekeeper.
+1. **Clone the repository**
+     #### Git:
+      ```bash
+      git clone <your-repo-url>
+      cd <repo-folder>
+      ```
+     #### Zip:
+     Download the zip from the release page and extract in some folder
+  
+3. **Configure the variables**
+   Open `compose.yml` and update the `VITE_API_URL` environment variable to match the ip/domain of the machine in which the app is running:
+   ```yaml
+   VITE_API_URL: http://localhost:6767
+   ```
+   **Change Download Variables** (optional) 
+   By default the app saves data into the root folder where the docker compose lives.
+   You can change the folder mapped to thi changing the values in the compose file.
+   ```
+   volumes:
+      - YOURFOLDERPATH:/root/Music/OnTheSpot
+      - YOURFOLDERPATH:/root/Videos/OnTheSpot
+      - YOURFOLDERPATH:/root/.config/onthespot
+   ```   
 
-3. **Launch OnTheSpot**
+5. **Start the containers**
+   From the project root, run:
+   ```bash
+   docker compose up --build
+   ```
 
-   - Open the application from your Downloads folder or Applications menu.
+6. **Access the application**
+   - Frontend: `http://yourip:6768`
+   - Backend AP DocsI: `http://yourip:6767/docs`
 
-![OTS_Download_1](../assets/gifs/download.gif)
+7. **Stop when done** (optional)
+   you won't loose data, only the download queue list.
+   ```bash
+   docker compose down
+   ```
 
-## 2. Build The App From Source
+---
 
-If you prefer to build OnTheSpot yourself, follow these steps.
+## Option 2: Run from Source Code
 
-1. **Install Python and Download the Source Code**
+If you prefer to run the app directly on your machine, follow these steps.
 
-   - Installing python can vary depending on your operating system.
-   - The source code can be downloaded through github or through the commands below:
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18 or higher)
+- [uv](https://docs.astral.sh/uv/) — a fast Python package installer and resolver
 
-     ```bash
-     git clone https://github.com/justin025/onthespot
-     cd onthespot
-     ```
+### Backend API (`/api`)
 
-2. **Run the Build Script for Your Operating System**
+1. Open a terminal in the `/api` folder:
+   ```bash
+   cd /path/to/project/api
+   uv run fastapi run
+   ```
 
-   - **Windows**: Open the `scripts` Folder. Double-click [`build_windows.bat`](scripts/build_windows.bat) or run it in Command Prompt.
-   - **MacOS**: Run [`build_mac.sh`](scripts/build_mac.sh) in Terminal with `./scripts/build_mac.sh`.
-   - **Linux**: Run [`build_linux.sh`](scripts/build_linux.sh) in Terminal with `./scripts/build_linux.sh`.
-   - **Linux AppImage**: Run [`build_appimage.sh`](scripts/build_appimage.sh) in Terminal with `./scripts/build_appimage.sh`.
+2. The backend will start on `http://localhost:6767`.
 
-3. **Install and Launch OnTheSpot**
+### Frontend UI (`/ui`)
 
-   After building the application will be located in the `dist` folder. Be sure to follow installation steps based on your operating system.
+You have two options to run the frontend:
 
-
-## 3. Install Via Pip or Run The App From Source
-You can install the app via pip, ensure you have ffmpeg, python, and git installed in your path. Run the commands below to setup the environment:
+#### A. Development Mode (with hot-reload)
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+cd /path/to/project/ui
+npm run dev
 ```
-Next you can download and run the app by installing via pip:
+This runs Vite in development mode with live reload — great for testing changes.
+
+#### B. Production Build
 ```bash
-python3 -m pip install git+https://github.com/justin025/onthespot --force
-
-onthespot-cli #cli
-onthespot-gui #gui
-onthespot-web #web ui
+npm run build
+npm run preview
 ```
-Alternatively you can run the app from source following the commands listed below:
-```bash
-git clone https://github.com/justin025/onthespot
+This builds the app and serves it locally on `http://localhost:4173`.
 
-cd onthespot/src
+### Running Detached (Background)
 
-python3 -m onthespot.cli #cli
-python3 -m onthespot.__init__ #gui
-python3 -m onthespot.web #web ui
-```
+If you want to run the app in the background without keeping a terminal open, use platform-specific commands. **Note:** This is not recommended for development — only do this if you need to free up your terminal for other tasks.
+
+- **Linux/macOS**
+  ```bash
+  # Backend (in /api)
+  uv run fastapi run &
+
+  # Frontend (in /ui)
+  npm run dev > output.log 2>&1 &
+  ```
+
+- **Windows PowerShell**
+  ```powershell
+  # Backend (in api folder)
+  uv run fastapi run | Out-File -FilePath "backend.log"
+
+  # Frontend (in ui folder)
+  npm run dev >> output.log 2>&1 &
+  ```
+
+> ⚠️ **Warning:** Detached processes may not restart automatically if your computer goes to sleep or crashes. Always use Docker Compose for production deployments!
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `VITE_APP_URL` is undefined in the frontend | Check that `compose.yml` has the correct environment variable set |
+| Backend won't start | Ensure Python 3.10+ and uv are installed; run `uv sync` first |
+| Frontend shows blank page | Verify the VITE_API_URL is correct |
+| Docker containers fail to build | Run `docker compose pull` to refresh images, then rebuild |
+
+---
+
+## Need Help?
+
+- Check the [README](../README.md) for more details about the project architecture.
+- Open an issue on GitHub if you encounter a bug or have questions!

@@ -1,0 +1,29 @@
+services:
+  ots-api:
+    container_name: ots-api
+    build:
+      context: ./api
+    pull_policy: build
+    ports:
+      - "6767:6767"
+    volumes:
+      - ./Music:/root/Music/OnTheSpot
+      - ./Videos:/root/Videos/OnTheSpot
+      - ./Config:/root/.config/onthespot
+    restart: unless-stopped
+  ots-ui:
+    container_name: ots-ui
+    build:
+      context: ./ui
+      args:
+        - API_URL=http://192.168.178.54:6767
+    pull_policy: build
+    volumes:
+      - node_modules:/app/node_modules
+    ports:
+      - "6768:4173"
+    depends_on:
+      - ots-api
+    restart: unless-stopped
+volumes:
+  node_modules:

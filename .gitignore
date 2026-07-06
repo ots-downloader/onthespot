@@ -17,6 +17,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+#exclude ui lib folder!
+!/ui/src/lib
 lib64/
 parts/
 sdist/
@@ -81,6 +83,7 @@ docs/_build/
 
 # PyBuilder
 target/
+
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -148,3 +151,8 @@ dmypy.json
 spotify_creds.txt
 debug_*.py
 run_dev.ps1
+
+uv.lock
+
+node_modules/
+package-lock.json
