@@ -16,6 +16,7 @@ import sys
 import time
 import tracemalloc
 import uuid
+import asyncio
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 from threading import Lock
@@ -91,7 +92,7 @@ pending: dict = {}
 download_queue: dict = {}
 
 # Websocket Events
-websocket_queue: dict = {}
+websocket_queue: asyncio.Queue = asyncio.Queue()
 
 
 parsing_lock = Lock()
@@ -104,8 +105,9 @@ websocket_queue_lock = Lock()
 
 # Event callback for websocket updates
 def websocket_event(etype: str, event=""):
-    with websocket_queue_lock:
-        websocket_queue[uuid.uuid4()] = {"type": etype, "event": event}
+    if websocket_queue:
+        data = {"type": etype, "event": event}
+        websocket_queue.put_nowait(data)
 
 
 # ---------------------------------------------------------------------------

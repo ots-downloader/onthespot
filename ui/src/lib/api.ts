@@ -2,7 +2,7 @@ import { OTSConfig, SearchResultItem, DownloadQueueItem, LogEntry, AccountItem }
 
 
 const config = {
-  api_url: import.meta.env.VITE_API_KEY || 'http://192.168.178.54:6767',
+  api_url: import.meta.env.VITE_API_KEY || 'http://localhost:8000',
 };
 const STORAGE_KEY = 'OTS_FASTAPI_URL';
 const DEFAULT_URL = config.api_url;
@@ -19,10 +19,6 @@ export function setTargetBackendUrl(url: string): void {
     localStorage.removeItem(STORAGE_KEY);
   } else {
     localStorage.setItem(STORAGE_KEY, cleaned);
-  }
-  if (wsSocket) {
-    wsSocket.close();
-    wsSocket = null;
   }
 }
 
@@ -237,76 +233,3 @@ export async function fetchServerLogs(): Promise<LogEntry[]> {
   }
 }
 
-// --- WEBSOCKET CONNECTION ---
-
-type WSMessageCallback = (data: any) => void;
-
-let wsSocket: WebSocket | null = null;
-let listeners: WSMessageCallback[] = [];
-let statusListeners: ((connected: boolean) => void)[] = [];
-let reconnectTimer: any = null;
-
-export function connectWebSocket(onMessage: WSMessageCallback, onStatusChange?: (connected: boolean) => void) {
-  listeners.push(onMessage);
-  if (onStatusChange) {
-    statusListeners.push(onStatusChange);
-  }
-
-  if (wsSocket && (wsSocket.readyState === WebSocket.OPEN || wsSocket.readyState === WebSocket.CONNECTING)) {
-    if (wsSocket.readyState === WebSocket.OPEN && onStatusChange) onStatusChange(true);
-    return () => {
-      listeners = listeners.filter(l => l !== onMessage);
-      if (onStatusChange) {
-        statusListeners = statusListeners.filter(l => l !== onStatusChange);
-      }
-    };
-  }
-
-  function init() {
-    const target = getTargetBackendUrl();
-    const cleanBase = target.replace(/^http/, 'ws').replace(/\/$/, '');
-    const wsUrl = `${cleanBase}/ws`;
-
-    try {
-      wsSocket = new WebSocket(wsUrl);
-    } catch (e) {
-      statusListeners.forEach(cb => cb(false));
-      return;
-    }
-
-    wsSocket.onopen = () => {
-      statusListeners.forEach(cb => cb(true));
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-    };
-
-    wsSocket.onmessage = (evt) => {
-      try {
-        const data = JSON.parse(evt.data);
-        listeners.forEach(cb => cb(data));
-      } catch (e) {
-        // ignore non-json messages
-      }
-    };
-
-    wsSocket.onclose = () => {
-      statusListeners.forEach(cb => cb(false));
-      reconnectTimer = setTimeout(() => {
-        init();
-      }, 5000);
-    };
-
-    wsSocket.onerror = () => {
-      statusListeners.forEach(cb => cb(false));
-      wsSocket?.close();
-    };
-  }
-
-  init();
-
-  return () => {
-    listeners = listeners.filter(l => l !== onMessage);
-    if (onStatusChange) {
-      statusListeners = statusListeners.filter(l => l !== onStatusChange);
-    }
-  };
-}

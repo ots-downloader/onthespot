@@ -3,14 +3,16 @@ import sys
 import threading
 import time
 import logging
+import json
 
 import uuid
 import re
 import asyncio
+
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
-# os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 from .api.generic import generic_add_account
 from .api.apple_music import apple_music_add_account
 from .api.bandcamp import bandcamp_add_account
@@ -42,9 +44,9 @@ from .constants import ItemStatus
 
 import uvicorn
 from pydantic import BaseModel
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
@@ -650,11 +652,19 @@ async def get_logs():
         try:
             message = main[0][1]
         except IndexError:
-            logger.error("error finding match in log %s", l)
             message = None
+            data.append(
+                {
+                    "id": uuid.uuid4(),
+                    "timestamp": "",
+                    "level": "ERROR",
+                    "message": l,
+                }
+            )
+            continue
 
-        log_info = re.findall(r"\[(.+?) :: (\w+?) :: (.+) :: (\w.+)]", main[0][0])
         try:
+            log_info = re.findall(r"\[(.+?) :: (\w+?) :: (.+) :: (\w.+)]", main[0][0])
             date = log_info[0][0][:-4]
             source = log_info[0][2]
             level = log_info[0][3]
@@ -688,86 +698,34 @@ async def download_logs():
     return FileResponse(log_path, media_type="text/plain", filename=file_name)
 
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """
-    Websocket endpoint for real-time communication.
-
-    :param websocket: The websocket connection.
-    """
-    await websocket.accept()
-    logger.info("websocket connected")
+async def event_generator(user_id: str, request: Request):
+    """Listens for items in the user's queue and pushes them to the frontend."""
+    # 1. Create a queue for this specific user connection
 
     try:
-        # Step 1: Send the initial HANDSHAKE with the current queue
-        # The frontend accepts either an array or an object (it converts objects to arrays via Object.values)
-        with download_queue_lock:
-            await websocket.send_json({"type": "HANDSHAKE", "queue": dict(download_queue)})
-
         while True:
-            if len(websocket_queue) > 0:
-                with websocket_queue_lock:
-                    websocket_event_time, websocket_event_item = (
-                        websocket_queue.popitem()
-                    )
-                    websocket_event_type = websocket_event_item["type"]
-                    websocket_payload = websocket_event_item["event"]
-                    try:
-                        if (
-                            websocket_event_type == "STATUS_CHANGE"
-                        ):  # progress change on item
-                            # Update status of item_1 to 'downloading' and trigger a notification
+            # 2. If the client disconnects, stop the generator
+            if await request.is_disconnected():
+                break
 
-                            await websocket.send_json(
-                                {
-                                    "type": "STATUS_CHANGE",
-                                    "item": websocket_payload,
-                                    "notification": websocket_payload["item_status"],
-                                }
-                            )
+            # 3. Wait indefinitely for an event to be put in the queue
+            # This does NOT use CPU. It just sleeps until data arrives.
+            data = await websocket_queue.get()
 
-                        elif websocket_event_type == "QUEUE_UPDATE":  # queue update
-                            # Add a new item to the queue and send a full QUEUE_UPDATE
+            # 4. Push the data to the Vite frontend!
+            yield f"data: {json.dumps(data, skipkeys=True)}\n\n"
 
-                            await websocket.send_json(
-                                {"type": "QUEUE_UPDATE", "queue": download_queue}
-                            )
-                        elif websocket_event_type == "Notification":  # queue update
-                            # Add a new item to the queue and send a full QUEUE_UPDATE
+    finally:
+        # Cleanup when user closes the browser tab
+        websocket_queue.pop()
 
-                            await websocket.send_json(
-                                {
-                                    "type": "Notification",
-                                    "content": websocket_payload,
-                                }
-                            )
-                        else:
-                            # Keep the connection alive with simple heartbeat logs, or break/reset
-                            await websocket.send_json(
-                                {
-                                    "type": "LOG",
-                                    "line": f"Unknown websocket event {websocket_event_type}",
-                                }
-                            )
-                    except Exception as e:
-                        logger.error(
-                            f"Error sending websocket event {websocket_event_type}: {str(e)}"
-                        )
-                        break
-                    await asyncio.sleep(0.5)
-            else:
-                await asyncio.sleep(2)
-                try:
-                    await websocket.send_json(
-                        {
-                            "type": "Keepalive",
-                        }
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to send websocket message: {e}")
-                    break  
-    except WebSocketDisconnect:
-        logger.info("Client disconnected")
+
+@app.get("/api/sse/{user_id}")
+async def sse_endpoint(user_id: str, request: Request):
+    """The Vite frontend connects here exactly ONCE."""
+    return StreamingResponse(
+        event_generator(user_id, request), media_type="text/event-stream"
+    )
 
 
 if __name__ == "__main__":

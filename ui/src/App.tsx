@@ -7,6 +7,7 @@ import { AccountsManager } from './components/AccountsManager';
 import { LogViewer } from './components/LogViewer';
 import { NotificationBanner } from './components/NotificationBanner';
 import { OTSConfig, DownloadQueueItem, AccountItem, LogEntry, NotificationBannerItem, SearchResultItem, NotificationContent } from './types';
+import { useNotifications } from './lib/notifications';
 import {
   fetchOTSConfig,
   fetchDownloadQueue,
@@ -22,7 +23,6 @@ import {
   resetOTSConfig,
   addAccountService,
   removeAccountUUID,
-  connectWebSocket
 } from './lib/api';
 
 
@@ -32,10 +32,9 @@ export default function App() {
   const [queue, setQueue] = useState<DownloadQueueItem[]>([]);
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [notifications, setNotifications] = useState<NotificationBannerItem[]>([]);
+  const { notifications, dismissNotification } = useNotifications("webui");
   const [wsConnected, setWsConnected] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState<'light' | 'dark'>('dark');
-
 
   // Initial load
   const loadData = useCallback(async () => {
@@ -64,6 +63,14 @@ export default function App() {
     }
   }, [loadData, isDarkMode]);
 
+  useEffect(() => {
+    async function fetchQueueData() {
+      const q = await fetchDownloadQueue();
+      if (q) setQueue(q);
+    }
+    fetchQueueData();
+  }, [notifications]);
+
   const toggleTheme = async () => {
     const newTheme = isDarkMode === 'dark' ? 'light' : 'dark';
     setIsDarkMode(newTheme);
@@ -74,74 +81,8 @@ export default function App() {
     }
   };
 
-
-
-  // WebSocket real-time subscription
-  useEffect(() => {
-    const unsubscribe = connectWebSocket(
-      (data) => {
-        const item: DownloadQueueItem = data.item;
-        if (data.type === 'QUEUE_UPDATE' && data.queue) {
-          const newQueue = Array.isArray(data.queue) ? data.queue : (typeof data.queue === 'object' ? Object.values(data.queue) : []);
-          setQueue(newQueue as DownloadQueueItem[]);
-        } else if (data.type === 'STATUS_CHANGE' && data.item) {
-          setQueue(prev => {
-            const idx = prev.findIndex(i => i.local_id === item.local_id);
-            if (idx === -1) return [item, ...prev];
-            const updated = [...prev];
-            updated[idx] = item;
-            return updated;
-          });
-        } else if (data.type === 'LOG' && data.line) {
-          setLogs(prev => [data.line, ...prev.slice(0, 499)]);
-        } else if (data.type === 'HANDSHAKE' && data.queue) {
-          const newQueue = Array.isArray(data.queue) ? data.queue : (typeof data.queue === 'object' ? Object.values(data.queue) : []);
-          setQueue(newQueue as DownloadQueueItem[]);
-        } else if (data.type === 'Keepalive') {
-          return
-        } else if (data.type === 'Notification') {
-          const newNotif: NotificationBannerItem = {
-            id: data.content?.id || crypto.randomUUID(),           // Use notification.id or generate one
-            title: data.content?.title || '',            // Safe access with optional chaining
-            message: data.content?.message || '',        // Safe access
-            url: data.content?.url || '',                // Safe access
-            status: '',                                       // No status from backend yet
-          };
-          setNotifications(prevItems => [newNotif, ...prevItems]);
-        }
-        if (data.notification) {
-          const newNotif: NotificationBannerItem = {
-            id: data.item?.local_id || crypto.randomUUID(),            // Use item.local_id if available
-            title: data.item?.name || '',                     // Safe access with optional chaining
-            message: data.notification,                       // Backend sends this directly
-            status: (data.item?.item_status as any) || '',   // Safe cast
-            thumbnail: data.item?.thumbnail || '',            // Safe access
-            timestamp: new Date()
-          };
-          setNotifications(prevItems => {
-            if (prevItems.length === 0) return [newNotif];
-            if (prevItems.some(item => item.id === newNotif.id)) {
-              return prevItems.map(item => item.id === newNotif.id ? newNotif : item)
-            } else {
-              return [newNotif, ...prevItems]
-            }
-
-          });
-        }
-      },
-      (connected) => {
-        setWsConnected(connected);
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-
   const handleDismissNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    dismissNotification(id);
   };
 
   const handleDownloadItem = async (query: string, filters?: Record<string, boolean>) => {
