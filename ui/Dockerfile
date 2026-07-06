@@ -11,9 +11,10 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build frontend
+RUN npm run build
+
 ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_API_URL=${API_URL}
 
 # Start server
 CMD ["npm", "run", "preview"]
