@@ -16,7 +16,7 @@ services:
     build:
       context: ./ui
     environment:
-      - API_URL="http://192.168.178.54:6767"
+      - VITE_API_URL="http://192.168.178.54:6767"
     pull_policy: build
     volumes:
       - node_modules:/app/node_modules
