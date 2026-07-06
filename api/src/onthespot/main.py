@@ -717,7 +717,8 @@ async def event_generator(user_id: str, request: Request):
 
     finally:
         # Cleanup when user closes the browser tab
-        websocket_queue.pop()
+        while not websocket_queue.empty():
+            websocket_queue.get_nowait()
 
 
 @app.get("/api/sse/{user_id}")

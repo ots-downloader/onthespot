@@ -1,5 +1,6 @@
 services:
   ots-api:
+    container_name: ots-api
     build:
       context: ./api
     pull_policy: build
@@ -11,6 +12,7 @@ services:
       - ./Config:/root/.config/onthespot
     restart: unless-stopped
   ots-ui:
+    container_name: ots-ui
     build:
       context: ./ui
     environment:
