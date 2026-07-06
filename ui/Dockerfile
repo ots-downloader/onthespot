@@ -13,7 +13,7 @@ COPY . .
 
 # Build frontend
 RUN npm run build
-ENV VITE_API_URL=VITE_API_URL
+ENV VITE_API_URL=${API_URL}
 
 # Start server
 CMD ["npm", "run", "preview"]
