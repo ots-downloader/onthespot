@@ -2,7 +2,7 @@ import { OTSConfig, SearchResultItem, DownloadQueueItem, LogEntry, AccountItem }
 
 
 const config = {
-  api_url: import.meta.env.VITE_API_KEY || 'http://localhost:8000',
+  api_url: import.meta.env.VITE_API_URL || 'http://localhost:8000',
 };
 const STORAGE_KEY = 'OTS_FASTAPI_URL';
 const DEFAULT_URL = config.api_url;
