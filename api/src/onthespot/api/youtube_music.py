@@ -83,7 +83,7 @@ def youtube_music_get_search_results(_, search_term, content_types):
     return search_results
 
 
-def youtube_music_get_track_metadata(_, item_id):
+def youtube_music_get_track_metadata(_, item_id, item = None):
     url = f"https://music.youtube.com/watch?v={item_id}"
     request_key = md5(f"{url}".encode()).hexdigest()
     cache_dir = os.path.join(config.get("_cache_dir"), "reqcache")
@@ -161,7 +161,8 @@ def youtube_music_get_track_metadata(_, item_id):
         else False
     )
     info["item_id"] = item_id
-
+    if item.get("parent_category", "") == "album":
+        info["track_number"] = item.get("playlist_number")
     return info
 
 

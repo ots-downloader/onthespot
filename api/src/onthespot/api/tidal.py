@@ -244,7 +244,7 @@ def tidal_get_track_metadata(token, item_id):
         f"{BASE_URL}/tracks/{item_id}", headers=headers, params=params
     )
     if not track_data:
-        return
+        return False
 
     params["include"] = "coverArt"
     album_data = make_call(

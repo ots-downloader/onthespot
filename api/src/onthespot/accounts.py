@@ -12,7 +12,6 @@ signals for the GUI.
 optionally rotating to the next available account.
 """
 
-from time import sleep
 import threading
 
 from .api.registry import SERVICE_LOGIN_FUNCTIONS, SERVICE_TOKEN_FUNCTIONS
@@ -32,9 +31,8 @@ class AccountPoolLoader:
     all accounts have been processed.
     """
 
-    def __init__(self, gui: bool = False) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.gui = gui
         self.is_running = True
         self.thread = threading.Thread(target=self.run, daemon=True)
 
@@ -56,7 +54,7 @@ class AccountPoolLoader:
 
             login_fn = SERVICE_LOGIN_FUNCTIONS.get(service)
             if login_fn is None:
-                logger.warning(f"No login function registered for service '{service}'")
+                logger.warning("No login function registered for service %s", service)
                 continue
 
             login_succeeded = login_fn(account)
@@ -92,8 +90,8 @@ def get_account_token(service: str, rotate: bool = False):
 
     token_fn = SERVICE_TOKEN_FUNCTIONS.get(service)
     if token_fn is None:
-        logger.error(f"No token function registered for service '{service}'")
-        return None
+        logger.error("No token function registered for service %s", service)
+        return False
 
     current_index = config.get("active_account_number")
 
@@ -108,11 +106,13 @@ def get_account_token(service: str, rotate: bool = False):
         if account_pool[index]["service"] == service:
             if config.get("rotate_active_account_number"):
                 logger.debug(
-                    f"Rotating to {account_pool[index]['service']} account "
-                    f"#{index}: {account_pool[index]['uuid']}"
+                    "Rotating to %s account \n#%s : %s",
+                    account_pool[index]['service'],
+                    index,
+                    account_pool[index]['uuid']
                 )
                 config.set("active_account_number", index)
                 config.save()
             return token_fn(index)
 
-    return None
+    return False

@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=OnTheSpot
-GenericName=Music downloader
-Comment=A music downloader
-Icon=onthespot
-Exec=python3 -m onthespot
-Categories=Audio;AudioVideo;Music;

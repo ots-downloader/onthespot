@@ -11,17 +11,19 @@ access back to this file.
 
 import linecache
 import logging
-import os
+
+import re
 import sys
-import time
-import tracemalloc
 import uuid
+import tracemalloc
+
 import asyncio
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 from threading import Lock
 from .otsconfig import config
-
+from .constants import ItemStatus
+from .resources.exceptions import DownloadCancelled
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -86,29 +88,67 @@ temp_download_path: list = []
 parsing: dict = {}
 
 #: Items waiting to be moved to the download queue.
-pending: dict = {}
+pending: asyncio.Queue = asyncio.Queue()
 
 #: Active download queue (local_id → item dict).
 download_queue: dict = {}
 
-# Websocket Events
+# Notification queue for EventSource updates.
 websocket_queue: asyncio.Queue = asyncio.Queue()
 
-
+# LOCK HELPERS
 parsing_lock = Lock()
 pending_lock = Lock()
 download_queue_lock = Lock()
 websocket_queue_lock = Lock()
 
-# LOCK HELPERS
 
-
-# Event callback for websocket updates
+# Event callback for EventSource updates
 def websocket_event(etype: str, event=""):
     if websocket_queue:
         data = {"type": etype, "event": event}
         websocket_queue.put_nowait(data)
 
+def progress_hook(item: dict, progress: int, status: ItemStatus | None = None):
+    item["progress"] = progress
+    if status:
+        item["item_status"] = status
+    websocket_event("STATUS_CHANGE", item)
+
+def yt_dlp_progress_hook(item: dict, progress_info: dict) -> None:
+    """Hook passed to yt-dlp to forward download progress to the GUI."""
+    current = item.get("progress", 0)
+    match = re.search(r"(\d+\.\d+)%", progress_info["_percent_str"])
+    if not match:
+        return
+    new_value = round(float(match.group(1))) - 1
+    if new_value >= current + 20:  # offset to avoid locking queue every 2 ms
+        item["progress"] = new_value
+        progress_hook(item, new_value, ItemStatus.DOWNLOADING)
+    if item["item_status"] == ItemStatus.CANCELLED:
+        raise DownloadCancelled("Download cancelled by user.")
+
+def notification_hook(
+    title,
+    message="",
+    url="",
+):
+    """
+    Sends a notification event through the websocket queue.
+
+    :param title: The title of the notification.
+    :param message: Optional message for the notification. Defaults to an empty string.
+    :param url: Optional URL associated with the notification. Defaults to an empty string.
+    """
+    websocket_event(
+        etype="Notification",
+        event={
+            "id": f"{uuid.uuid4()}",
+            "url": f"{url}",
+            "title": f"{title}",
+            "message": f"{message}",
+        },
+    )
 
 # ---------------------------------------------------------------------------
 # System-tray initialisation flag

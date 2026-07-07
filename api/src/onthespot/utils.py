@@ -17,6 +17,7 @@ Sections
 
 import json
 import os
+import random
 import platform
 import requests
 import re
@@ -29,10 +30,11 @@ from hashlib import md5
 from urllib.parse import urlparse
 from io import BytesIO
 from PIL import Image
-from mutagen.id3 import ID3, ID3NoHeaderError, WOAS, USLT, TCMP, COMM
+from mutagen.id3 import ID3, WOAS, USLT, TCMP, COMM
 import music_tag
 from .otsconfig import config
-from .runtimedata import get_logger, pending, download_queue
+from .runtimedata import get_logger, download_queue, download_queue_lock, progress_hook, pending
+from .constants import ItemStatus
 
 logger = get_logger("utils")
 
@@ -50,7 +52,7 @@ logger = get_logger("utils")
 _api_host_locks = {}
 _api_host_locks_guard = threading.Lock()
 
-counter = itertools.count(start=1)
+local_id_counter = itertools.count(start=1)
 
 
 def _get_host_lock(url):
@@ -227,15 +229,38 @@ def make_call(
 def format_local_id(item_id):
     """Return a unique local ID for *item_id* that does not clash with any
     existing entry in the download queue or pending dict."""
-    local_id = next(counter)
-    logger.debug(f"NEW ID: {local_id}")
+    local_id = next(local_id_counter)
+    logger.debug("NEW ID: %s for item %s", local_id, item_id)
     return str(local_id)
 
 
 # ---------------------------------------------------------------------------
 # Application helpers
 # ---------------------------------------------------------------------------
-
+def requeue_item(item: dict) -> None:
+    """Move *item* to the back of the queue and mark it available for RetryWorker to re-add to the pending queue."""
+    with download_queue_lock:
+        try:
+            local_id = item["local_id"]
+            del download_queue[local_id]
+            download_queue[local_id] = item
+            download_queue[local_id]["available"] = True
+            progress_hook(download_queue[local_id], item["item_progress"], item["item_status"])
+        except KeyError:
+            # Item was cleared from the queue while we were processing it.
+            pass
+    
+def retry_single_item(item: dict) -> None:
+    """Move *item* back to the pending queue for download and removes from downloadqueue
+    FREE THE DownloadQueue LOCK BEFORE CALLING"""
+    with download_queue_lock:
+        try:
+            item["available"] = True
+            item["item_status"] = ItemStatus.WAITING
+            del download_queue[item["local_id"]]
+            pending.put_nowait(item)
+        except KeyError as e:
+            logger.error("Error retrying item %s, error: %s", item, str(e))
 
 def _version_to_int(version):
     match = re.match(r"[\d.]+", str(version).lower().lstrip("v"))
@@ -265,6 +290,12 @@ def open_item(item):
     else:  # For Linux and other Unix-like systems
         subprocess.Popen(["xdg-open", item])
 
+def jittered_delay() -> float:
+    """Return the configured download delay with optional random variance."""
+    variance = int(config.get("download_delay_variance"))
+    return max(
+        0, int(config.get("download_delay")) + random.randint(-variance, variance)
+    )
 
 # ---------------------------------------------------------------------------
 # String / path helpers
@@ -413,7 +444,14 @@ def format_item_path(item, item_metadata):
 # ---------------------------------------------------------------------------
 # Audio / video processing
 # ---------------------------------------------------------------------------
-
+def run_ffmpeg(command: list) -> None:
+    """Run an ffmpeg command, suppressing the console window on Windows."""
+    if os.name == "nt":
+        subprocess.check_call(
+            command, shell=False, creationflags=subprocess.CREATE_NO_WINDOW
+        )
+    else:
+        subprocess.check_call(command, shell=False)
 
 def convert_audio_format(filename, bitrate, default_format):
     """Re-encode or copy *filename* to the target format via ffmpeg.

@@ -1,18 +1,23 @@
 import os
-import sys
 import threading
 import time
-import logging
 import json
-
 import uuid
 import re
-import asyncio
-
 from contextlib import asynccontextmanager
-from logging.handlers import RotatingFileHandler
+import mimetypes
 
-os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
+import uvicorn
+from pydantic import BaseModel
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
+
+# dev env flag for protobufs
+#os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
+
 from .api.generic import generic_add_account
 from .api.apple_music import apple_music_add_account
 from .api.bandcamp import bandcamp_add_account
@@ -20,33 +25,26 @@ from .api.deezer import deezer_add_account
 from .api.qobuz import qobuz_add_account
 from .api.soundcloud import soundcloud_add_account
 from .api.crunchyroll import crunchyroll_add_account
-from .api.spotify import spotify_new_session, MirrorSpotifyPlayback
+from .api.spotify import spotify_new_session
 from .api.tidal import tidal_add_account_pt1, tidal_add_account_pt2
 
 from .accounts import FillAccountPool
-from .search import get_search_results
+from .parsingworker import ParsingWorker
 from .otsconfig import config
-from .parse_item import ParsingWorker
+from .parse_item import get_search_results
 from .runtimedata import (
     get_logger,
     pending,
-    pending_lock,
     download_queue,
     download_queue_lock,
     parsing,
     websocket_queue,
-    websocket_queue_lock,
-    websocket_event,
     account_pool,
+    notification_hook,
 )
 from .downloader import DownloadWorker, RetryWorker
 from .constants import ItemStatus
-
-import uvicorn
-from pydantic import BaseModel
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from .utils import retry_single_item
 
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
@@ -55,140 +53,14 @@ logger = get_logger("gui")
 # ONTHESPOT BOOTSTRAP
 # ---------------------------------------------------------------------------
 
-
-def add_item_to_download_list(item, item_status: str | None = None):
-    """
-    Adds an item to the download queue with the specified status.
-
-    :param item: Dictionary containing item details.
-    :param item_status: Optional status for the item. Defaults to "Waiting" if not provided.
-    """
-    playlist_name = ""
-    playlist_by = ""
-    if item["parent_category"] == "playlist":
-        item_category = f"Playlist: {item['playlist_name']}"
-        playlist_name = item.get("playlist_name")
-        playlist_by = item.get("playlist_by")
-    elif item["parent_category"] in ("album", "show"):
-        item_category = f"{item['parent_category'].title()}"
-    else:
-        item_category = f"{item['parent_category'].title()}"
-
-    with download_queue_lock:
-        download_queue[item["local_id"]] = {
-            "local_id": item["local_id"],
-            "available": True,
-            "item_service": item["item_service"],
-            "item_type": item["item_type"],
-            "item_id": item["item_id"],
-            "item_status": "Waiting" if not item_status else item_status,
-            "file_path": None,
-            "parent_category": item_category,
-            "playlist_name": playlist_name,
-            "playlist_by": playlist_by,
-            "playlist_number": item.get("playlist_number"),
-        }
-
-
-class QueueWorker:
-    """
-    A worker class that processes items in the pending queue and adds them to the download list.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.is_running = True
-        self.thread = threading.Thread(target=self.run)
-
-    def start(self):
-        """
-        Starts the worker thread.
-        """
-        self.thread.start()
-
-    def run(self):
-        """
-        Continuously processes items in the pending queue until stopped.
-        """
-        while self.is_running:
-            if pending:
-                try:
-                    local_id = next(iter(pending))
-                    with pending_lock:
-                        item = pending.pop(local_id)
-
-                    add_item_to_download_list(item)
-
-                except Exception as e:
-                    error_msg = f"Unknown Exception for {item}: {str(e)}"
-                    logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
-
-                    # Check if this is a permanent failure (e.g., max retries exhausted)
-                    if item is None:
-                        logger.warning(
-                            f"Permanent failure detected for {item['item_id']}, will not retry. Adding to download list as Failed."
-                        )
-
-                        # Create user-friendly error message
-                        error_str = str(e)
-                        service = item["item_service"].replace("_", " ").title()
-                        item_type = item["item_type"]
-
-                        if "404" in error_str or "not found" in error_str.lower():
-                            user_msg = f"Track not found: Could not load {item_type} from {service}. The item may have been removed or is unavailable in your region."
-                        elif "Max retries" in error_str or "exhausted" in error_str:
-                            user_msg = f"Failed to load {item_type} from {service} after multiple retries. The service may be experiencing issues."
-                        else:
-                            user_msg = f"Failed to load {item_type} from {service}: {error_str}"
-
-                        # log error
-                        logger.error(f"{user_msg}")
-
-                        add_item_to_download_list(item, "Failed")
-                    continue
-            else:
-                time.sleep(0.2)
-
-    def stop(self):
-        """
-        Stops the worker thread and waits for it to finish.
-        """
-        logger.info("Stopping Queue Worker")
-        self.is_running = False
-        self.thread.join()
-
-
-def notification_hook(
-    title,
-    message="",
-    url="",
-):
-    """
-    Sends a notification event through the websocket queue.
-
-    :param title: The title of the notification.
-    :param message: Optional message for the notification. Defaults to an empty string.
-    :param url: Optional URL associated with the notification. Defaults to an empty string.
-    """
-    websocket_event(
-        etype="Notification",
-        event={
-            "id": f"{uuid.uuid4()}",
-            "url": f"{url}",
-            "title": f"{title}",
-            "message": f"{message}",
-        },
-    )
-
-
 # define workers here to allow app to access them
 # but start/stop them on lifespan events
 parsing_worker = ParsingWorker()
-queueworker = QueueWorker()
 downloadworker = DownloadWorker()
 # spotifymirrorworker = MirrorSpotifyPlayback()
 retryworker = RetryWorker()
 fillaccountpool = FillAccountPool()
+
 
 
 ##ONTHESPOT BRIDGE FUNCTIONS
@@ -253,29 +125,10 @@ def add_tidal_account_worker(device_code):
 
 def search(search_term, search_filters: dict | None = None) -> None:
     """
-    Performs a search with optional filters.
-
-    :param search_term: The term to search for.
-    :param search_filters: Optional dictionary of content types to filter the search results.
-    :return: Search results.
+    Parse the url and add the item to the pending queue.
     """
-    if not search_filters:
-        search_filters = {
-            "tracks": True,
-            "playlists": True,
-            "albums": True,
-            "artists": True,
-            "podcasts": True,
-            "episodes": True,
-            "audiobooks": True,
-        }
 
-    content_types = []
-    for key, value in search_filters.items():
-        if value is True:
-            content_types.append(key)
-
-    results = get_search_results(search_term, content_types)
+    results = get_search_results(search_term)
     return results
 
 
@@ -305,7 +158,6 @@ async def lifespan(app: FastAPI):
     """
     logger.info("OnTheSpot Version: %s", config.get("version"))
     parsing_worker.start()
-    queueworker.start()
     downloadworker.start()
     if config.get("enable_retry_worker"):
         retryworker.start()
@@ -314,7 +166,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    queueworker.stop()
     parsing_worker.stop()
     downloadworker.stop()
     fillaccountpool.stop()
@@ -322,11 +173,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
 # Define allowed origins
 origins = [
     "http://localhost:3000",
     "https://example.com",
 ]
+
+# Register correct MIME types for frontend files
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/wasm", ".wasm")
 
 app.add_middleware(
     CORSMiddleware,
@@ -335,7 +191,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+# Enabled Self-serving static frontend files from FastAPI. This could work for single binary deployment
+# but we need to implement better path handling and a separate composer file
+#app.frontend("/", directory="dist")
 
 # Pydantic schemas of body data
 class AccountData(BaseModel):
@@ -346,16 +204,6 @@ class AccountData(BaseModel):
 # ---------------------------------------------------------------------------
 # API ENDPOINTS
 # ---------------------------------------------------------------------------
-
-
-@app.get("/")
-def read_root():
-    """
-    Root endpoint returning a greeting message.
-
-    :return: A dictionary with a greeting message.
-    """
-    return {"Hello": "World"}
 
 
 ##QUERY ENDPOINTS
@@ -373,7 +221,6 @@ async def query_url(q: str | None = None, filters: dict | None = None):
     result = None
     if q:
         result = search(q, filters)
-    websocket_event("QUEUE_UPDATE")
     return result
 
 
@@ -432,13 +279,15 @@ async def queue_action(lid: str, action: str):
     :param action: Action to perform (e.g., retry, cancel, delete).
     :return: Boolean indicating success or failure of the action.
     """
+
+    retry_item = None
     with download_queue_lock:
         for key, item in download_queue.items():
             if item["local_id"] == lid:
                 match action:
                     case "retry":
-                        item["item_status"] = ItemStatus.WAITING
-                        return True
+                        # need to retry later to free the lock
+                        retry_item = item
                     case "cancel":
                         item["item_status"] = ItemStatus.CANCELLED
                         return True
@@ -447,7 +296,8 @@ async def queue_action(lid: str, action: str):
                         return True
                     case _:
                         return False
-
+    if retry_item is not None:
+        retry_single_item(retry_item)
 
 @app.get("/queue/downloads/retryfailed")
 async def retry_failed_items():
@@ -455,9 +305,24 @@ async def retry_failed_items():
     Endpoint to retry all failed or cancelled items in the download queue.
     """
     with download_queue_lock:
-        for key, item in download_queue.items():
-            if item["item_status"] in ["Failed", "Cancelled"]:
-                download_queue[key]["item_status"] = "Waiting"
+        found_items = []
+        for local_id, item in download_queue.items():
+            if item["available"] is False:
+                continue
+            # ---- Skip terminal-state items --------------------------------
+            terminal_statuses = {
+                ItemStatus.CANCELLED,
+                ItemStatus.FAILED,
+                ItemStatus.DELETED,
+            }
+            if item["item_status"] in terminal_statuses:
+                item["available"] = True
+            item["item_status"] = ItemStatus.WAITING
+            found_items.append(item)
+
+        for item in found_items:
+            del download_queue[item["local_id"]]
+            pending.put_nowait(item)
 
 
 @app.get("/queue/downloads/download")

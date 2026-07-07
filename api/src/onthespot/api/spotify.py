@@ -19,7 +19,7 @@ from ..runtimedata import (
     pending_lock,
 )
 from ..utils import make_call, conv_list_format, get_primary_composer
-
+from ..resources.exceptions import SpotifyPlaylistUnavailableError, SpotifyAPIUnavailableError
 
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
@@ -130,10 +130,9 @@ def spotify_playlist_call(token, url):
     return resp
 
 
-class MirrorSpotifyPlayback():
+class MirrorSpotifyPlayback:
     # declare here to avoid Circular Import
-    
-    
+
     def __init__(self):
         super().__init__()
         self.thread = None
@@ -174,6 +173,7 @@ class MirrorSpotifyPlayback():
                     headers={
                         "Authorization": f"Bearer {token.get('user-read-currently-playing')}"
                     },
+                    timeout=10,
                 )
             except Exception:
                 logger.info("Session Expired, reinitializing...")
@@ -264,7 +264,7 @@ def spotify_new_session():
                 logger.info("Account already exists")
                 return False
             try:
-                with open(session_json_path, "r") as file:
+                with open(session_json_path, "r", encoding="utf-8") as file:
                     zeroconf_login = json.load(file)
             except FileNotFoundError as e:
                 logger.error(
@@ -316,7 +316,7 @@ def spotify_login_user(account):
         os.makedirs(session_dir, exist_ok=True)
         session_json_path = os.path.join(session_dir, f"ots_login_{luuid}.json")
         try:
-            with open(session_json_path, "w") as file:
+            with open(session_json_path, "w", encoding="utf-8") as file:
                 json.dump(account["login"], file)
             logger.info(
                 "Login information for %s written to %s",
@@ -442,6 +442,16 @@ def spotify_re_init_session(account, dead_session=None):
         account["account_type"] = account_type
         account["bitrate"] = "320k" if account_type == "premium" else "160k"
 
+def reinit_spotify_session(token):
+
+    for account in account_pool:
+        if (
+            account.get("service") == "spotify"
+            and account.get("login", {}).get("session") is token
+        ):
+            logger.info("Spotify session connection lost, re-initializing...")
+            spotify_re_init_session(account, dead_session=token)
+            return
 
 def spotify_get_token(parsing_index):
     try:
@@ -485,7 +495,7 @@ def spotify_get_playlist_data(token, playlist_id):
     logger.info("Get playlist data for playlist: %s", playlist_id)
     resp = spotify_playlist_call(token, f"{BASE_URL}/playlists/{playlist_id}")
     if not resp:
-        raise Exception(f"Failed to fetch playlist data for '{playlist_id}'")
+        raise SpotifyPlaylistUnavailableError(f"Failed to fetch playlist data for '{playlist_id}'")
     return resp["name"], resp["owner"]["display_name"]
 
 
@@ -497,14 +507,17 @@ def spotify_get_lyrics(token, item_id, item_type, metadata, filepath):
                 url = f"https://spclient.wg.spotify.com/color-lyrics/v2/track/{item_id}?format=json&market=from_token"
             elif item_type == "episode":
                 url = f"https://spclient.wg.spotify.com/transcript-read-along/v2/episode/{item_id}?format=json&market=from_token"
-
+            else:
+                url = None
             headers = {}
             headers["app-platform"] = "WebPlayer"
             headers["Authorization"] = f"Bearer {token.tokens().get('user-read-email')}"
             headers["user-agent"] = (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36"
             )
-
+            if url is None:
+                logger.error("No lyrics URL for %s: %s", item_type, item_id)
+                return None
             resp = make_call(url, headers=headers)
             if resp is None:
                 logger.info("Failed to find lyrics for %s: %s", item_type, item_id)
@@ -837,7 +850,10 @@ def spotify_get_track_metadata(token, item_id):
         api_total_calls += 1
     call_num = 1
     logger.info(
-        "Fetching track data for track_id=%s (Call %d/%d)", item_id, call_num, api_total_calls
+        "Fetching track data for track_id=%s (Call %d/%d)",
+        item_id,
+        call_num,
+        api_total_calls,
     )
 
     headers = spotify_get_auth_header(token)
@@ -854,7 +870,7 @@ def spotify_get_track_metadata(token, item_id):
     # A None result means a permanent (non-retryable) error such as 401/403/404.
     # Bail out with a clear message rather than crashing on track_data.get(...).
     if not track or not track.get("id"):
-        raise Exception(
+        raise SpotifyAPIUnavailableError(
             f"No track data returned for '{item_id}' (rate limited or unavailable)"
         )
     track_data = {"tracks": [track]}
@@ -1003,20 +1019,20 @@ def spotify_get_track_metadata(token, item_id):
     info["is_playable"] = track_data.get("tracks", [{}])[0].get("is_playable", True)
 
     if credits_data:
-        credits = {}
+        local_credits = {}
         for credit_block in credits_data.get("roleCredits", []):
             role_title = credit_block.get("roleTitle").lower()
-            credits[role_title] = [
+            local_credits[role_title] = [
                 artist.get("name") for artist in credit_block.get("artists", [])
             ]
         info["performers"] = conv_list_format(
-            [item for item in credits.get("performers", []) if isinstance(item, str)]
+            [item for item in local_credits.get("performers", []) if isinstance(item, str)]
         )
         info["producers"] = conv_list_format(
-            [item for item in credits.get("producers", []) if isinstance(item, str)]
+            [item for item in local_credits.get("producers", []) if isinstance(item, str)]
         )
         info["writers"] = conv_list_format(
-            [item for item in credits.get("writers", []) if isinstance(item, str)]
+            [item for item in local_credits.get("writers", []) if isinstance(item, str)]
         )
         info["composer"] = info["writers"]
         if config.get("prefer_composer_as_album_artist") and info["composer"]:
