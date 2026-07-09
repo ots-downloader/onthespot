@@ -33,7 +33,14 @@ from PIL import Image
 from mutagen.id3 import ID3, WOAS, USLT, TCMP, COMM
 import music_tag
 from .otsconfig import config
-from .runtimedata import get_logger, download_queue, download_queue_lock, progress_hook, pending
+from .runtimedata import (
+    get_logger,
+    download_queue,
+    download_queue_lock,
+    progress_hook,
+    notification_hook,
+    pending,
+)
 from .constants import ItemStatus
 
 logger = get_logger("utils")
@@ -245,11 +252,14 @@ def requeue_item(item: dict) -> None:
             del download_queue[local_id]
             download_queue[local_id] = item
             download_queue[local_id]["available"] = True
-            progress_hook(download_queue[local_id], item["item_progress"], item["item_status"])
+            progress_hook(
+                download_queue[local_id], item["item_progress"], item["item_status"]
+            )
         except KeyError:
             # Item was cleared from the queue while we were processing it.
             pass
-    
+
+
 def retry_single_item(item: dict) -> None:
     """Move *item* back to the pending queue for download and removes from downloadqueue
     FREE THE DownloadQueue LOCK BEFORE CALLING"""
@@ -262,21 +272,31 @@ def retry_single_item(item: dict) -> None:
         except KeyError as e:
             logger.error("Error retrying item %s, error: %s", item, str(e))
 
+
 def _version_to_int(version):
-    match = re.match(r"[\d.]+", str(version).lower().lstrip("v"))
-    digits = match.group(0).replace(".", "") if match else ""
-    return int(digits) if digits else 0
+    try:
+        match = re.findall(r"\d+\.\d+\.\d+", version)
+        digits = match[0].replace(".", "") if match else 0
+        return int(digits) if digits else 0
+    except Exception:
+        logger.error("Error during version extraction %s", version)
+        return 0
 
 
 def is_latest_release():
     """Return ``True`` if the running version is the latest GitHub release."""
-    url = "https://api.github.com/repos/justin025/onthespot/releases/latest"
-    response = requests.get(url)
+    url = "https://api.github.com/repos/ots-downloader/onthespot/releases/latest"
+    response = requests.get(url, timeout=10)
     if response.status_code == 200:
         current_version = _version_to_int(config.get("version"))
-        latest_version = _version_to_int(response.json()["name"])
+        latest_version = _version_to_int(response.json()["tag_name"])
         if latest_version > current_version:
-            logger.info(f"Update Available: {latest_version} > {current_version}")
+            notification_hook(
+                "Notification",
+                f"New Version Available: {latest_version}",
+                "https://github.com/ots-downloader/onthespot/releases/latest",
+            )
+            logger.info("Update Available: %s", latest_version)
             return False
     return True
 
@@ -290,12 +310,14 @@ def open_item(item):
     else:  # For Linux and other Unix-like systems
         subprocess.Popen(["xdg-open", item])
 
+
 def jittered_delay() -> float:
     """Return the configured download delay with optional random variance."""
     variance = int(config.get("download_delay_variance"))
     return max(
         0, int(config.get("download_delay")) + random.randint(-variance, variance)
     )
+
 
 # ---------------------------------------------------------------------------
 # String / path helpers
@@ -452,6 +474,7 @@ def run_ffmpeg(command: list) -> None:
         )
     else:
         subprocess.check_call(command, shell=False)
+
 
 def convert_audio_format(filename, bitrate, default_format):
     """Re-encode or copy *filename* to the target format via ffmpeg.

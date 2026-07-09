@@ -69,7 +69,7 @@ export async function checkServerHealth(): Promise<{
 export async function searchMedia(
   query: string,
   filters?: Record<string, boolean>,
-): Promise<SearchResultItem[]> {
+): Promise<boolean> {
   try {
     const qParam = query ? `?q=${encodeURIComponent(query)}` : "";
     const res = await request(`/query/url${qParam}`, {
@@ -77,12 +77,7 @@ export async function searchMedia(
       body: JSON.stringify(filters || {}),
     });
     if (!res.ok) throw new Error("Search request failed");
-    const data = await res.json();
-    return Array.isArray(data)
-      ? data
-      : typeof data === "object" && data !== null
-        ? Object.values(data)
-        : [];
+    return res.ok;
   } catch (err) {
     console.error("Search API connection failed:", err);
     throw err;
@@ -289,5 +284,16 @@ export async function fetchServerLogs(): Promise<LogEntry[]> {
   } catch (err) {
     console.error("Fetch server logs failed:", err);
     return [];
+  }
+}
+
+export async function check_api_version(): Promise<boolean> {
+  try {
+    const res = await request("/config/version");
+    if (!res.ok) throw new Error("Failed to fetch api version");
+    return res.ok;
+  } catch (err) {
+    console.error("Fetch version failed:", err);
+    return false;
   }
 }

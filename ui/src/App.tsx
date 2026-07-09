@@ -1,13 +1,21 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Navbar, NavTab } from './components/Navbar';
-import { SearchDashboard } from './components/SearchDashboard';
-import { DownloadQueue } from './components/DownloadQueue';
-import { SettingsPage } from './components/SettingsPage';
-import { AccountsManager } from './components/AccountsManager';
-import { LogViewer } from './components/LogViewer';
-import { NotificationBanner } from './components/NotificationBanner';
-import { OTSConfig, DownloadQueueItem, AccountItem, LogEntry, NotificationBannerItem, SearchResultItem, NotificationContent } from './types';
-import { useNotifications } from './lib/notifications';
+import React, { useEffect, useState, useCallback } from "react";
+import { Navbar, NavTab } from "./components/Navbar";
+import { SearchDashboard } from "./components/SearchDashboard";
+import { DownloadQueue } from "./components/DownloadQueue";
+import { SettingsPage } from "./components/SettingsPage";
+import { AccountsManager } from "./components/AccountsManager";
+import { LogViewer } from "./components/LogViewer";
+import { NotificationBanner } from "./components/NotificationBanner";
+import {
+  OTSConfig,
+  DownloadQueueItem,
+  AccountItem,
+  LogEntry,
+  NotificationBannerItem,
+  SearchResultItem,
+  NotificationContent,
+} from "./types";
+import { useNotifications } from "./lib/notifications";
 import {
   fetchOTSConfig,
   fetchDownloadQueue,
@@ -23,18 +31,19 @@ import {
   resetOTSConfig,
   addAccountService,
   removeAccountUUID,
-} from './lib/api';
-
+  check_api_version,
+} from "./lib/api";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<NavTab>("dashboard");
   const [config, setConfig] = useState<OTSConfig | null>(null);
   const [queue, setQueue] = useState<DownloadQueueItem[]>([]);
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const { notifications, dismissNotification } = useNotifications("webui");
   const [wsConnected, setWsConnected] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState<'light' | 'dark'>('dark');
+  const [isDarkMode, setIsDarkMode] = useState<"light" | "dark">("dark");
+  const [hasNewVersion, SetNewVersion] = useState(false);
 
   // Initial load
   const loadData = useCallback(async () => {
@@ -42,26 +51,25 @@ export default function App() {
       fetchOTSConfig(),
       fetchDownloadQueue(),
       fetchAccounts(),
-      fetchServerLogs()
+      fetchServerLogs(),
     ]);
     if (cfg) {
-        setConfig(cfg._Config__config);
-        // Initialize theme based on config if available
-        setIsDarkMode(cfg._Config__config.theme === 'dark' ? 'dark' : 'light');
+      setWsConnected(true); // Set Connection status
+      setConfig(cfg._Config__config);
+      // Initialize theme based on config if available
+      setIsDarkMode(cfg._Config__config.theme === "dark" ? "dark" : "light");
     }
     if (qData) setQueue(qData);
     if (accData) setAccounts(accData);
     if (logData) setLogs(logData);
-    
-    setWsConnected(true);
   }, []);
 
   useEffect(() => {
     loadData();
-    if (isDarkMode === 'dark') {
-      document.documentElement.classList.add('dark');
+    if (isDarkMode === "dark") {
+      document.documentElement.classList.add("dark");
     } else {
-      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.remove("dark");
     }
   }, [loadData, isDarkMode]);
 
@@ -74,28 +82,37 @@ export default function App() {
   }, [notifications]);
 
   const toggleTheme = async () => {
-    const newTheme = isDarkMode === 'dark' ? 'light' : 'dark';
+    const newTheme = isDarkMode === "dark" ? "light" : "dark";
     setIsDarkMode(newTheme);
     if (config) {
-        await updateOTSConfigValue('theme', newTheme);
-        setConfig(prev => prev ? ({ ...prev, theme: newTheme }) : null);
-        await saveOTSConfig(); // Persist the change
+      await updateOTSConfigValue("theme", newTheme);
+      setConfig((prev) => (prev ? { ...prev, theme: newTheme } : null));
+      await saveOTSConfig(); // Persist the change
     }
+  };
+
+  const checkNewVersion = async () => {
+    const newVersion = await check_api_version();
+    SetNewVersion(!newVersion);
   };
 
   const handleDismissNotification = (id: string) => {
     dismissNotification(id);
   };
 
-  const handleDownloadItem = async (query: string, filters?: Record<string, boolean>) => {
+  const handleDownloadItem = async (
+    query: string,
+    filters?: Record<string, boolean>,
+  ): Promise<boolean> => {
     const res = await searchMedia(query, filters);
     if (res) {
-      setActiveTab('queue')
+      setActiveTab("queue");
     }
+    return res;
   };
 
   const handleClearCompleted = async () => {
-    await clearQueueItems('Downloaded');
+    await clearQueueItems("Downloaded");
     const q = await fetchDownloadQueue();
     setQueue(q);
   };
@@ -106,16 +123,22 @@ export default function App() {
     setQueue(q);
   };
 
-  const handleQueueAction = async (local_id: string, action: 'cancel' | 'delete' | 'retry') => {
+  const handleQueueAction = async (
+    local_id: string,
+    action: "cancel" | "delete" | "retry",
+  ) => {
     await performQueueAction(local_id, action);
     const q = await fetchDownloadQueue();
     setQueue(q);
   };
 
-  const handleUpdateConfigValue = async (key: string, value: any): Promise<boolean> => {
+  const handleUpdateConfigValue = async (
+    key: string,
+    value: any,
+  ): Promise<boolean> => {
     const ok = await updateOTSConfigValue(key, value);
     if (ok) {
-      setConfig(prev => prev ? { ...prev, [key]: value } : null);
+      setConfig((prev) => (prev ? { ...prev, [key]: value } : null));
     }
     return ok;
   };
@@ -129,7 +152,10 @@ export default function App() {
     if (fresh) setConfig(fresh);
   };
 
-  const handleAddAccount = async (service: string, creds: { username?: string; token?: string }) => {
+  const handleAddAccount = async (
+    service: string,
+    creds: { username?: string; token?: string },
+  ) => {
     const acc = await addAccountService(service, creds);
     if (acc) {
       const fresh = await fetchAccounts();
@@ -141,7 +167,7 @@ export default function App() {
   const handleRemoveAccount = async (uuid: string) => {
     const ok = await removeAccountUUID(uuid);
     if (ok) {
-      setAccounts(prev => prev.filter(a => a.uuid !== uuid));
+      setAccounts((prev) => prev.filter((a) => a.uuid !== uuid));
     }
     return ok;
   };
@@ -155,29 +181,37 @@ export default function App() {
     setLogs(fresh);
   };
 
-  const activeDownloadsCount = queue.filter(i => i.item_status === 'Downloading').length;
+  const activeDownloadsCount = queue.filter(
+    (i) => i.item_status === "Downloading",
+  ).length;
 
   return (
-<div className={`min-h-screen flex flex-col antialiased selection:bg-emerald-500 selection:text-white dark:bg-zinc-950 bg-[#121214] text-zinc-100 bg-white text-zinc-900`}>
-
+    <div
+      className={`min-h-screen flex flex-col antialiased selection:bg-emerald-500 selection:text-white dark:bg-zinc-950 bg-[#121214] text-zinc-100 bg-white text-zinc-900`}
+    >
       {/* Top sticky navbar */}
       <Navbar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        queueCount={queue.filter(i => i.item_status === 'Waiting' || i.item_status === 'Downloading').length}
+        queueCount={
+          queue.filter(
+            (i) =>
+              i.item_status === "Waiting" || i.item_status === "Downloading",
+          ).length
+        }
         activeDownloads={activeDownloadsCount}
         accountCount={accounts.length}
         wsConnected={wsConnected}
-        version={config?.version || 'v2.0.0alpha1'}
-        totalDownloadedItems={config?.total_downloaded_items || queue.filter(i => i.item_status === 'Downloaded').length}
-        totalDownloadedData={config?.total_downloaded_data || 0}
+        version={config?.version || "v2.0.0alpha1"}
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
+        newVersion={hasNewVersion}
+        checkVersion={checkNewVersion}
       />
 
       {/* Main Tab Content */}
       <main className="flex-1 pb-16">
-        {activeTab === 'dashboard' && (
+        {activeTab === "dashboard" && (
           <SearchDashboard
             onSearch={handleDownloadItem}
             onDownload={handleDownloadItem}
@@ -185,7 +219,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'queue' && (
+        {activeTab === "queue" && (
           <DownloadQueue
             queue={queue}
             onClearCompleted={handleClearCompleted}
@@ -195,7 +229,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'settings' && (
+        {activeTab === "settings" && (
           <SettingsPage
             config={config}
             onUpdateValue={handleUpdateConfigValue}
@@ -204,7 +238,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'accounts' && (
+        {activeTab === "accounts" && (
           <AccountsManager
             accounts={accounts.length > 0 ? accounts : config?.accounts || []}
             onAddAccount={handleAddAccount}
@@ -212,7 +246,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'logs' && (
+        {activeTab === "logs" && (
           <LogViewer
             logs={logs}
             onRefresh={handleRefreshLogs}
@@ -227,8 +261,6 @@ export default function App() {
         onDismiss={handleDismissNotification}
         disabled={config?.disable_download_popups}
       />
-
     </div>
   );
 }
-

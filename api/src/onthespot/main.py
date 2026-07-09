@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 # dev env flag for protobufs
-#os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+# os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 
 from .api.generic import generic_add_account
@@ -44,7 +44,7 @@ from .runtimedata import (
 )
 from .downloader import DownloadWorker, RetryWorker
 from .constants import ItemStatus
-from .utils import retry_single_item
+from .utils import retry_single_item, is_latest_release
 
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
@@ -60,7 +60,6 @@ downloadworker = DownloadWorker()
 # spotifymirrorworker = MirrorSpotifyPlayback()
 retryworker = RetryWorker()
 fillaccountpool = FillAccountPool()
-
 
 
 ##ONTHESPOT BRIDGE FUNCTIONS
@@ -193,7 +192,8 @@ app.add_middleware(
 )
 # Enabled Self-serving static frontend files from FastAPI. This could work for single binary deployment
 # but we need to implement better path handling and a separate composer file
-#app.frontend("/", directory="dist")
+# app.frontend("/", directory="dist")
+
 
 # Pydantic schemas of body data
 class AccountData(BaseModel):
@@ -238,8 +238,6 @@ async def query_url(q: str | None = None, filters: dict | None = None):
 
 
 ## QUEUES ENDPOINTS
-
-
 @app.get("/queue/downloads")
 async def query_download_queue():
     """
@@ -298,6 +296,7 @@ async def queue_action(lid: str, action: str):
                         return False
     if retry_item is not None:
         retry_single_item(retry_item)
+
 
 @app.get("/queue/downloads/retryfailed")
 async def retry_failed_items():
@@ -363,8 +362,6 @@ async def query_parsing_queue():
 
 
 ## CONFIG ENDPOINTS
-
-
 @app.get("/config/get")
 async def get_config():
     """
@@ -415,9 +412,14 @@ async def reset_config():
     return config.reset()
 
 
+@app.get("/config/version")
+async def check_version():
+    # the update available notification is pushed directly by the function
+    # returns true if new version available
+    return is_latest_release()
+
+
 # ACCOUNTS ENDPOINTS
-
-
 @app.post("/accounts/add")
 async def add_account(service: str, item: AccountData | None = None):
     """
@@ -563,6 +565,7 @@ async def download_logs():
     return FileResponse(log_path, media_type="text/plain", filename=file_name)
 
 
+# SSE Methods and endpoint
 async def event_generator(user_id: str, request: Request):
     """Listens for items in the user's queue and pushes them to the frontend."""
     # 1. Create a queue for this specific user connection

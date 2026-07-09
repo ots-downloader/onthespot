@@ -20,10 +20,10 @@ interface NavbarProps {
   accountCount: number;
   wsConnected: boolean;
   version: string;
-  totalDownloadedItems: number;
-  totalDownloadedData: number;
   isDarkMode: "light" | "dark";
   toggleTheme: () => void;
+  newVersion: boolean;
+  checkVersion: () => Promise<void>;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,10 +34,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   accountCount,
   wsConnected,
   version,
-  totalDownloadedItems,
-  totalDownloadedData,
   isDarkMode,
   toggleTheme,
+  newVersion,
+  checkVersion,
 }) => {
   const ui_version = import.meta.env.PACKAGE_VERSION;
   const api_url = import.meta.env.VITE_API_URL
@@ -107,12 +107,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <h1 className="font-sans font-semibold text-lg tracking-tight text-gray-900 dark:text-neutral-100">
                   OnTheSpot
                 </h1>
-                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-cyan-100 text-gray-600 dark:bg-cyan-800 dark:text-neutral-400">
-                  API: {version || "nd"}
-                </span>
+                <div onClick={checkVersion}>
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-cyan-100 text-gray-600 dark:bg-cyan-800 dark:text-neutral-400">
+                    API: {version || "nd"}
+                  </span>
+                </div>
                 <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-gray-600 dark:bg-yellow-800 dark:text-neutral-400">
                   UI: v{ui_version || "nd"}
                 </span>
+                {newVersion && (
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-gray-600 dark:bg-red-800 dark:text-neutral-400">
+                    New Update Available!
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5 mt-0.5">

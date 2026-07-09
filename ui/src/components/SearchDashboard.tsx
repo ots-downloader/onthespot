@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
-import { Search, Download, ExternalLink, Music, Disc, Tv, Film, Mic, Filter, Check, Loader2, ArrowRight } from 'lucide-react';
-import { SearchResultItem, OTSConfig } from '../types';
+import React, { useState } from "react";
+import {
+  Search,
+  Download,
+  ExternalLink,
+  Music,
+  Disc,
+  Tv,
+  Film,
+  Mic,
+  Filter,
+  Check,
+  Loader2,
+  ArrowRight,
+} from "lucide-react";
+import { SearchResultItem, OTSConfig } from "../types";
 
 interface SearchDashboardProps {
-  onSearch: (q: string, filters: Record<string, boolean>) => Promise<SearchResultItem[]>;
-  onDownload: (item: SearchResultItem) => void;
+  onSearch: (q: string, filters: Record<string, boolean>) => Promise<boolean>;
+  onDownload: (q: string, filters: Record<string, boolean>) => Promise<boolean>;
   config: OTSConfig | null;
 }
 
 export const SearchDashboard: React.FC<SearchDashboardProps> = ({
   onSearch,
   onDownload,
-  config
+  config,
 }) => {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +48,9 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
 
     setLoading(true);
     try {
-      const formattedQ = query.startsWith('http') ? query : `${prefix !== 'none' ? prefix + ' ' : ''}${query}`;
+      const formattedQ = query.startsWith("http")
+        ? query
+        : `${prefix !== "none" ? prefix + " " : ""}${query}`;
       const data = await onSearch(formattedQ, filters);
       setResults(data);
       setQuery("");
@@ -47,42 +62,53 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
   };
 
   const toggleFilter = (key: string) => {
-    setFilters(prev => ({ ...prev, [key]: !prev[key] }));
+    setFilters((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const triggerDownload = (item: SearchResultItem) => {
     onDownload(item);
-    setEnqueuedIds(prev => new Set(prev).add(item.id));
+    setEnqueuedIds((prev) => new Set(prev).add(item.id));
   };
 
   const getServiceText = (service: string) => {
     switch (service.toLowerCase()) {
-      case 'spotify': return 'Spotify';
-      case 'tidal': return 'Tidal';
-      case 'apple_music':
-      case 'applemusic': return 'Apple Music';
-      case 'soundcloud': return 'SoundCloud';
-      case 'youtube_music':
-      case 'youtube': return 'YT Music';
-      default: return 'Generic';
+      case "spotify":
+        return "Spotify";
+      case "tidal":
+        return "Tidal";
+      case "apple_music":
+      case "applemusic":
+        return "Apple Music";
+      case "soundcloud":
+        return "SoundCloud";
+      case "youtube_music":
+      case "youtube":
+        return "YT Music";
+      default:
+        return "Generic";
     }
   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'album': return <Disc className="w-3.5 h-3.5" />;
-      case 'playlist': return <Music className="w-3.5 h-3.5" />;
-      case 'podcast':
-      case 'episode': return <Mic className="w-3.5 h-3.5" />;
-      case 'movie': return <Film className="w-3.5 h-3.5" />;
-      case 'show': return <Tv className="w-3.5 h-3.5" />;
-      default: return <Music className="w-3.5 h-3.5" />;
+      case "album":
+        return <Disc className="w-3.5 h-3.5" />;
+      case "playlist":
+        return <Music className="w-3.5 h-3.5" />;
+      case "podcast":
+      case "episode":
+        return <Mic className="w-3.5 h-3.5" />;
+      case "movie":
+        return <Film className="w-3.5 h-3.5" />;
+      case "show":
+        return <Tv className="w-3.5 h-3.5" />;
+      default:
+        return <Music className="w-3.5 h-3.5" />;
     }
   };
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-8 font-sans">
-      
       {/* Search Header Container */}
       <div className="bg-white dark:bg-[#1a1a1a] rounded-3xl p-6 md:p-10 border border-gray-200 dark:border-neutral-800/60 shadow-sm">
         <div className="max-w-4xl">
@@ -90,14 +116,13 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
             Search & Download Media
           </h2>
           <p className="text-sm text-gray-500 dark:text-neutral-400 mb-6">
-            Paste a link from supported platforms, or search by keywords. Target format: {config?.track_file_format?.toUpperCase() || 'FLAC'}.
+            Paste a link from supported platforms, or search by keywords. Target
+            format: {config?.track_file_format?.toUpperCase() || "FLAC"}.
           </p>
 
           <form onSubmit={handleSearchSubmit} className="flex flex-col gap-4">
-            
             {/* Search Bar Row */}
             <div className="flex flex-col md:flex-row gap-3">
-              
               <div className="relative flex items-center bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-full flex-1 focus-within:ring-2 focus-within:ring-blue-500/50 transition-shadow overflow-hidden">
                 <Search className="w-5 h-5 text-gray-400 absolute left-4" />
                 <input
@@ -140,8 +165,8 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                   onClick={() => toggleFilter(key)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-colors border ${
                     filters[key]
-                      ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800/50'
-                      : 'bg-transparent text-gray-600 border-gray-300 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800'
+                      ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800/50"
+                      : "bg-transparent text-gray-600 border-gray-300 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   }`}
                 >
                   {key}
@@ -187,7 +212,10 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                   {/* Image */}
                   <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-neutral-800 mb-3 border border-gray-200/50 dark:border-neutral-700/50">
                     <img
-                      src={item.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"}
+                      src={
+                        item.thumbnail ||
+                        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"
+                      }
                       alt={item.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       referrerPolicy="no-referrer"
@@ -213,14 +241,20 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                         {getTypeIcon(item.item_type)}
                         {item.item_type}
                       </span>
-                      <span className="text-gray-400 dark:text-neutral-500">•</span>
+                      <span className="text-gray-400 dark:text-neutral-500">
+                        •
+                      </span>
                       <span className="text-gray-600 dark:text-neutral-400">
                         {getServiceText(item.item_service)}
                       </span>
                       {item.release_year && (
                         <>
-                          <span className="text-gray-400 dark:text-neutral-500">•</span>
-                          <span className="text-gray-500 dark:text-neutral-400">{item.release_year}</span>
+                          <span className="text-gray-400 dark:text-neutral-500">
+                            •
+                          </span>
+                          <span className="text-gray-500 dark:text-neutral-400">
+                            {item.release_year}
+                          </span>
                         </>
                       )}
                     </div>
@@ -232,8 +266,8 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                         disabled={isEnqueued}
                         className={`flex-1 font-medium py-2 px-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 ${
                           isEnqueued
-                            ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 cursor-default'
-                            : 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40'
+                            ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 cursor-default"
+                            : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40"
                         }`}
                       >
                         {isEnqueued ? (

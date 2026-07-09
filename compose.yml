@@ -7,9 +7,9 @@ services:
     ports:
       - "6767:6767"
     volumes:
-      - ./Music:/root/Music/OnTheSpot
-      - ./Videos:/root/Videos/OnTheSpot
-      - ./Config:/root/.config/onthespot
+      - ./otsdata/Music:/root/Music/OnTheSpot
+      - ./otsdata/Videos:/root/Videos/OnTheSpot
+      - ./otsdata/Config:/root/.config/onthespot
     restart: unless-stopped
   ots-ui:
     container_name: ots-ui
