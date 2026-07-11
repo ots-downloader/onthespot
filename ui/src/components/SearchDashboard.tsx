@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Search,
   Download,
@@ -12,8 +12,10 @@ import {
   Check,
   Loader2,
   ArrowRight,
+  Trash,
 } from "lucide-react";
 import { SearchResultItem, OTSConfig } from "../types";
+import { fetchPendingQueue, performPendingAction } from "../lib/api";
 
 interface SearchDashboardProps {
   onSearch: (q: string, filters: Record<string, boolean>) => Promise<boolean>;
@@ -42,6 +44,15 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
 
   const [prefix, setPrefix] = useState<string>(config?.search_prefix || "the");
 
+  const getPending = async () => {
+    const pending = await fetchPendingQueue();
+    setResults(pending);
+  };
+
+  useEffect(() => {
+    getPending();
+  }, []);
+
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -52,7 +63,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
         ? query
         : `${prefix !== "none" ? prefix + " " : ""}${query}`;
       const data = await onSearch(formattedQ, filters);
-      setResults(data);
+
       setQuery("");
     } catch (err) {
       console.error("Search error", err);
@@ -65,9 +76,8 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
     setFilters((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const triggerDownload = (item: SearchResultItem) => {
-    onDownload(item);
-    setEnqueuedIds((prev) => new Set(prev).add(item.id));
+  const cancelDownload = (item: SearchResultItem) => {
+    performPendingAction(item?.local_id, "cancel");
   };
 
   const getServiceText = (service: string) => {
@@ -106,6 +116,8 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
         return <Music className="w-3.5 h-3.5" />;
     }
   };
+
+  const showThumbnails = config?.show_search_thumbnails ?? true;
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-8 font-sans">
@@ -202,30 +214,31 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
             {results.map((item) => {
-              const isEnqueued = enqueuedIds.has(item.id);
-
               return (
                 <div
-                  key={item.id}
+                  key={item.local_id}
                   className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-neutral-800/60 hover:shadow-md rounded-2xl p-4 flex flex-col transition-all group"
                 >
                   {/* Image */}
-                  <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-neutral-800 mb-3 border border-gray-200/50 dark:border-neutral-700/50">
-                    <img
-                      src={
-                        item.thumbnail ||
-                        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"
-                      }
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      referrerPolicy="no-referrer"
-                    />
-                    {item.explicit && (
-                      <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] font-bold text-white uppercase tracking-wider">
-                        E
-                      </div>
-                    )}
-                  </div>
+
+                  {showThumbnails && (
+                    <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-neutral-800 mb-3 border border-gray-200/50 dark:border-neutral-700/50">
+                      <img
+                        src={
+                          item.thumbnail ||
+                          "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"
+                        }
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        referrerPolicy="no-referrer"
+                      />
+                      {item.explicit && (
+                        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] font-bold text-white uppercase tracking-wider">
+                          E
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Metadata */}
                   <div className="flex-1 flex flex-col">
@@ -233,7 +246,8 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                       {item.name}
                     </h4>
                     <p className="text-xs text-gray-500 dark:text-neutral-400 line-clamp-1 mb-2">
-                      {item.artist} {item.album && `• ${item.album}`}
+                      {item.artist} {item.album && `• ${item.album}`}{" "}
+                      {item.playlist_name && `• ${item.playlist_name}`}
                     </p>
 
                     <div className="flex items-center gap-2 text-[10px] font-medium mt-auto mb-4">
@@ -262,29 +276,17 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                     {/* Actions */}
                     <div className="flex items-center gap-2 pt-3 border-t border-gray-100 dark:border-neutral-800/60">
                       <button
-                        onClick={() => triggerDownload(item)}
-                        disabled={isEnqueued}
-                        className={`flex-1 font-medium py-2 px-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 ${
-                          isEnqueued
-                            ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 cursor-default"
-                            : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40"
-                        }`}
+                        onClick={() => cancelDownload(item)}
+                        className="flex-1 font-medium py-2 px-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40"
                       >
-                        {isEnqueued ? (
-                          <>
-                            <Check className="w-4 h-4" />
-                            Queued
-                          </>
-                        ) : (
-                          <>
-                            <Download className="w-4 h-4" />
-                            Download
-                          </>
-                        )}
+                        <>
+                          <Trash className="w-4 h-4" />
+                          Cancel
+                        </>
                       </button>
 
                       <a
-                        href={item.item_url}
+                        href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-2.5 rounded-xl bg-gray-50 text-gray-600 hover:bg-gray-100 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700 transition-colors"

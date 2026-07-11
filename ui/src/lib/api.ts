@@ -100,6 +100,36 @@ export async function fetchDownloadQueue(): Promise<DownloadQueueItem[]> {
   }
 }
 
+export async function fetchPendingQueue(): Promise<SearchResultItem[]> {
+  try {
+    const res = await request("/queue/pending");
+    if (!res.ok) throw new Error("Failed to fetch queue");
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error("Fetch download queue failed:", err);
+    return [];
+  }
+}
+
+export async function performPendingAction(
+  local_id: string,
+  action: "cancel",
+): Promise<boolean> {
+  try {
+    const res = await request(
+      `/queue/pending/action?lid=${encodeURIComponent(local_id)}&action=${encodeURIComponent(action)}`,
+      {
+        method: "POST",
+      },
+    );
+    return res.ok;
+  } catch (err) {
+    console.error(`Perform queue action (${action}) failed:`, err);
+    return false;
+  }
+}
+
 export async function enqueueDownload(
   item: SearchResultItem,
 ): Promise<{ success: boolean }> {

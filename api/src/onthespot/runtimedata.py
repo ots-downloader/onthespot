@@ -11,7 +11,8 @@ access back to this file.
 
 import linecache
 import logging
-
+from collections import deque
+import threading
 import re
 import sys
 import uuid
@@ -37,7 +38,7 @@ _file_handler = RotatingFileHandler(
     maxBytes=(5 * 1024 * 1024),
     backupCount=2,
     encoding="utf-8",
-    delay=0,
+    delay=True,
 )
 _stdout_handler = logging.StreamHandler(sys.stdout)
 _file_handler.setFormatter(_log_formatter)
@@ -78,6 +79,42 @@ sys.excepthook = _handle_uncaught_exception
 # under the corresponding lock)
 # ---------------------------------------------------------------------------
 
+
+# Thread Safe Queue Adapter, uses deque with lock
+class ThreadSafeDeque:
+    def __init__(self):
+        self._deque = deque()
+        self._lock = threading.Lock()
+
+    def put_nowait(self, item):
+        with self._lock:
+            self._deque.append(item)
+
+    def get_nowait(self):
+        with self._lock:
+            if not self._deque:
+                raise IndexError("pop from an empty deque")
+            return self._deque.popleft()
+
+    def get_items(self) -> list:
+        with self._lock:
+            if not self._deque:
+                return []
+            return list(self._deque)
+
+    def remove(self, item):
+        with self._lock:
+            self._deque.remove(item)
+
+    def empty(self):
+        queue = self.__len__()
+        return False if queue > 0 else True
+
+    def __len__(self):
+        with self._lock:
+            return len(self._deque)
+
+
 #: Pool of authenticated service accounts added by :class:`AccountPoolLoader`.
 account_pool: list = []
 
@@ -88,7 +125,7 @@ temp_download_path: list = []
 parsing: dict = {}
 
 #: Items waiting to be moved to the download queue.
-pending: asyncio.Queue = asyncio.Queue()
+pending = ThreadSafeDeque()
 
 #: Active download queue (local_id → item dict).
 download_queue: dict = {}
@@ -109,11 +146,13 @@ def websocket_event(etype: str, event=""):
         data = {"type": etype, "event": event}
         websocket_queue.put_nowait(data)
 
+
 def progress_hook(item: dict, progress: int, status: ItemStatus | None = None):
     item["progress"] = progress
     if status:
         item["item_status"] = status
     websocket_event("STATUS_CHANGE", item)
+
 
 def yt_dlp_progress_hook(item: dict, progress_info: dict) -> None:
     """Hook passed to yt-dlp to forward download progress to the GUI."""
@@ -127,6 +166,7 @@ def yt_dlp_progress_hook(item: dict, progress_info: dict) -> None:
         progress_hook(item, new_value, ItemStatus.DOWNLOADING)
     if item["item_status"] == ItemStatus.CANCELLED:
         raise DownloadCancelled("Download cancelled by user.")
+
 
 def notification_hook(
     title,
@@ -149,6 +189,7 @@ def notification_hook(
             "message": f"{message}",
         },
     )
+
 
 # ---------------------------------------------------------------------------
 # System-tray initialisation flag

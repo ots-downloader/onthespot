@@ -19,7 +19,10 @@ from ..runtimedata import (
     pending_lock,
 )
 from ..utils import make_call, conv_list_format, get_primary_composer
-from ..resources.exceptions import SpotifyPlaylistUnavailableError, SpotifyAPIUnavailableError
+from ..resources.exceptions import (
+    SpotifyPlaylistUnavailableError,
+    SpotifyAPIUnavailableError,
+)
 
 logger = get_logger("api.spotify")
 BASE_URL = "https://api.spotify.com/v1"
@@ -185,7 +188,10 @@ class MirrorSpotifyPlayback:
                 data = resp.json()
                 if data["currently_playing_type"] == "track":
                     item_id = data["item"]["id"]
-                    if item_id not in pending and item_id not in download_queue:
+                    if (
+                        item_id not in pending.get_items()
+                        and item_id not in download_queue
+                    ):
                         parent_category = "track"
                         playlist_name = ""
                         playlist_by = ""
@@ -212,16 +218,18 @@ class MirrorSpotifyPlayback:
                         # Use item id to prevent duplicates
                         # local_id = format_local_id(item_id)
                         with pending_lock:
-                            pending[item_id] = {
-                                "local_id": item_id,
-                                "item_service": "spotify",
-                                "item_type": "track",
-                                "item_id": item_id,
-                                "parent_category": parent_category,
-                                "playlist_name": playlist_name,
-                                "playlist_by": playlist_by,
-                                "playlist_number": "?",
-                            }
+                            pending.put_nowait(
+                                item={
+                                    "local_id": item_id,
+                                    "item_service": "spotify",
+                                    "item_type": "track",
+                                    "item_id": item_id,
+                                    "parent_category": parent_category,
+                                    "playlist_name": playlist_name,
+                                    "playlist_by": playlist_by,
+                                    "playlist_number": "?",
+                                }
+                            )
                         logger.info(
                             "Mirror Spotify Playback added track to download queue: https://open.spotify.com/track/%s",
                             item_id,
@@ -442,6 +450,7 @@ def spotify_re_init_session(account, dead_session=None):
         account["account_type"] = account_type
         account["bitrate"] = "320k" if account_type == "premium" else "160k"
 
+
 def reinit_spotify_session(token):
 
     for account in account_pool:
@@ -452,6 +461,7 @@ def reinit_spotify_session(token):
             logger.info("Spotify session connection lost, re-initializing...")
             spotify_re_init_session(account, dead_session=token)
             return
+
 
 def spotify_get_token(parsing_index):
     try:
@@ -495,7 +505,9 @@ def spotify_get_playlist_data(token, playlist_id):
     logger.info("Get playlist data for playlist: %s", playlist_id)
     resp = spotify_playlist_call(token, f"{BASE_URL}/playlists/{playlist_id}")
     if not resp:
-        raise SpotifyPlaylistUnavailableError(f"Failed to fetch playlist data for '{playlist_id}'")
+        raise SpotifyPlaylistUnavailableError(
+            f"Failed to fetch playlist data for '{playlist_id}'"
+        )
     return resp["name"], resp["owner"]["display_name"]
 
 
@@ -1026,10 +1038,18 @@ def spotify_get_track_metadata(token, item_id):
                 artist.get("name") for artist in credit_block.get("artists", [])
             ]
         info["performers"] = conv_list_format(
-            [item for item in local_credits.get("performers", []) if isinstance(item, str)]
+            [
+                item
+                for item in local_credits.get("performers", [])
+                if isinstance(item, str)
+            ]
         )
         info["producers"] = conv_list_format(
-            [item for item in local_credits.get("producers", []) if isinstance(item, str)]
+            [
+                item
+                for item in local_credits.get("producers", [])
+                if isinstance(item, str)
+            ]
         )
         info["writers"] = conv_list_format(
             [item for item in local_credits.get("writers", []) if isinstance(item, str)]

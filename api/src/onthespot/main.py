@@ -248,6 +248,31 @@ async def query_download_queue():
     return dict(sorted(download_queue.items()))
 
 
+@app.get("/queue/pending")
+async def get_pending_queue():
+    return pending.get_items()
+
+
+@app.post("/queue/pending/action")
+async def pending_action(lid: str, action: str):
+    """
+    Endpoint to perform actions on a specific item in the pending queue.
+
+    :param lid: Local ID of the item.
+    :param action: Action to perform (e.g., retry, cancel, delete).
+    :return: Boolean indicating success or failure of the action.
+    """
+
+    for item in pending.get_items():
+        if item["local_id"] == lid:
+            match action:
+                case "cancel":
+                    pending.remove(item)
+                    return True
+                case _:
+                    return False
+
+
 @app.get("/queue/downloads/clear")
 async def remove_queue_items(status: str = "Completed"):
     """
@@ -339,16 +364,6 @@ async def download_file(lid):
             directory, file_name = os.path.split(file_path)
             break
     return FileResponse(file_path, media_type="audio/mpeg", filename=file_name)
-
-
-@app.get("/queue/pending")
-async def query_pending_queue():
-    """
-    Endpoint to get the current pending queue.
-
-    :return: Dictionary of items in the pending queue.
-    """
-    return pending
 
 
 @app.get("/queue/parsing")
