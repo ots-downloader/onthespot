@@ -1,23 +1,29 @@
 import React, { useState } from 'react';
-import { Users, Plus, Trash2, Key, Shield, Loader2, Server } from 'lucide-react';
+import { Users, Plus, Trash2, Key, Shield, Loader2, Server, RefreshCw, CircleCheck, AlertTriangle } from 'lucide-react';
 import { AccountItem } from '../types';
+import type { AccountHealth } from '../lib/api';
 
 interface AccountsManagerProps {
   accounts: AccountItem[];
   onAddAccount: (service: string, credentials: { username?: string; token?: string }) => Promise<AccountItem | null>;
   onRemoveAccount: (uuid: string) => Promise<boolean>;
+  health: AccountHealth | null;
+  onReconnect: () => Promise<boolean>;
 }
 
 export const AccountsManager: React.FC<AccountsManagerProps> = ({
   accounts,
   onAddAccount,
-  onRemoveAccount
+  onRemoveAccount,
+  health,
+  onReconnect
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [service, setService] = useState('generic');
   const [username, setUsername] = useState('');
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,30 +53,38 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6 font-sans">
+    <div className="spotify-fade-up ots-page flex flex-col gap-6 font-sans">
       
       {/* Top Banner */}
-      <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm border border-gray-200 dark:border-neutral-800/60">
+      <div className="ots-hero flex flex-col justify-between gap-4 p-6 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-xl font-medium text-gray-900 dark:text-neutral-100 flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+            <Users className="h-5 w-5 text-[#1ed760]" />
             Account Pool Manager
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 ml-2">
+            <span className="ots-accent-badge ml-2 px-2 py-1 text-xs font-bold">
               {accounts.length} active workers
             </span>
           </h2>
-          <p className="text-sm text-gray-500 dark:text-neutral-400 mt-1">
+          <p className="mt-1 text-sm text-[#8f8f8f]">
             Accounts are automatically rotated to distribute API load and bypass rate limits.
           </p>
         </div>
 
         <button
           onClick={() => setShowModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full transition-colors flex items-center justify-center gap-2 text-sm font-medium shrink-0 focus:ring-2 focus:ring-blue-500/50 outline-none"
+          className="ots-button ots-button-primary h-11 shrink-0 px-5 text-sm"
         >
           <Plus className="w-4 h-4" />
           <span>Add Account</span>
         </button>
+      </div>
+
+      <div className={`ots-health-banner flex flex-col justify-between gap-4 border p-4 sm:flex-row sm:items-center ${health?.spotify.connected ? 'ots-health-banner--connected' : 'ots-health-banner--warning'}`}>
+        <div className="flex items-start gap-3">
+          {health?.spotify.connected ? <CircleCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#1ed760]" /> : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#f6b94a]" />}
+          <div><p className="text-sm font-bold text-white">Spotify API: {health?.spotify.status || 'Checking…'}</p><p className="mt-1 text-xs text-[#b3b3b3]">{health ? `${health.authenticated_accounts} authenticated workers · ${health.missing_services.length ? `Missing: ${health.missing_services.join(', ')}` : 'All configured services available'}` : 'Checking account pool health…'}</p></div>
+        </div>
+        <button type="button" onClick={async () => { setReconnecting(true); await onReconnect(); setReconnecting(false); }} disabled={reconnecting} className="ots-button ots-button-secondary h-10"><RefreshCw className={`h-4 w-4 ${reconnecting ? 'animate-spin' : ''}`} /> Reconnect accounts</button>
       </div>
 
       {/* Account Cards Grid */}
@@ -81,7 +95,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
           return (
             <div
               key={acc.uuid}
-              className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-neutral-800/60 rounded-2xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow"
+              className="ots-card flex flex-col justify-between p-5 shadow-xl shadow-black/10 transition-colors hover:bg-[#242424]"
             >
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -95,7 +109,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 </div>
 
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center text-lg font-medium text-gray-700 dark:text-neutral-300">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#282828] text-lg font-medium text-[#b3b3b3]">
                     {acc.service.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -119,7 +133,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
 
                 <button
                   onClick={() => onRemoveAccount(acc.uuid)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                  className="ots-button ots-button-danger h-9 px-3 text-xs"
                 >
                   <Trash2 className="w-4 h-4" />
                   Remove
@@ -133,10 +147,10 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       {/* Standard Material Dialog */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-[#1c1c1c] rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative overflow-hidden animate-[slideIn_0.2s_ease-out]">
+          <div className="ots-panel relative w-full max-w-md overflow-hidden bg-[#1c1c1c] p-6 shadow-2xl sm:p-8">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-full">
-                <Server className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#173b25]">
+                <Server className="h-5 w-5 text-[#1ed760]" />
               </div>
               <h3 className="text-xl font-medium text-gray-900 dark:text-neutral-100">
                 Add Worker Account
@@ -153,7 +167,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 <select
                   value={service}
                   onChange={(e) => setService(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-neutral-100 focus:ring-2 focus:ring-blue-500/50 outline-none transition-shadow"
+                  className="ots-select w-full"
                 >
                   <option value="generic">Generic (Free)</option>
                   <option value="spotify">Spotify (zeroconf - Premium + DevAPI)</option>
@@ -175,7 +189,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="e.g. user@example.com"
-                  className="w-full bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-neutral-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow"
+                  className="ots-input w-full"
                 />
               </div>
 
@@ -186,7 +200,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder="Paste secure token"
-                  className="w-full bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-neutral-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow"
+                  className="ots-input w-full"
                 />
               </div>
 
@@ -194,14 +208,14 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-5 py-2 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-neutral-300 dark:hover:bg-neutral-800 transition-colors"
+                  className="ots-button ots-button-ghost"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-5 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="ots-button ots-button-primary"
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {loading ? 'Saving...' : 'Add Account'}

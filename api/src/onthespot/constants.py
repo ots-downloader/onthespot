@@ -12,6 +12,7 @@ class ItemStatus(str, Enum):
 
     WAITING = "Waiting"
     DOWNLOADING = "Downloading"
+    PAUSED = "Paused"
     CONVERTING = "Converting"
     DECRYPTING = "Decrypting"
     GETTING_LYRICS = "Getting Lyrics"

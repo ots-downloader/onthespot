@@ -6,7 +6,15 @@ import time
 
 
 from .accounts import get_account_token
-from .runtimedata import get_logger, parsing, parsing_lock, pending, pending_lock
+from .runtimedata import (
+    download_queue,
+    download_queue_lock,
+    get_logger,
+    parsing,
+    parsing_lock,
+    pending,
+    pending_lock,
+)
 from .utils import format_local_id
 from .constants import ItemStatus
 from .api.registry import (
@@ -114,7 +122,7 @@ class ParsingWorker:
 
         # --- Single downloadable items ---
         if item_type in ("track", "podcast_episode", "movie", "episode"):
-            self._enqueue_single_item(service, item_type, item_id)
+            self._enqueue_single_item(service, item_type, item_id, item_url)
             return
 
         # --- Podcast / audiobook (expand to episodes) ---
@@ -141,17 +149,30 @@ class ParsingWorker:
     # Individual expansion handlers
     # ------------------------------------------------------------------
 
-    def _enqueue_single_item(self, service, item_type, item_id):
+    def _enqueue_single_item(self, service, item_type, item_id, item_url=""):
         local_id = format_local_id(item_id)
         pending.put_nowait({
                 "local_id": local_id,
                 "item_service": service,
                 "item_type": item_type,
                 "item_id": item_id,
+                "item_url": item_url,
                 "parent_category": item_type,
                 "available": True,
                 "item_status": ItemStatus.WAITING
             })
+
+    def _enqueue_playlist_item(self, item):
+        """Expose the whole playlist in the UI before downloading starts."""
+        item["queue_preloaded"] = True
+        with download_queue_lock:
+            item["queue_position"] = max(
+                [entry.get("queue_position", -1) for entry in download_queue.values()],
+                default=-1,
+            ) + 1
+            item["priority"] = 0
+            download_queue[item["local_id"]] = item
+        pending.put_nowait(item)
 
     def _expand_spotify_playlist(self, token, playlist_id):
         try:
@@ -182,7 +203,7 @@ class ParsingWorker:
                 track_type = item["track"]["type"]
                 local_id = format_local_id(track_id)
 
-                pending.put_nowait( {
+                self._enqueue_playlist_item({
                     "local_id": local_id,
                     "item_service": "spotify",
                     "item_type": track_type,
@@ -201,7 +222,7 @@ class ParsingWorker:
         for index, track in enumerate(spotify_get_liked_songs(token)):
             track_id = track["track"]["id"]
             local_id = format_local_id(track_id)
-            pending.put_nowait({
+            self._enqueue_playlist_item({
                 "local_id": local_id,
                 "item_service": "spotify",
                 "item_type": "track",
@@ -297,7 +318,7 @@ class ParsingWorker:
 
         for index, track_id in enumerate(track_ids):
             local_id = format_local_id(track_id)
-            pending.put_nowait({
+            queued_item = {
                 "local_id": local_id,
                 "item_service": service,
                 "item_type": "track",
@@ -308,7 +329,11 @@ class ParsingWorker:
                 "playlist_number": str(index + 1),
                 "available": True,
                 "item_status": ItemStatus.WAITING
-            })
+            }
+            if effective_category == "playlist":
+                self._enqueue_playlist_item(queued_item)
+            else:
+                pending.put_nowait(queued_item)
 
     def _expand_artist_or_label(self, service, item_type, item_id, token):
         """Expand an artist or label into their albums (which are then re-parsed)."""

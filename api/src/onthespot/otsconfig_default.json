@@ -38,6 +38,23 @@
 
   "language": "en_US",
   "theme": "dark",
+  "active_download_profile": "mp3-320",
+  "download_profiles": [
+    {
+      "id": "mp3-320",
+      "name": "MP3 · 320 kbps",
+      "format": "mp3",
+      "bitrate": "320k",
+      "download_path": ""
+    },
+    {
+      "id": "flac",
+      "name": "FLAC · lossless",
+      "format": "flac",
+      "bitrate": "1411k",
+      "download_path": ""
+    }
+  ],
   "explicit_label": "🅴",
   "download_copy_btn": false,
   "download_open_btn": false,
@@ -52,6 +69,8 @@
   "mirror_spotify_playback": false,
 
   "check_for_updates": true,
+  "update_repository": "ots-downloader/onthespot",
+  "update_check_interval_hours": 12,
   "illegal_character_replacement": "-",
   "raw_media_download": false,
   "rotate_active_account_number": false,

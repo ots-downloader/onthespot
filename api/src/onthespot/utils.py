@@ -26,6 +26,7 @@ import subprocess
 import threading
 import time
 import itertools
+import string
 from hashlib import md5
 from urllib.parse import urlparse
 from io import BytesIO
@@ -40,6 +41,7 @@ from .runtimedata import (
     progress_hook,
     notification_hook,
     pending,
+    record_rate_limit,
 )
 from .constants import ItemStatus
 
@@ -190,6 +192,11 @@ def make_call(
                 logger.warning(
                     f"Rate limited (429) on {url}. No Retry-After header, backing off {delay}s (attempt {attempt + 1}/{max_retries})"
                 )
+            record_rate_limit(
+                urlparse(url).netloc,
+                int(retry_after) if retry_after and retry_after.isdigit() else delay,
+                delay,
+            )
             time.sleep(delay)
             continue
 
@@ -267,7 +274,13 @@ def retry_single_item(item: dict) -> None:
         try:
             item["available"] = True
             item["item_status"] = ItemStatus.WAITING
-            del download_queue[item["local_id"]]
+            item["error"] = ""
+            item["_stats_recorded"] = False
+            item["retry_count"] = int(item.get("retry_count", 0) or 0) + 1
+            if item.get("queue_preloaded"):
+                download_queue[item["local_id"]] = item
+            else:
+                del download_queue[item["local_id"]]
             pending.put_nowait(item)
         except KeyError as e:
             logger.error("Error retrying item %s, error: %s", item, str(e))
@@ -284,20 +297,23 @@ def _version_to_int(version):
 
 
 def is_latest_release():
-    """Return ``True`` if the running version is the latest GitHub release."""
-    url = "https://api.github.com/repos/ots-downloader/onthespot/releases/latest"
-    response = requests.get(url, timeout=10)
-    if response.status_code == 200:
-        current_version = _version_to_int(config.get("version"))
-        latest_version = _version_to_int(response.json()["tag_name"])
-        if latest_version > current_version:
-            notification_hook(
-                "Notification",
-                f"New Version Available: {latest_version}",
-                "https://github.com/ots-downloader/onthespot/releases/latest",
-            )
-            logger.info("Update Available: %s", latest_version)
-            return False
+    """Return ``True`` if the running version is the latest GitHub release.
+
+    This compatibility wrapper is retained for callers from the desktop
+    application.  The structured updater lives in :mod:`onthespot.updater`.
+    """
+    from .updater import check_for_updates
+
+    status = check_for_updates(force=True)
+    if status.get("update_available"):
+        latest = status.get("latest_version")
+        notification_hook(
+            "Update available",
+            f"OnTheSpot {latest} is ready to download.",
+            status.get("release_url", ""),
+        )
+        logger.info("Update Available: %s", latest)
+        return False
     return True
 
 
@@ -403,6 +419,19 @@ def format_item_path(item, item_metadata):
     elif item["item_type"] == "episode":
         path = config.get("show_path_formatter")
 
+    # A stray closing brace in a user-edited formatter otherwise aborts every
+    # item in a playlist before the download starts. Repair the common typo
+    # and let the formatter continue; the saved setting is corrected by the
+    # UI/API separately.
+    try:
+        list(string.Formatter().parse(path))
+    except ValueError as exc:
+        repaired_path = path.replace("}}", "}")
+        if repaired_path == path:
+            raise
+        logger.warning("Repairing malformed path formatter %r: %s", path, exc)
+        path = repaired_path
+
     # Split composer
     composer_full = item_metadata.get("composer", "")
     primary_composer = get_primary_composer(composer_full)
@@ -476,7 +505,7 @@ def run_ffmpeg(command: list) -> None:
         subprocess.check_call(command, shell=False)
 
 
-def convert_audio_format(filename, bitrate, default_format):
+def convert_audio_format(filename, bitrate, default_format, force_bitrate=False):
     """Re-encode or copy *filename* to the target format via ffmpeg.
 
     If the file is already in *default_format* and a custom bitrate is not
@@ -504,7 +533,7 @@ def convert_audio_format(filename, bitrate, default_format):
 
         # Check if media format is service default
 
-        if filetype == default_format and config.get("use_custom_file_bitrate"):
+        if filetype == default_format and (config.get("use_custom_file_bitrate") or force_bitrate):
             command += ["-b:a", bitrate]
         elif filetype == default_format:
             command += ["-c:a", "copy"]
@@ -1058,7 +1087,7 @@ def add_to_m3u_file(item, item_metadata):
     )
 
     m3u_file += "." + config.get("m3u_format")
-    dl_root = config.get("audio_download_path")
+    dl_root = item.get("profile_download_path") or config.get("audio_download_path")
     m3u_path = os.path.join(dl_root, m3u_file)
 
     os.makedirs(os.path.dirname(m3u_path), exist_ok=True)

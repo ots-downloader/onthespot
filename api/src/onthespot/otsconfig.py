@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import uuid
 
 
@@ -97,6 +98,19 @@ class Config:
                     json.dump(self.__template_data, cf, indent=4, ensure_ascii=False)
                 self.__config = self.__template_data
 
+        # The bundled defaults are written for the Linux/Docker image. When
+        # running the API directly on Windows, translate those container paths
+        # to the user's normal Music/Videos folders instead of creating a
+        # literal ``C:\\root`` directory.
+        if os.name == "nt":
+            for path_key in ("audio_download_path", "video_download_path"):
+                configured_path = self.__config.get(path_key)
+                normalized_path = str(configured_path or "").replace("\\", "/")
+                if normalized_path.startswith("/root/"):
+                    self.__config[path_key] = os.path.join(
+                        os.path.expanduser("~"), normalized_path.removeprefix("/root/")
+                    )
+
         # Make Download Dirs
         try:
             os.makedirs(self.get("audio_download_path"), exist_ok=True)
@@ -113,9 +127,9 @@ class Config:
             os.makedirs(self.get("video_download_path"), exist_ok=True)
 
         # Set FFMPEG Path
-        ffmpeg_path = os.environ.get(
-            "FFMPEG_PATH", "/usr/bin/ffmpeg"
-        )  # Assuming ffmpeg is available at /usr/bin/ffmpeg in the Docker container
+        ffmpeg_path = os.environ.get("FFMPEG_PATH") or shutil.which("ffmpeg")
+        if not ffmpeg_path and os.name != "nt":
+            ffmpeg_path = "/usr/bin/ffmpeg"
 
         if ffmpeg_path and os.path.isfile(ffmpeg_path):
             self._ffmpeg_bin_path = ffmpeg_path

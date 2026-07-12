@@ -42,14 +42,17 @@ from .services_middleware import (
 )
 
 from .constants import ItemStatus
+from .library import remember_item, verify_file
 from .otsconfig import config
 from .runtimedata import (
     pending,
+    download_paused,
     download_queue,
     download_queue_lock,
     get_logger,
     temp_download_path,
     progress_hook,
+    wait_for_download_resume,
 )
 from .utils import (
     add_to_m3u_file,
@@ -61,6 +64,7 @@ from .utils import (
     set_music_thumbnail,
     strip_metadata,
     requeue_item,
+    retry_single_item,
     jittered_delay,
 )
 from .resources.exceptions import TrackUnavailableError
@@ -103,15 +107,21 @@ class RetryWorker:
                     for local_id, item in download_queue.items():
                         if item["available"] is False:
                             continue
-                        # ---- Skip terminal-state items --------------------------------
-                        terminal_statuses = {
+                        # Only retry items that actually need a retry. Waiting,
+                        # downloading, and completed playlist entries must stay
+                        # in the visible batch queue.
+                        retryable_statuses = {
                             ItemStatus.CANCELLED,
                             ItemStatus.FAILED,
-                            ItemStatus.DELETED,
+                            ItemStatus.UNAVAILABLE,
                         }
-                        if item["item_status"] in terminal_statuses:
-                            item["available"] = True
+                        if item["item_status"] not in retryable_statuses:
+                            continue
+                        item["available"] = True
                         item["item_status"] = ItemStatus.WAITING
+                        item["error"] = ""
+                        item["_stats_recorded"] = False
+                        item["retry_count"] = int(item.get("retry_count", 0) or 0) + 1
                         found_items.append(item)
 
                     for item in found_items:
@@ -149,6 +159,26 @@ class DownloadWorker:
     # Main loop
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _retry_or_fail(item, error: str) -> bool:
+        """Retry transient download failures while preserving partial files."""
+        max_retries = max(0, int(config.get("api_retry_max_attempts", 3) or 3))
+        retry_count = int(item.get("retry_count", 0) or 0)
+        if retry_count < max_retries and not item.get("_discarded"):
+            item["retry_count"] = retry_count + 1
+            item["error"] = f"{error} (automatic retry {retry_count + 1}/{max_retries})"
+            item["_stats_recorded"] = False
+            item["_active_download"] = False
+            item["item_status"] = ItemStatus.WAITING
+            retry_single_item(item)
+            return True
+
+        item["error"] = error
+        item["item_status"] = ItemStatus.FAILED
+        progress_hook(item, 0, item["item_status"])
+        requeue_item(item)
+        return False
+
     def run(self) -> None:
         """Process download queue items until stopped."""
         while self.is_running:
@@ -157,6 +187,9 @@ class DownloadWorker:
             file_path = ""
 
             try:
+                if download_paused.is_set():
+                    time.sleep(0.2)
+                    continue
                 # ---- Fetch next item from download queue ----------------------
                 try:
                     if not pending.empty():
@@ -164,7 +197,21 @@ class DownloadWorker:
                         if item is None:
                             time.sleep(0.2)
                             continue
+                        if item.get("_discarded"):
+                            continue
                         with download_queue_lock:
+                            # Playlist items are registered before they reach
+                            # pending so the UI can show the full batch. If a
+                            # user cleared one in the meantime, do not
+                            # resurrect it when the pending item is consumed.
+                            if item.get("queue_preloaded") and item["local_id"] not in download_queue:
+                                continue
+                            if item["local_id"] not in download_queue:
+                                item["queue_position"] = max(
+                                    [entry.get("queue_position", -1) for entry in download_queue.values()],
+                                    default=-1,
+                                ) + 1
+                                item.setdefault("priority", 0)
                             download_queue[item["local_id"]] = item
                     else:
                         time.sleep(0.2)
@@ -178,6 +225,9 @@ class DownloadWorker:
                 item_type = item["item_type"]
                 item_id = item["item_id"]
 
+                self._apply_download_profile(item)
+                item["_active_download"] = True
+                wait_for_download_resume(item)
                 item["item_status"] = ItemStatus.DOWNLOADING
                 progress_hook(item, 1, item["item_status"])
 
@@ -189,6 +239,7 @@ class DownloadWorker:
                 # If no token is available, mark the item as failed and continue to the next item.
                 if token is False:
                     logger.error("No token available for service '%s'", service)
+                    item["error"] = f"No active account is available for {service}."
                     item["item_status"] = ItemStatus.FAILED
                     progress_hook(item, 0, item["item_status"])
                     requeue_item(item)
@@ -221,6 +272,7 @@ class DownloadWorker:
                     if "Max retries" in str(exc) or "exhausted" in str(exc):
                         error_msg += " (Rate limit exceeded - please try again later or reduce concurrent downloads)"
                     logger.error(error_msg, exc_info=exc)
+                    item["error"] = error_msg
                     item["item_status"] = ItemStatus.FAILED
                     
                     requeue_item(item)
@@ -249,6 +301,7 @@ class DownloadWorker:
                 # ---- Playability check ----------------------------------------
                 if not item_metadata.get("is_playable", True):
                     logger.error("Track is unavailable", extra={"track_id": item_id})
+                    item["error"] = "The service marked this item as unavailable."
                     item["item_status"] = ItemStatus.UNAVAILABLE
                     progress_hook(item, 0, item["item_status"])
                     requeue_item(item)
@@ -272,6 +325,7 @@ class DownloadWorker:
                     )
                 except TrackUnavailableError:
                     logger.error("Track is unavailable", extra={"track_id": item_id})
+                    item["error"] = "The service marked this item as unavailable."
                     item["item_status"] = ItemStatus.UNAVAILABLE
                     
                     requeue_item(item)
@@ -280,9 +334,7 @@ class DownloadWorker:
                     logger.error(
                         "Download failed", extra={"item": item, "error": str(exc)}
                     )
-                    item["item_status"] = ItemStatus.FAILED
-                    
-                    requeue_item(item)
+                    self._retry_or_fail(item, str(exc))
                     continue
 
                 # ---- Post-processing (convert, tag, thumbnail, lyrics, ecc) ------------------------------------------
@@ -311,8 +363,17 @@ class DownloadWorker:
                             video_files,
                         )
 
+                if service != "generic" and item_type in ("track", "podcast_episode"):
+                    verification = verify_file(item.get("file_path", ""))
+                    if not verification.get("valid"):
+                        raise RuntimeError(
+                            f"Final file verification failed: {verification.get('reason', 'invalid audio')}"
+                        )
+
                 # ---- Mark downloaded ------------------------------------------
                 item["item_status"] = ItemStatus.DOWNLOADED
+                item["_active_download"] = False
+                item["error"] = ""
                 logger.info("Item Successfully Downloaded")
                 item["progress"] = 100
                 # --- Emit final progress metadata --------------------------------
@@ -325,6 +386,7 @@ class DownloadWorker:
                         item_progress["file_size"] = str(
                             os.path.getsize(item["file_path"])
                         )
+                        remember_item(item, item["file_path"])
                     progress_hook(item_progress, 100, item["item_status"])
                 except Exception as e:
                     logger.error("error emitting progress metadata", exc_info=e)
@@ -341,20 +403,39 @@ class DownloadWorker:
                     str(exc),
                 )
                 if item is not None:
+                    item["_active_download"] = False
                     if item["item_status"] != ItemStatus.CANCELLED:
-                        item["item_status"] = ItemStatus.FAILED
-
-                    progress_hook(item, 0, item["item_status"])
+                        self._retry_or_fail(item, str(exc))
                     delay = jittered_delay()
                     time.sleep(delay)
                     # remove possible trash files
                     for path in (temp_path, file_path, item.get("file_path", "")):
+                        # Keep the temporary download so the next retry can
+                        # continue it when the underlying service supports
+                        # ranged/continued downloads.
+                        if path == temp_path:
+                            continue
                         if isinstance(path, str) and path and os.path.exists(path):
                             os.remove(path)
 
     # ------------------------------------------------------------------
     # Path helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_download_profile(item):
+        profiles = config.get("download_profiles", []) or []
+        active_id = item.get("profile_id") or config.get("active_download_profile")
+        profile = next((entry for entry in profiles if entry.get("id") == active_id), None)
+        if profile is None and profiles:
+            profile = profiles[0]
+        if not profile:
+            return
+        item["profile_id"] = profile.get("id")
+        item["profile_name"] = profile.get("name", profile.get("id", "Default"))
+        item["profile_format"] = str(profile.get("format", config.get("track_file_format"))).lstrip(".")
+        item["profile_bitrate"] = profile.get("bitrate", config.get("file_bitrate"))
+        item["profile_download_path"] = profile.get("download_path", "")
 
     def _resolve_paths(self, item, item_type, item_path):
         """Return ``(temp_file_path, file_path)`` for *item*."""
@@ -365,6 +446,8 @@ class DownloadWorker:
 
         if temp_download_path:
             dl_root = temp_download_path[0]
+        elif item_type in ("track", "podcast_episode") and item.get("profile_download_path"):
+            dl_root = item["profile_download_path"]
 
         file_path = os.path.join(dl_root, item_path)
         directory, file_name = os.path.split(file_path)
@@ -600,10 +683,12 @@ class DownloadWorker:
                 item_metadata.update(extra)
 
         # Rename temp file to final path with correct extension
+        target_format = item.get("profile_format") or config.get("track_file_format")
+        target_bitrate = item.get("profile_bitrate") or config.get("file_bitrate")
         if config.get("raw_media_download") or config.get("use_source_format"):
             final_path = file_path + default_format
         elif item_type == "track":
-            final_path = file_path + "." + config.get("track_file_format")
+            final_path = file_path + "." + target_format
         else:
             final_path = file_path + "." + config.get("podcast_file_format")
 
@@ -612,9 +697,14 @@ class DownloadWorker:
 
         if not config.get("raw_media_download"):
             progress_hook(item, 70, ItemStatus.CONVERTING)
-            if config.get("use_custom_file_bitrate"):
-                bitrate = config.get("file_bitrate")
-            convert_audio_format(final_path, bitrate, default_format)
+            if item.get("profile_bitrate") or config.get("use_custom_file_bitrate"):
+                bitrate = target_bitrate
+            convert_audio_format(
+                final_path,
+                bitrate,
+                default_format,
+                force_bitrate=bool(item.get("profile_bitrate")),
+            )
             embed_metadata(item, item_metadata)
 
             if config.get("save_album_cover") or config.get("embed_cover"):

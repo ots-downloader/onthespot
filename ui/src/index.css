@@ -1,2 +1,1683 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: dark;
+  --spotify-green: #1ed760;
+  --spotify-green-bright: #1fdf64;
+  --ots-green-contrast: #147f3e;
+  --ots-green-contrast-hover: #158642;
+  --spotify-black: #121212;
+  --spotify-surface: #222222;
+  --spotify-surface-elevated: #292929;
+  --spotify-text: #f5f5f5;
+  --spotify-muted: #b3b3b3;
+  --ots-border: #303030;
+  --ots-border-strong: #414141;
+  --ots-field: #272727;
+  --ots-danger: #ff7b7b;
+  --ots-warning: #f6b94a;
+  --ots-on-accent: #ffffff;
+  --ots-accent-soft: color-mix(in srgb, var(--spotify-green) 14%, var(--spotify-surface));
+  --ots-accent-soft-strong: color-mix(in srgb, var(--spotify-green) 24%, var(--spotify-surface));
+  --ots-accent-border: color-mix(in srgb, var(--spotify-green) 48%, var(--spotify-surface));
+  --ots-divider: color-mix(in srgb, var(--ots-border-strong) 74%, var(--spotify-surface));
+  --ots-radius-lg: 0.5rem;
+  --ots-radius-md: 0.375rem;
+  --ots-radius-sm: 0.25rem;
+  --ots-font-sans: "Spotify Mix", "Circular", Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--spotify-black);
+  color: var(--spotify-text);
+  font-family: var(--ots-font-sans);
+  letter-spacing: -0.008em;
+}
+
+.font-sans,
+.font-mono,
+.font-serif,
+button,
+input,
+select,
+textarea {
+  font-family: var(--ots-font-sans) !important;
+}
+
+html:not(.dark) {
+  color-scheme: light;
+}
+
+html:not(.dark) body {
+  background: #f5f5f5;
+  color: #181818;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus {
+  outline: none;
+}
+
+button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--spotify-green) 55%, transparent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--spotify-green) 35%, transparent);
+  color: white;
+}
+
+/* Keep the existing component library, but give its shared blue accents the
+   Spotify green treatment. */
+.bg-blue-600 { background-color: var(--ots-green-contrast) !important; }
+.bg-blue-500 { background-color: var(--ots-green-contrast) !important; }
+.bg-blue-100 { background-color: var(--ots-accent-soft) !important; }
+.bg-blue-50 { background-color: color-mix(in srgb, var(--spotify-green) 9%, var(--spotify-surface)) !important; }
+.text-blue-700,
+.text-blue-600,
+.text-blue-500 { color: var(--spotify-green) !important; }
+.text-blue-400,
+.text-blue-300 { color: var(--spotify-green-bright) !important; }
+.border-blue-200,
+.border-blue-800,
+.border-blue-800\/50 { border-color: var(--ots-accent-border) !important; }
+.hover\:bg-blue-700:hover { background-color: var(--spotify-green-bright) !important; }
+.hover\:bg-blue-100:hover { background-color: var(--ots-accent-soft-strong) !important; }
+.hover\:bg-blue-50:hover { background-color: var(--ots-accent-soft) !important; }
+
+/* A compact, card-based radius scale inspired by Spotify's denser product UI. */
+.rounded-3xl { border-radius: 0.5rem !important; }
+.rounded-2xl { border-radius: 0.5rem !important; }
+.rounded-xl { border-radius: 0.375rem !important; }
+.rounded-lg { border-radius: 0.375rem !important; }
+.rounded-md { border-radius: 0.25rem !important; }
+.rounded-full { border-radius: 0.25rem !important; }
+.rounded-full.h-10.w-10 { border-radius: 9999px !important; }
+
+/* Theme bridge for the Spotify-style surfaces introduced in the redesign. */
+.light-theme {
+  --spotify-black: #f5f5f5;
+  --spotify-surface: #ffffff;
+  --spotify-surface-elevated: #f0f0f0;
+  --spotify-text: #181818;
+  --spotify-muted: #6f6f6f;
+  --spotify-green: #158642;
+  --spotify-green-bright: #147f3e;
+  background: #f5f5f5;
+  color: #181818;
+}
+
+.light-theme header {
+  background-color: #f5f5f5 !important;
+  border-color: #dedede !important;
+}
+
+.light-theme main {
+  background: #f5f5f5;
+}
+
+.light-theme [class~="bg-[#121212]"],
+.light-theme [class~="bg-[#151515]"],
+.light-theme [class~="bg-[#181818]"],
+.light-theme [class~="bg-[#1c1c1c]"],
+.light-theme [class~="bg-[#202020]"],
+.light-theme [class~="bg-[#242424]"],
+.light-theme [class~="bg-[#282828]"],
+.light-theme [class~="bg-[#2b2b2b]"] {
+  background-color: #ffffff !important;
+}
+
+.light-theme [class~="bg-[#173b25]"] {
+  background-color: var(--ots-accent-soft) !important;
+}
+
+.light-theme [class~="bg-[#2c2417]"] {
+  background-color: #fff7e5 !important;
+}
+
+.light-theme [class*="from-[#2b2b2b]"],
+.light-theme [class*="via-[#1c1c1c]"],
+.light-theme [class*="to-[#151515]"] {
+  --tw-gradient-from: #ffffff var(--tw-gradient-from-position) !important;
+  --tw-gradient-via: #f0f0f0 var(--tw-gradient-via-position) !important;
+  --tw-gradient-to: #e8e8e8 var(--tw-gradient-to-position) !important;
+}
+
+.light-theme [class*="from-[#242424]"],
+.light-theme [class*="to-[#181818]"] {
+  background-image: linear-gradient(110deg, #ffffff 0%, #ededed 100%) !important;
+}
+
+.light-theme [class*="from-[#2b2b2b]"] {
+  background-image: linear-gradient(135deg, #ffffff 0%, #eeeeee 100%) !important;
+}
+
+.light-theme [class~="text-white"] {
+  color: var(--spotify-text) !important;
+}
+
+.light-theme [class~="bg-neutral-900"][class~="text-white"] {
+  background-color: #181818 !important;
+  color: #ffffff !important;
+}
+
+.light-theme [class~="text-[#b3b3b3]"],
+.light-theme [class~="text-[#8f8f8f]"],
+.light-theme [class~="text-[#6f6f6f]"] {
+  color: #6f6f6f !important;
+}
+
+.light-theme [class~="text-[#1ed760]"] {
+  color: var(--spotify-green) !important;
+}
+
+.light-theme [class~="text-[#f6b94a]"] {
+  color: #9a6a12 !important;
+}
+
+.light-theme [class~="text-[#b8f5c9]"] {
+  color: var(--spotify-green) !important;
+}
+
+.light-theme [class~="border-[#282828]"],
+.light-theme [class~="border-[#303030]"],
+.light-theme [class~="border-[#3b3b3b]"],
+.light-theme [class~="border-[#333]"],
+.light-theme [class~="border-[#3a3a3a]"],
+.light-theme [class~="border-[#275c37]"] {
+  border-color: #dedede !important;
+}
+
+.light-theme [class~="border-[#6a4920]"] {
+  border-color: #ead5a8 !important;
+}
+
+.light-theme .ots-on-green-text,
+.light-theme .ots-button-primary,
+.light-theme .ots-segment-active,
+.light-theme .ots-filter-chip-active {
+  color: var(--ots-on-accent) !important;
+}
+
+.light-theme .ots-filter-chip-active {
+  border-color: var(--ots-green-contrast) !important;
+  background: var(--ots-green-contrast) !important;
+}
+
+.light-theme .ots-nav-item[class~="bg-[#282828]"] {
+  background: #e9e9e9 !important;
+  color: #181818 !important;
+}
+
+.light-theme [class~="hover:bg-[#1f1f1f]"]:hover,
+.light-theme [class~="hover:bg-[#242424]"]:hover,
+.light-theme [class~="hover:bg-[#282828]"]:hover,
+.light-theme [class~="hover:bg-[#333]"]:hover {
+  background-color: #e9e9e9 !important;
+}
+
+.spotify-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.spotify-scrollbar::-webkit-scrollbar-thumb {
+  background: #535353;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+
+.spotify-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes spotify-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.spotify-fade-up {
+  animation: spotify-fade-up 320ms ease-out both;
+}
+
+/* Shared application language. New and legacy screens use these primitives
+   so controls, panels, and fields feel like one product. */
+.ots-page {
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  gap: 0.875rem !important;
+  padding: 1rem 0.75rem 1.5rem;
+}
+
+.ots-hero {
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-lg);
+  background: var(--spotify-surface);
+  box-shadow: none;
+  padding: 1.25rem !important;
+}
+
+.ots-hero h1 {
+  font-size: clamp(1.6rem, 2.4vw, 2.25rem) !important;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+}
+
+.ots-hero h2 {
+  font-size: 1.375rem !important;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+
+.ots-panel,
+.ots-card {
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-lg);
+  background: var(--spotify-surface);
+  box-shadow: none;
+}
+
+.ots-card-active {
+  border-color: var(--spotify-green);
+  background: var(--spotify-surface-elevated);
+}
+
+.ots-library-row {
+  background: transparent;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ots-library-row:hover,
+.ots-library-row:focus-within {
+  background: var(--spotify-surface-elevated) !important;
+  box-shadow: inset 3px 0 0 var(--spotify-green);
+}
+
+.ots-button {
+  display: inline-flex;
+  min-height: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--ots-radius-sm);
+  padding-inline: 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+
+.ots-button-sm {
+  min-height: 2rem;
+  height: 2rem;
+}
+
+.ots-button-md {
+  min-height: 2.75rem;
+  height: 2.75rem;
+}
+
+.ots-button-lg {
+  min-height: 3rem;
+  height: 3rem;
+}
+
+.ots-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ots-button-primary {
+  background: var(--ots-green-contrast);
+  color: var(--ots-on-accent, #fff);
+  box-shadow: none;
+}
+
+.ots-button-primary:hover:not(:disabled) {
+  background: var(--ots-green-contrast-hover);
+}
+
+/* Keep white labels readable on bright green surfaces with a restrained edge. */
+.ots-on-green-text,
+.ots-button-primary,
+.ots-segment-active,
+.ots-filter-chip-active {
+  text-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.46);
+}
+
+.ots-button-secondary {
+  border: 1px solid var(--ots-border-strong);
+  background: var(--ots-field);
+  color: var(--spotify-text);
+}
+
+.ots-button-secondary:hover:not(:disabled) {
+  background: #2a2a2a;
+}
+
+.ots-button-ghost {
+  color: var(--spotify-muted);
+}
+
+.ots-button-ghost:hover:not(:disabled) {
+  background: #242424;
+  color: var(--spotify-text);
+}
+
+.ots-button-danger {
+  border: 1px solid #5b3030;
+  background: #2c1d1d;
+  color: var(--ots-danger);
+}
+
+.ots-button-danger:hover:not(:disabled) {
+  background: #402424;
+}
+
+.ots-button-warning {
+  border: 1px solid #5c4724;
+  background: #2b2418;
+  color: #f6b94a;
+}
+
+.ots-button-warning:hover:not(:disabled) {
+  background: #3a3020;
+}
+
+.ots-input,
+.ots-select {
+  min-height: 2.5rem;
+  border: 1px solid var(--ots-border-strong);
+  border-radius: var(--ots-radius-sm);
+  background: var(--ots-field);
+  color: var(--spotify-text);
+  padding: 0.5rem 0.75rem;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ots-search-input {
+  padding-left: 2.5rem !important;
+}
+
+.ots-toolbar-control {
+  min-height: 2.75rem !important;
+  height: 2.75rem !important;
+}
+
+.ots-sort-select {
+  padding-left: 2.5rem !important;
+  padding-right: 2.25rem !important;
+}
+
+.ots-input::placeholder {
+  color: #777;
+}
+
+.ots-input:focus,
+.ots-select:focus {
+  border-color: var(--spotify-green);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--spotify-green) 36%, transparent);
+}
+
+.ots-settings-section {
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-lg);
+  background: var(--spotify-surface);
+  padding: 1.5rem;
+}
+
+.ots-settings-section-title {
+  color: var(--spotify-green);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.ots-settings-divider > * + * {
+  border-top: 1px solid var(--ots-divider);
+}
+
+/* Settings uses many legacy Tailwind divider utilities. Give those shared
+   separators one stronger, theme-aware color so they remain visible across
+   dark, light, and custom palettes. */
+.ots-settings-content {
+  --ots-divider: color-mix(in srgb, var(--ots-border-strong) 74%, var(--spotify-surface));
+}
+
+.ots-settings-content [class*="divide-"] > :not([hidden]) ~ :not([hidden]),
+.ots-settings-content [class*="border-gray-100"],
+.ots-settings-content [class*="border-gray-200"],
+.ots-settings-content [class*="border-neutral-800"] {
+  border-color: var(--ots-divider) !important;
+}
+
+.ots-toggle {
+  position: relative;
+  display: inline-flex;
+  height: 1.5rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--ots-radius-md);
+  padding: 0;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.ots-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--spotify-green) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.ots-toggle-on {
+  border-color: var(--spotify-green);
+  background: var(--ots-green-contrast);
+}
+
+.ots-toggle-off {
+  border-color: var(--ots-border-strong);
+  background: var(--ots-field);
+}
+
+.ots-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  height: 1.125rem;
+  width: 1.125rem;
+  border-radius: var(--ots-radius-sm);
+  background: var(--ots-on-accent, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  transition: transform 200ms ease;
+}
+
+.ots-segmented {
+  display: flex;
+  gap: 0.125rem;
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-md);
+  background: var(--ots-field);
+  padding: 0.125rem;
+}
+
+.ots-segment {
+  min-height: 2rem;
+  border-radius: var(--ots-radius-sm);
+  padding-inline: 0.75rem;
+  color: var(--spotify-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.ots-segment:hover {
+  color: var(--spotify-text);
+}
+
+.ots-segment-active {
+  background: var(--ots-green-contrast);
+  color: var(--ots-on-accent, #fff);
+}
+
+.ots-icon-button {
+  display: inline-flex;
+  height: 2.25rem;
+  width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--ots-radius-sm);
+  color: var(--spotify-muted);
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.ots-icon-button:hover {
+  border-color: var(--ots-border-strong);
+  background: var(--ots-field);
+  color: var(--spotify-text);
+}
+
+.ots-nav-item:focus-visible,
+.ots-theme-toggle:focus-visible {
+  outline: none;
+}
+
+.ots-nav-item {
+  min-height: 2.5rem;
+  gap: 0.75rem !important;
+  border-radius: var(--ots-radius-sm) !important;
+  padding: 0.625rem 0.75rem !important;
+  font-size: 0.75rem !important;
+}
+
+.ots-theme-toggle {
+  border-radius: var(--ots-radius-sm) !important;
+}
+
+.ots-kicker {
+  color: var(--spotify-green);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ots-tile {
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-sm);
+  background: var(--spotify-surface);
+  padding: 1rem;
+}
+
+.ots-tile-label {
+  color: #777;
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ots-status-cell {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  overflow: hidden;
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-sm);
+  background: var(--ots-field);
+  color: var(--spotify-muted);
+  padding-inline: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: none;
+}
+
+.ots-status-cell--online {
+  border-color: var(--ots-accent-border);
+  background: var(--ots-green-contrast);
+  color: var(--ots-on-accent, #fff);
+}
+
+.ots-status-cell:hover {
+  box-shadow: none;
+}
+
+.ots-status-cell:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--spotify-green) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.ots-queue-header {
+  overflow: hidden;
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-lg);
+  background: var(--spotify-surface);
+  box-shadow: none;
+}
+
+.ots-filter-chip {
+  display: inline-flex;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-sm);
+  background: var(--ots-field);
+  color: var(--spotify-muted);
+  padding-inline: 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.ots-filter-chip:hover {
+  border-color: var(--ots-border-strong);
+  background: var(--spotify-surface-elevated);
+  color: var(--spotify-text);
+}
+
+.ots-filter-chip-active {
+  border-color: var(--spotify-green);
+  background: var(--ots-green-contrast);
+  color: var(--ots-on-accent, #fff);
+}
+
+.ots-filter-count {
+  min-width: 1.25rem;
+  border-radius: var(--ots-radius-sm);
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0.125rem 0.375rem;
+  text-align: center;
+  font-size: 0.625rem;
+  line-height: 1.1;
+}
+
+.ots-filter-chip-active .ots-filter-count {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* Palette-aware states. These replace the old fixed Spotify-green surfaces so
+   every preset keeps its own accent in both light and dark mode. */
+.ots-on-accent {
+  color: var(--ots-on-accent) !important;
+  text-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.34);
+}
+
+.ots-nav-item-active,
+.ots-nav-item-active:hover {
+  background: var(--ots-green-contrast) !important;
+  color: var(--ots-on-accent) !important;
+}
+
+.ots-nav-item:hover:not(:disabled) {
+  background: var(--spotify-surface-elevated) !important;
+  color: var(--spotify-text) !important;
+}
+
+.ots-accent-badge,
+.ots-queued-state {
+  border: 1px solid var(--ots-accent-border) !important;
+  background: var(--ots-accent-soft) !important;
+  color: var(--spotify-green) !important;
+}
+
+.ots-health-banner {
+  color: var(--spotify-text);
+}
+
+.ots-health-banner--connected {
+  border-color: var(--ots-accent-border) !important;
+  background: var(--ots-accent-soft) !important;
+}
+
+.ots-health-banner--warning {
+  border-color: color-mix(in srgb, var(--ots-warning) 42%, var(--spotify-surface)) !important;
+  background: color-mix(in srgb, var(--ots-warning) 12%, var(--spotify-surface)) !important;
+}
+
+.ots-status-pill--active {
+  border-color: var(--ots-accent-border) !important;
+  background: var(--ots-green-contrast) !important;
+  color: var(--ots-on-accent) !important;
+}
+
+.ots-status-pill--inactive {
+  border-color: var(--ots-border) !important;
+  background: var(--ots-field) !important;
+  color: var(--spotify-muted) !important;
+}
+
+.ots-log-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+}
+
+.ots-log-badge-info {
+  border-color: var(--ots-accent-border);
+  background: var(--ots-accent-soft);
+  color: var(--spotify-green);
+}
+
+.ots-log-badge-warning {
+  border-color: color-mix(in srgb, var(--ots-warning) 36%, var(--spotify-surface));
+  background: color-mix(in srgb, var(--ots-warning) 12%, var(--spotify-surface));
+  color: var(--ots-warning);
+}
+
+.ots-log-badge-error {
+  border-color: color-mix(in srgb, var(--ots-danger) 36%, var(--spotify-surface));
+  background: color-mix(in srgb, var(--ots-danger) 12%, var(--spotify-surface));
+  color: var(--ots-danger);
+}
+
+.light-theme {
+  --ots-border: #dedede;
+  --ots-border-strong: #c9c9c9;
+  --ots-field: #f1f1f1;
+  --ots-danger: #c94444;
+  --ots-warning: #9a6a12;
+}
+
+.light-theme .ots-hero {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.light-theme .ots-panel,
+.light-theme .ots-card {
+  background: #ffffff;
+}
+
+.light-theme .ots-card-active {
+  background: #eaf7ee;
+}
+
+.light-theme .ots-button-secondary {
+  color: #181818;
+}
+
+.light-theme .ots-button-secondary:hover:not(:disabled),
+.light-theme .ots-button-ghost:hover:not(:disabled),
+.light-theme .ots-icon-button:hover {
+  background: #e7e7e7;
+  color: #181818;
+}
+
+.light-theme .ots-button-danger {
+  border-color: #efc7c7;
+  background: #fff2f2;
+}
+
+.light-theme .ots-button-warning {
+  border-color: #ead5a8;
+  background: #fff7e5;
+  color: #9a6a12;
+}
+
+.light-theme .ots-button-warning:hover:not(:disabled) {
+  background: #ffefc6;
+}
+
+.light-theme .ots-filter-chip {
+  background: #f1f1f1;
+  color: #6f6f6f;
+}
+
+.light-theme .ots-filter-chip:hover {
+  background: #e7e7e7;
+  color: #181818;
+}
+
+.light-theme .ots-status-cell {
+  background: #f1f1f1;
+  color: #6f6f6f;
+}
+
+.light-theme .ots-status-cell--online {
+  border-color: #b9dfc2;
+  background: #eaf7ee;
+  color: #18783b;
+}
+
+@media (min-width: 768px) {
+  .ots-page {
+    padding: 1.5rem 1.5rem 2.25rem;
+  }
+
+  .ots-hero {
+    padding: 1.5rem !important;
+  }
+}
+
+/* Typography lock: keep the legacy Tailwind surfaces on the same compact
+   scale as the newer Lyra-style panels. */
+.ots-page [class~="text-[10px]"],
+.ots-page [class~="text-[11px]"],
+.ots-page [class~="text-xs"] {
+  font-size: 0.6875rem !important;
+  line-height: 1.25 !important;
+}
+
+.ots-page [class~="text-sm"] {
+  font-size: 0.8125rem !important;
+  line-height: 1.45 !important;
+}
+
+.ots-page [class~="text-base"] {
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+}
+
+.ots-page [class~="text-lg"] {
+  font-size: 1rem !important;
+  line-height: 1.3 !important;
+}
+
+.ots-page [class~="text-xl"] {
+  font-size: 1.25rem !important;
+  line-height: 1.2 !important;
+}
+
+.ots-page [class~="text-3xl"],
+.ots-page [class~="text-4xl"],
+.ots-page [class~="text-5xl"] {
+  font-size: 1.875rem !important;
+  line-height: 1.1 !important;
+}
+
+.ots-page [class~="text-2xl"] {
+  font-size: 1.5rem !important;
+  line-height: 1.1 !important;
+}
+
+.ots-page .ots-hero h1,
+.ots-page .ots-hero h2,
+.ots-page .ots-queue-header h2 {
+  font-size: 1.875rem !important;
+  line-height: 1.08 !important;
+  font-weight: 700 !important;
+}
+
+.ots-page .ots-panel h3 {
+  font-size: 1.375rem !important;
+  line-height: 1.15 !important;
+}
+
+.ots-page .ots-button,
+.ots-page .ots-segment,
+.ots-page .ots-filter-chip,
+.ots-page .ots-status-cell {
+  font-size: 0.6875rem !important;
+  line-height: 1 !important;
+}
+
+.ots-page .ots-input,
+.ots-page .ots-select {
+  font-size: 0.75rem !important;
+  line-height: 1.25 !important;
+}
+
+.ots-theme-toggle {
+  font-size: 0.75rem !important;
+  line-height: 1.25 !important;
+}
+
+/* Theme picker cards. */
+.ots-theme-option {
+  display: flex;
+  min-height: 4.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--ots-border-strong);
+  border-radius: var(--ots-radius-md);
+  background: var(--ots-field);
+  color: var(--spotify-text);
+  padding: 0.75rem;
+  text-align: left;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.ots-theme-option:hover {
+  border-color: var(--spotify-green);
+  background: var(--spotify-surface-elevated);
+}
+
+.ots-theme-option-active {
+  border-color: var(--spotify-green);
+  background: var(--spotify-surface-elevated);
+}
+
+.ots-theme-preview {
+  display: flex;
+  height: 2.25rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid var(--ots-border-strong);
+  border-radius: var(--ots-radius-sm);
+}
+
+.ots-theme-preview span {
+  flex: 1;
+}
+
+.ots-theme-mode {
+  border: 1px solid var(--ots-border-strong);
+  border-radius: var(--ots-radius-sm);
+  color: var(--spotify-muted);
+  padding: 0.125rem 0.3rem;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.ots-theme-check {
+  margin-left: auto;
+  color: var(--spotify-green);
+  font-size: 1rem;
+  font-weight: 800;
+  opacity: 0;
+}
+
+.ots-theme-check-visible {
+  opacity: 1;
+}
+
+/* Additional dark presets. The shared primitives inherit these tokens, while
+   these remaps keep older hard-coded utility classes visually consistent. */
+.theme-midnight {
+  --spotify-black: #0f111a;
+  --spotify-surface: #171b2a;
+  --spotify-surface-elevated: #20263a;
+  --spotify-text: #f4f6ff;
+  --spotify-muted: #adb5cf;
+  --spotify-green: #91a8ff;
+  --spotify-green-bright: #a7b8ff;
+  --ots-green-contrast: #4d5fb3;
+  --ots-green-contrast-hover: #5b70c8;
+  --ots-border: #2b3450;
+  --ots-border-strong: #3b4666;
+  --ots-field: #1d2436;
+  --ots-danger: #ff8f9b;
+}
+
+.theme-forest {
+  --spotify-black: #0f1712;
+  --spotify-surface: #17221a;
+  --spotify-surface-elevated: #203126;
+  --spotify-text: #f3faf5;
+  --spotify-muted: #a6b8ab;
+  --spotify-green: #8ce8ae;
+  --spotify-green-bright: #a2f2bf;
+  --ots-green-contrast: #246b48;
+  --ots-green-contrast-hover: #2f7c55;
+  --ots-border: #2e4435;
+  --ots-border-strong: #405b47;
+  --ots-field: #1d2b22;
+  --ots-danger: #ff9197;
+}
+
+.theme-midnight,
+.theme-forest {
+  background: var(--spotify-black);
+  color: var(--spotify-text);
+}
+
+.theme-midnight header,
+.theme-forest header,
+.theme-midnight main,
+.theme-forest main {
+  background-color: var(--spotify-black) !important;
+  border-color: var(--ots-border) !important;
+}
+
+.theme-midnight [class~="bg-[#121212]"],
+.theme-forest [class~="bg-[#121212]"],
+.theme-midnight [class~="bg-[#151515]"],
+.theme-forest [class~="bg-[#151515]"] {
+  background-color: var(--spotify-black) !important;
+}
+
+.theme-midnight [class~="bg-[#181818]"],
+.theme-forest [class~="bg-[#181818]"],
+.theme-midnight [class~="bg-[#1c1c1c]"],
+.theme-forest [class~="bg-[#1c1c1c]"],
+.theme-midnight [class~="bg-[#202020]"],
+.theme-forest [class~="bg-[#202020]"],
+.theme-midnight [class~="bg-[#242424]"],
+.theme-forest [class~="bg-[#242424]"],
+.theme-midnight [class~="bg-[#282828]"],
+.theme-forest [class~="bg-[#282828]"],
+.theme-midnight [class~="bg-[#2b2b2b]"],
+.theme-forest [class~="bg-[#2b2b2b]"] {
+  background-color: var(--spotify-surface) !important;
+}
+
+.theme-midnight [class~="bg-[#173b25]"],
+.theme-forest [class~="bg-[#173b25]"],
+.theme-midnight [class~="bg-[#1ed760]"],
+.theme-forest [class~="bg-[#1ed760]"],
+.theme-midnight [class~="bg-[#147f3e]"],
+.theme-forest [class~="bg-[#147f3e]"],
+.theme-midnight [class~="bg-[#158642]"],
+.theme-forest [class~="bg-[#158642]"] {
+  background-color: var(--ots-green-contrast) !important;
+}
+
+.theme-midnight [class~="text-[#1ed760]"],
+.theme-forest [class~="text-[#1ed760]"],
+.theme-midnight [class~="text-[#158642]"],
+.theme-forest [class~="text-[#158642]"] {
+  color: var(--spotify-green) !important;
+}
+
+.theme-midnight [class~="text-[#b3b3b3]"],
+.theme-forest [class~="text-[#b3b3b3]"],
+.theme-midnight [class~="text-[#8f8f8f]"],
+.theme-forest [class~="text-[#8f8f8f]"],
+.theme-midnight [class~="text-[#6f6f6f]"],
+.theme-forest [class~="text-[#6f6f6f]"],
+.theme-midnight [class~="text-[#777]"],
+.theme-forest [class~="text-[#777]"] {
+  color: var(--spotify-muted) !important;
+}
+
+.theme-midnight [class~="text-[#555]"],
+.theme-forest [class~="text-[#555]"],
+.theme-midnight [class~="text-[#535353]"],
+.theme-forest [class~="text-[#535353]"] {
+  color: var(--ots-border-strong) !important;
+}
+
+.theme-midnight [class~="text-[#ff7b7b]"],
+.theme-forest [class~="text-[#ff7b7b]"] {
+  color: var(--ots-danger) !important;
+}
+
+.theme-midnight [class~="border-[#282828]"],
+.theme-forest [class~="border-[#282828]"],
+.theme-midnight [class~="border-[#303030]"],
+.theme-forest [class~="border-[#303030]"],
+.theme-midnight [class~="border-[#333]"],
+.theme-forest [class~="border-[#333]"],
+.theme-midnight [class~="border-[#3a3a3a]"],
+.theme-forest [class~="border-[#3a3a3a]"] {
+  border-color: var(--ots-border) !important;
+}
+
+.theme-midnight [class~="border-[#275c37]"],
+.theme-forest [class~="border-[#275c37]"],
+.theme-midnight [class~="border-[#1ed760]"],
+.theme-forest [class~="border-[#1ed760]"] {
+  border-color: var(--spotify-green) !important;
+}
+
+.theme-midnight .ots-status-cell--online,
+.theme-forest .ots-status-cell--online {
+  border-color: var(--ots-green-contrast);
+  background: var(--ots-green-contrast);
+  color: #fff;
+}
+
+.theme-midnight .ots-card-active,
+.theme-forest .ots-card-active {
+  border-color: var(--spotify-green);
+  background: var(--spotify-surface-elevated);
+}
+
+/* More ready-made palettes. */
+.theme-ocean {
+  --spotify-black: #0b1620;
+  --spotify-surface: #132734;
+  --spotify-surface-elevated: #1b3545;
+  --spotify-text: #eaf7ff;
+  --spotify-muted: #a4bfcd;
+  --spotify-green: #67d5ff;
+  --spotify-green-bright: #8fe2ff;
+  --ots-green-contrast: #176a8a;
+  --ots-green-contrast-hover: #1f7f9f;
+  --ots-border: #2c4857;
+  --ots-border-strong: #3e6070;
+  --ots-field: #1a303d;
+  --ots-danger: #ff9292;
+}
+
+.theme-sunset {
+  --spotify-black: #1b1210;
+  --spotify-surface: #2a1b18;
+  --spotify-surface-elevated: #382421;
+  --spotify-text: #fff5ed;
+  --spotify-muted: #cdb4aa;
+  --spotify-green: #ffab70;
+  --spotify-green-bright: #ffc08f;
+  --ots-green-contrast: #a34b26;
+  --ots-green-contrast-hover: #bc5e33;
+  --ots-border: #55382f;
+  --ots-border-strong: #704a3e;
+  --ots-field: #33231f;
+  --ots-danger: #ff8f8f;
+}
+
+.theme-violet {
+  --spotify-black: #15111d;
+  --spotify-surface: #211a2d;
+  --spotify-surface-elevated: #2e2440;
+  --spotify-text: #f8f3ff;
+  --spotify-muted: #b9accb;
+  --spotify-green: #c49cff;
+  --spotify-green-bright: #d5b7ff;
+  --ots-green-contrast: #6a45a6;
+  --ots-green-contrast-hover: #7955b8;
+  --ots-border: #44365a;
+  --ots-border-strong: #5c4a74;
+  --ots-field: #2a2038;
+  --ots-danger: #ff91ad;
+}
+
+.theme-rose {
+  --spotify-black: #1c1014;
+  --spotify-surface: #2a181e;
+  --spotify-surface-elevated: #382128;
+  --spotify-text: #fff3f6;
+  --spotify-muted: #cfadb8;
+  --spotify-green: #ff8fab;
+  --spotify-green-bright: #ffa9bd;
+  --ots-green-contrast: #9f3657;
+  --ots-green-contrast-hover: #b64668;
+  --ots-border: #55303b;
+  --ots-border-strong: #704353;
+  --ots-field: #332029;
+  --ots-danger: #ffabb6;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) {
+  background: var(--spotify-black);
+  color: var(--spotify-text);
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) header,
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) main {
+  background-color: var(--spotify-black) !important;
+  border-color: var(--ots-border) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#121212]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#151515]"] {
+  background-color: var(--spotify-black) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#181818]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#1c1c1c]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#202020]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#242424]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#282828]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#2b2b2b]"] {
+  background-color: var(--spotify-surface) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#173b25]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#1ed760]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#147f3e]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="bg-[#158642]"] {
+  background-color: var(--ots-green-contrast) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="text-[#1ed760]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="text-[#158642]"] {
+  color: var(--spotify-green) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="text-[#b3b3b3]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="text-[#8f8f8f]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="text-[#6f6f6f]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="text-[#777]"] {
+  color: var(--spotify-muted) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="text-[#ff7b7b]"] {
+  color: var(--ots-danger) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="border-[#282828]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="border-[#303030]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="border-[#333]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="border-[#3a3a3a]"] {
+  border-color: var(--ots-border) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="border-[#275c37]"],
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) [class~="border-[#1ed760]"] {
+  border-color: var(--spotify-green) !important;
+}
+
+:is(.theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) .ots-status-cell--online {
+  border-color: var(--ots-green-contrast);
+  background: var(--ots-green-contrast);
+  color: var(--ots-on-accent, #fff);
+}
+
+.theme-custom .ots-hero,
+.theme-custom .ots-panel,
+.theme-custom .ots-card,
+.theme-custom .ots-queue-header,
+.theme-custom .ots-tile {
+  border-color: var(--ots-border) !important;
+  background: var(--spotify-surface) !important;
+  color: var(--spotify-text);
+}
+
+.theme-custom .ots-card-active {
+  border-color: var(--spotify-green) !important;
+  background: var(--spotify-surface-elevated) !important;
+}
+
+.theme-custom .ots-button-secondary:hover:not(:disabled),
+.theme-custom .ots-button-ghost:hover:not(:disabled),
+.theme-custom .ots-icon-button:hover {
+  border-color: var(--ots-border-strong);
+  background: var(--spotify-surface-elevated) !important;
+  color: var(--spotify-text) !important;
+}
+
+.theme-custom .ots-filter-chip,
+.theme-custom .ots-status-cell {
+  background: var(--ots-field);
+  color: var(--spotify-muted);
+}
+
+.theme-custom .ots-on-green-text,
+.theme-custom .ots-button-primary,
+.theme-custom .ots-segment-active,
+.theme-custom .ots-filter-chip-active {
+  color: var(--ots-on-accent) !important;
+}
+
+/* Controls used by the custom palette editor. */
+.ots-color-control {
+  display: flex;
+  min-height: 4.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--ots-border-strong);
+  border-radius: var(--ots-radius-md);
+  background: var(--ots-field);
+  padding: 0.75rem;
+}
+
+.ots-color-control input[type="color"] {
+  height: 2rem;
+  width: 2.5rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  overflow: hidden;
+  border: 1px solid var(--ots-border-strong);
+  border-radius: var(--ots-radius-sm);
+  background: transparent;
+  padding: 0.125rem;
+}
+
+.ots-color-control input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.ots-color-control input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 0.125rem;
+}
+
+.ots-color-control code {
+  color: var(--spotify-muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Every built-in palette has a light companion selected by the same global
+   mode toggle. The accent remains recognizable while surfaces become bright. */
+.theme-spotify.light-theme {
+  --spotify-black: #f5f5f5;
+  --spotify-surface: #ffffff;
+  --spotify-surface-elevated: #f0f0f0;
+  --spotify-text: #181818;
+  --spotify-muted: #6f6f6f;
+  --spotify-green: #158642;
+  --spotify-green-bright: #147f3e;
+  --ots-green-contrast: #147f3e;
+  --ots-green-contrast-hover: #158642;
+  --ots-border: #dedede;
+  --ots-border-strong: #c9c9c9;
+  --ots-field: #f1f1f1;
+  --ots-danger: #c94444;
+  --ots-on-accent: #ffffff;
+}
+
+.theme-midnight.light-theme {
+  --spotify-black: #f3f5ff;
+  --spotify-surface: #ffffff;
+  --spotify-surface-elevated: #eef1ff;
+  --spotify-text: #171b2c;
+  --spotify-muted: #5d6884;
+  --spotify-green: #4d5fb3;
+  --spotify-green-bright: #5b70c8;
+  --ots-green-contrast: #3d4d99;
+  --ots-green-contrast-hover: #4d5fb3;
+  --ots-border: #d9def0;
+  --ots-border-strong: #bdc6e0;
+  --ots-field: #f0f2fb;
+  --ots-danger: #b4233b;
+  --ots-on-accent: #ffffff;
+}
+
+.theme-forest.light-theme {
+  --spotify-black: #f2f8f3;
+  --spotify-surface: #ffffff;
+  --spotify-surface-elevated: #edf6ef;
+  --spotify-text: #15231a;
+  --spotify-muted: #617565;
+  --spotify-green: #2f7c55;
+  --spotify-green-bright: #246b48;
+  --ots-green-contrast: #246b48;
+  --ots-green-contrast-hover: #2f7c55;
+  --ots-border: #d6e5da;
+  --ots-border-strong: #b9cfbf;
+  --ots-field: #eff6f0;
+  --ots-danger: #b4233b;
+  --ots-on-accent: #ffffff;
+}
+
+.theme-ocean.light-theme {
+  --spotify-black: #f0f8fc;
+  --spotify-surface: #ffffff;
+  --spotify-surface-elevated: #eaf5fa;
+  --spotify-text: #132734;
+  --spotify-muted: #5b7381;
+  --spotify-green: #0b789f;
+  --spotify-green-bright: #0e89b2;
+  --ots-green-contrast: #176a8a;
+  --ots-green-contrast-hover: #1f7f9f;
+  --ots-border: #d2e3eb;
+  --ots-border-strong: #b4ccd6;
+  --ots-field: #eff7fa;
+  --ots-danger: #b4233b;
+  --ots-on-accent: #ffffff;
+}
+
+.theme-sunset.light-theme {
+  --spotify-black: #fff6f1;
+  --spotify-surface: #ffffff;
+  --spotify-surface-elevated: #fff0e8;
+  --spotify-text: #321d17;
+  --spotify-muted: #7b625a;
+  --spotify-green: #a34b26;
+  --spotify-green-bright: #bc5e33;
+  --ots-green-contrast: #9a4322;
+  --ots-green-contrast-hover: #a34b26;
+  --ots-border: #ead7cf;
+  --ots-border-strong: #d9b9aa;
+  --ots-field: #fff4ef;
+  --ots-danger: #b4233b;
+  --ots-on-accent: #ffffff;
+}
+
+.theme-violet.light-theme {
+  --spotify-black: #f8f5ff;
+  --spotify-surface: #ffffff;
+  --spotify-surface-elevated: #f2edfc;
+  --spotify-text: #241d32;
+  --spotify-muted: #70637c;
+  --spotify-green: #6a45a6;
+  --spotify-green-bright: #7955b8;
+  --ots-green-contrast: #613c99;
+  --ots-green-contrast-hover: #6a45a6;
+  --ots-border: #e0d7ed;
+  --ots-border-strong: #c4b6d6;
+  --ots-field: #f6f2fb;
+  --ots-danger: #b4233b;
+  --ots-on-accent: #ffffff;
+}
+
+.theme-rose.light-theme {
+  --spotify-black: #fff5f7;
+  --spotify-surface: #ffffff;
+  --spotify-surface-elevated: #ffedf1;
+  --spotify-text: #351821;
+  --spotify-muted: #7c626c;
+  --spotify-green: #9f3657;
+  --spotify-green-bright: #b64668;
+  --ots-green-contrast: #96314f;
+  --ots-green-contrast-hover: #9f3657;
+  --ots-border: #ead5dc;
+  --ots-border-strong: #d9bac5;
+  --ots-field: #fff2f5;
+  --ots-danger: #b4233b;
+  --ots-on-accent: #ffffff;
+}
+
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-hero,
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-panel,
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-card,
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-queue-header,
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-tile {
+  border-color: var(--ots-border) !important;
+  background: var(--spotify-surface) !important;
+  color: var(--spotify-text);
+}
+
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-card-active {
+  border-color: var(--spotify-green) !important;
+  background: var(--spotify-surface-elevated) !important;
+}
+
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-button-secondary,
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-filter-chip,
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-status-cell {
+  color: var(--spotify-text);
+}
+
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-button-secondary:hover:not(:disabled),
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-button-ghost:hover:not(:disabled),
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose).light-theme .ots-icon-button:hover {
+  background: var(--spotify-surface-elevated) !important;
+  color: var(--spotify-text) !important;
+}
+
+.theme-light.dark-theme {
+  --spotify-black: #121212;
+  --spotify-surface: #222222;
+  --spotify-surface-elevated: #292929;
+  --spotify-text: #f5f5f5;
+  --spotify-muted: #b3b3b3;
+  --spotify-green: #1ed760;
+  --spotify-green-bright: #1fdf64;
+  --ots-green-contrast: #147f3e;
+  --ots-green-contrast-hover: #158642;
+  --ots-border: #303030;
+  --ots-border-strong: #414141;
+  --ots-field: #272727;
+  --ots-danger: #ff7b7b;
+  --ots-on-accent: #ffffff;
+}
+
+/* Recompute derived accent tokens after each preset has supplied its own
+   palette. Custom properties inherited from :root otherwise retain the
+   default Spotify-green/dark-surface mix. */
+:is(.theme-spotify, .theme-midnight, .theme-forest, .theme-light, .theme-ocean, .theme-sunset, .theme-violet, .theme-rose, .theme-custom) {
+  --ots-accent-soft: color-mix(in srgb, var(--spotify-green) 14%, var(--spotify-surface));
+  --ots-accent-soft-strong: color-mix(in srgb, var(--spotify-green) 24%, var(--spotify-surface));
+  --ots-accent-border: color-mix(in srgb, var(--spotify-green) 48%, var(--spotify-surface));
+  --ots-divider: color-mix(in srgb, var(--ots-border-strong) 74%, var(--spotify-surface));
+}
+
+/* Final light-mode bridge for legacy utility classes. Keep these rules after
+   the preset remaps so old green literals inherit the selected palette. */
+.light-theme [class~="bg-[#173b25]"] {
+  background-color: var(--ots-accent-soft) !important;
+}
+
+.light-theme [class~="bg-[#147f3e]"],
+.light-theme [class~="bg-[#158642]"],
+.light-theme [class~="bg-[#1ed760]"] {
+  background-color: var(--ots-green-contrast) !important;
+}
+
+.light-theme [class~="border-[#147f3e]"],
+.light-theme [class~="border-[#158642]"],
+.light-theme [class~="border-[#1ed760]"],
+.light-theme [class~="border-[#275c37]"] {
+  border-color: var(--ots-accent-border) !important;
+}
+
+.light-theme [class~="text-[#1ed760]"],
+.light-theme [class~="text-[#158642]"],
+.light-theme [class~="text-[#b8f5c9]"] {
+  color: var(--spotify-green) !important;
+}
+
+.light-theme .ots-status-cell--online {
+  border-color: var(--ots-accent-border) !important;
+  background: var(--ots-green-contrast) !important;
+  color: var(--ots-on-accent) !important;
+}
+
+.light-theme .ots-card-active {
+  border-color: var(--spotify-green) !important;
+  background: var(--spotify-surface-elevated) !important;
+}
+
+.light-theme .ots-nav-item:hover:not(:disabled) {
+  background: var(--spotify-surface-elevated) !important;
+  color: var(--spotify-text) !important;
+}
+
+.light-theme .ots-nav-item-active,
+.light-theme .ots-nav-item-active:hover:not(:disabled) {
+  background: var(--ots-green-contrast) !important;
+  color: var(--ots-on-accent) !important;
+}
+
+/* Keep Local Library interactions on the selected theme accent instead of
+   falling back to the neutral grey hover treatment. */
+.ots-button-secondary:hover:not(:disabled),
+.ots-filter-chip:hover,
+.ots-button-ghost:hover:not(:disabled) {
+  border-color: var(--spotify-green) !important;
+  background: var(--ots-green-contrast) !important;
+  color: var(--ots-on-accent, #fff) !important;
+}
+
+.ots-input:hover,
+.ots-select:hover {
+  border-color: var(--spotify-green) !important;
+  background: var(--ots-accent-soft) !important;
+}
+
+.ots-page .ots-library-row:hover,
+.ots-page .ots-library-row:focus-within {
+  background: var(--ots-accent-soft) !important;
+  box-shadow: inset 3px 0 0 var(--spotify-green);
+}
+
+/* One shared button geometry across legacy and redesigned screens. The
+   semantic size classes remain available, but all standard buttons use the
+   same compact control height so old h-9/h-10/h-11 utilities cannot create
+   mismatched rows. */
+.ots-button,
+.ots-button-sm,
+.ots-button-md,
+.ots-button-lg {
+  min-height: 2.5rem !important;
+  height: 2.5rem !important;
+  border-radius: var(--ots-radius-sm) !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+}
+
+.ots-button {
+  padding-inline: 0.875rem !important;
+}
+
+.ots-button.w-9,
+.ots-button.w-10,
+.ots-button[class~="px-0"] {
+  padding-inline: 0 !important;
+}
+
+.ots-button:focus-visible,
+.ots-filter-chip:focus-visible,
+.ots-segment:focus-visible,
+.ots-icon-button:focus-visible,
+.ots-status-cell:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--spotify-green) 65%, transparent) !important;
+  outline-offset: 2px;
+}
+
+/* Keep the Local Library sort dropdown aligned with its Search button. */
+.ots-sort-select.ots-toolbar-control {
+  min-height: 2.5rem !important;
+  height: 2.5rem !important;
+}
+
+/* Browse Catalogue tabs use the same compact filter treatment as the queue:
+   a quiet grouped surface with one clear themed active button. */
+.ots-browse-tabs {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border: 1px solid var(--ots-border);
+  border-radius: var(--ots-radius-md);
+  background: var(--ots-field);
+  padding: 0.25rem;
+}
+
+.ots-browse-tabs.ots-queue-filters {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.ots-browse-tabs.ots-library-filters {
+  height: 2.5rem;
+  padding: 0.125rem;
+}
+
+.ots-library-filters .ots-browse-tab {
+  height: 2rem;
+}
+
+.ots-browse-tab {
+  display: inline-flex;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--ots-radius-sm);
+  padding-inline: 1rem;
+  color: var(--spotify-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.ots-browse-tab:hover:not(:disabled) {
+  border-color: var(--spotify-green);
+  background: var(--ots-accent-soft);
+  color: var(--spotify-text);
+}
+
+.ots-browse-tab-active,
+.ots-browse-tab-active:hover:not(:disabled) {
+  border-color: var(--spotify-green);
+  background: var(--ots-green-contrast);
+  color: var(--ots-on-accent, #fff);
+  text-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.46);
+}
+
+.ots-browse-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--spotify-green) 65%, transparent);
+  outline-offset: 2px;
+}

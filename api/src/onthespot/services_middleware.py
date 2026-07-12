@@ -29,13 +29,47 @@ from .api.spotify import reinit_spotify_session
 
 from .accounts import get_account_token
 from .constants import ItemStatus
-from .runtimedata import  get_logger, progress_hook, yt_dlp_progress_hook
+from .runtimedata import get_logger, progress_hook, wait_for_download_resume, yt_dlp_progress_hook
 from .resources.exceptions import TrackUnavailableError, DownloadCancelled
 from .otsconfig import config
 from .utils import requeue_item, run_ffmpeg
 
 
 logger = get_logger("services_middleware")
+
+
+def _download_http_with_resume(item, url, temp_path, headers=None):
+    """Stream a URL into *temp_path*, continuing a partial file when possible."""
+    headers = dict(headers or {})
+    existing = os.path.getsize(temp_path) if os.path.isfile(temp_path) else 0
+    if existing:
+        headers["Range"] = f"bytes={existing}-"
+
+    response = requests.get(url, headers=headers, stream=True, timeout=60)
+    response.raise_for_status()
+    can_append = existing > 0 and response.status_code == 206
+    if not can_append:
+        existing = 0
+    total_size = int(response.headers.get("Content-Length", 0) or 0) + existing
+    downloaded = existing
+
+    with open(temp_path, "ab" if can_append else "wb") as audio_file:
+        for chunk in response.iter_content(chunk_size=config.get("download_chunk_size", 65536)):
+            if not chunk:
+                continue
+            if item.get("item_status") == ItemStatus.CANCELLED:
+                raise DownloadCancelled("Download cancelled by user.")
+            wait_for_download_resume(item)
+            downloaded += len(chunk)
+            audio_file.write(chunk)
+            progress_hook(
+                item,
+                int((downloaded / total_size) * 100) if total_size else item.get("progress", 0),
+                ItemStatus.DOWNLOADING,
+                downloaded_bytes=downloaded,
+                total_bytes=total_size or None,
+            )
+    return downloaded
 
 
 def download_spotify(item, item_id, item_type, token, temp_path):
@@ -83,6 +117,8 @@ def download_spotify(item, item_id, item_type, token, temp_path):
                     item,
                     int((downloaded / total_size) * 100),
                     ItemStatus.DOWNLOADING,
+                    downloaded_bytes=downloaded,
+                    total_bytes=total_size,
                 )
             if not chunk:
                 break
@@ -180,7 +216,11 @@ def download_deezer(item, item_id, token, temp_path):
             if item["item_status"] == ItemStatus.CANCELLED:
                 raise DownloadCancelled("Download cancelled by user.")
             progress_hook(
-                item, int((downloaded / total_size) * 100), ItemStatus.DOWNLOADING
+                item,
+                int((downloaded / total_size) * 100),
+                ItemStatus.DOWNLOADING,
+                downloaded_bytes=downloaded,
+                total_bytes=total_size,
             )
 
     bf_key = calcbfkey(song["SNG_ID"])
@@ -232,14 +272,7 @@ def download_via_ytdlp_audio(
                     "Tidal: Direct URL detected", extra={"url": direct_url[:80]}
                 )
                 headers = {"Authorization": f"Bearer {token['access_token']}"}
-                resp = requests.get(
-                    direct_url, headers=headers, stream=True, timeout=60
-                )
-                resp.raise_for_status()
-                with open(temp_path, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=65536):
-                        if chunk:
-                            f.write(chunk)
+                _download_http_with_resume(item, direct_url, temp_path, headers)
                 mime = manifest_json.get("codecs", "audio/mp4")
                 default_format = ".flac" if "flac" in mime else ".m4a"
                 bitrate = "1411k"
@@ -288,6 +321,10 @@ def download_via_ytdlp_audio(
             "noprogress": True,
             "extract_audio": True,
             "outtmpl": temp_path,
+            "continuedl": True,
+            "overwrites": False,
+            "retries": 3,
+            "fragment_retries": 3,
         }
     )
     ydl_opts["progress_hooks"] = [lambda d: yt_dlp_progress_hook(item, d)]
@@ -317,22 +354,7 @@ def download_http_stream(
         bitrate = "128k"
         file_url = item_metadata["file_url"]
 
-    response = requests.get(file_url, stream=True, timeout=60)
-    total_size = int(response.headers.get("Content-Length", 0))
-    downloaded = 0
-
-    with open(temp_path, "wb") as audio_file:
-        for chunk in response.iter_content(
-            chunk_size=config.get("download_chunk_size", 1024)
-        ):
-            if not chunk:
-                continue
-            downloaded += len(chunk)
-            audio_file.write(chunk)
-            if total_size > 0 and downloaded != total_size:
-                if item["item_status"] == ItemStatus.CANCELLED:
-                    raise DownloadCancelled("Download cancelled by user.")
-                progress_hook(item, int((downloaded / total_size) * 100))
+    _download_http_with_resume(item, file_url, temp_path)
 
     return default_format, bitrate
 
@@ -366,6 +388,10 @@ def download_apple_music(item, item_id, token, temp_path):
         "fixup": "never",
         "allowed_extractors": ["generic"],
         "noprogress": True,
+        "continuedl": True,
+        "overwrites": False,
+        "retries": 3,
+        "fragment_retries": 3,
     }
     ydl_opts["progress_hooks"] = [lambda d: yt_dlp_progress_hook(item, d)]
 
@@ -407,6 +433,10 @@ def download_crunchyroll(item, item_metadata, item_id, token, temp_path):
         "fixup": "never",
         "allowed_extractors": ["generic"],
         "noprogress": True,
+        "continuedl": True,
+        "overwrites": False,
+        "retries": 3,
+        "fragment_retries": 3,
     }
     ydl_base_opts["progress_hooks"] = [
         lambda d: yt_dlp_progress_hook(item, d)
@@ -590,6 +620,10 @@ def download_generic(item, item_id, temp_path):
         "outtmpl": config.get("video_download_path") + os.sep + "%(title)s.%(ext)s",
         "ffmpeg_location": config.get("_ffmpeg_bin_path"),
         "postprocessors": [{"key": "FFmpegMetadata"}],
+        "continuedl": True,
+        "overwrites": False,
+        "retries": 3,
+        "fragment_retries": 3,
     }
 
     ydl_opts["progress_hooks"] = [lambda d: yt_dlp_progress_hook(item, d)]
@@ -621,6 +655,10 @@ def download_generic_v2a(item, item_id, temp_path):
                 "preferredquality": config.get("v2a_preferred_bitrate"),
             },
         ],
+        "continuedl": True,
+        "overwrites": False,
+        "retries": 3,
+        "fragment_retries": 3,
     }
 
     ydl_opts["progress_hooks"] = [lambda d: yt_dlp_progress_hook(item, d)]
