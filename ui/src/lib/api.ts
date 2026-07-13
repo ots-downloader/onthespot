@@ -485,6 +485,18 @@ export async function requeueMissingLibraryItem(path: string): Promise<boolean> 
   }
 }
 
+export async function removeMissingLibraryItems(paths: string[] = []): Promise<number> {
+  try {
+    const res = await request("/library/missing", { method: "DELETE", body: JSON.stringify({ paths }) });
+    if (!res.ok) throw new Error("Failed to remove missing library entries");
+    const data = await res.json();
+    return Number(data?.removed || 0);
+  } catch (err) {
+    console.error("Remove missing library items failed:", err);
+    return 0;
+  }
+}
+
 export async function enqueueDownload(
   item: SearchResultItem,
 ): Promise<{ success: boolean }> {

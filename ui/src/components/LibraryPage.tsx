@@ -26,6 +26,7 @@ import {
   LibraryFilters,
   openLibraryItem,
   renameLibraryItem,
+  removeMissingLibraryItems,
   requeueMissingLibraryItem,
   scanLibrary,
   updateLibraryMetadata,
@@ -243,6 +244,20 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onQueueChanged }) => {
     if (ok) await onQueueChanged?.();
   };
 
+  const removeMissing = async (paths: string[], all = false) => {
+    const message = all
+      ? `Remove all ${missing.length} missing entries from the library index? This will not delete any files.`
+      : "Remove this missing entry from the library index? This will not delete any files.";
+    if (!window.confirm(message)) return;
+    const removed = await removeMissingLibraryItems(paths);
+    if (!removed) {
+      setStatus("Could not remove those missing library entries.");
+      return;
+    }
+    setStatus(`Removed ${removed} missing ${removed === 1 ? "entry" : "entries"} from the library index.`);
+    await load();
+  };
+
   const verifyFiles = async () => {
     const result = await verifyLibraryFiles();
     setStatus(result.corrupt ? `Found ${result.corrupt} corrupt or incomplete file(s).` : `Verified ${result.healthy} library file(s).`);
@@ -378,13 +393,19 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onQueueChanged }) => {
 
       {missing.length > 0 && (
         <section className="border border-[#6a4920] bg-[#2c2417] p-5">
-          <div className="mb-3 flex items-center gap-2 text-[#f6b94a]"><Trash2 className="h-4 w-4" /><h2 className="font-bold">Missing files</h2></div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-[#f6b94a]"><Trash2 className="h-4 w-4" /><h2 className="font-bold">Missing files</h2></div>
+            <button type="button" onClick={() => void removeMissing([], true)} className="ots-button ots-button-danger ots-button-sm shrink-0"><Trash2 className="h-4 w-4" /> Remove all</button>
+          </div>
           <p className="mb-4 text-xs text-[#c6b28d]">These indexed downloads are no longer on disk. Entries with a saved source can be queued again.</p>
           <div className="flex flex-col gap-2">
             {missing.map((item) => (
               <div key={item.id} className="flex flex-col justify-between gap-3 border border-[#4b3a20] bg-[#211b12] p-3 sm:flex-row sm:items-center">
                 <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{item.title || item.filename}</p><p className="truncate text-xs text-[#b3b3b3]">{item.artist || "Unknown artist"} · {item.filename}</p></div>
-                <button type="button" onClick={() => void requeueMissing(item)} disabled={!item.source_url} className="ots-button ots-button-warning ots-button-sm shrink-0 disabled:opacity-40">Re-download</button>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => void requeueMissing(item)} disabled={!item.source_url} className="ots-button ots-button-warning ots-button-sm disabled:opacity-40">Re-download</button>
+                  <button type="button" onClick={() => void removeMissing([item.path])} className="ots-button ots-button-danger ots-button-sm"><Trash2 className="h-4 w-4" /> Remove</button>
+                </div>
               </div>
             ))}
           </div>

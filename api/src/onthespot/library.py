@@ -453,6 +453,37 @@ def missing_items(query: str = "") -> list[dict[str, Any]]:
     return result
 
 
+def remove_missing_items(paths: list[str] | None = None) -> int:
+    """Forget missing entries from the provenance index without touching files.
+
+    The library index may outlive a file that was moved or deleted outside
+    OnTheSpot.  Removing one of these records only clears its saved metadata;
+    it never deletes a file from the music folder.
+    """
+    requested = {
+        _path_key(path)
+        for path in (paths or [])
+        if path and is_allowed_path(path, allow_missing=True)
+    }
+    if paths and not requested:
+        return 0
+
+    with _index_lock:
+        index = _load_index()
+        removed = 0
+        for key, item in list(index.items()):
+            path = str(item.get("path", ""))
+            if not path or os.path.isfile(path) or not item.get("source_url"):
+                continue
+            if requested and _path_key(path) not in requested:
+                continue
+            index.pop(key, None)
+            removed += 1
+        if removed:
+            _save_index(index)
+    return removed
+
+
 def rename_file(path: str, new_name: str) -> dict[str, Any]:
     normalized = _absolute(path)
     if not is_allowed_path(normalized):

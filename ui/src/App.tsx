@@ -251,8 +251,14 @@ const getCustomThemeStyle = (theme: CustomTheme, mode: ThemeMode = theme.mode): 
   } as React.CSSProperties;
 };
 
+const initialTabFromLocation = (): NavTab => {
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  const validTabs: NavTab[] = ["dashboard", "browse", "playlist-automation", "library", "queue", "statistics", "settings", "accounts", "diagnostics", "logs"];
+  return validTabs.includes(tab as NavTab) ? (tab as NavTab) : "dashboard";
+};
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>("dashboard");
+  const [activeTab, setActiveTab] = useState<NavTab>(initialTabFromLocation);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [config, setConfig] = useState<OTSConfig | null>(null);
   const [queue, setQueue] = useState<DownloadQueueItem[]>([]);

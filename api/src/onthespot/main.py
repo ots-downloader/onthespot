@@ -5,6 +5,7 @@ import json
 import uuid
 import re
 import shutil
+from urllib.parse import quote
 from pathlib import Path
 from typing import Any
 from contextlib import asynccontextmanager
@@ -56,6 +57,7 @@ from .constants import ItemStatus
 from .library import (
     is_allowed_path,
     missing_items,
+    remove_missing_items,
     read_cover,
     rename_file,
     scan_library,
@@ -272,6 +274,10 @@ class ActiveProfile(BaseModel):
 
 class LibraryPath(BaseModel):
     path: str
+
+
+class LibraryPaths(BaseModel):
+    paths: list[str] = []
 
 
 class LibraryVerify(BaseModel):
@@ -571,6 +577,16 @@ async def requeue_missing_library_item(request: LibraryPath):
     pending.put_nowait(item)
     notification_hook("Added missing file", f"Queued {item['name'] or source_url} for re-download.")
     return {"success": True, "local_id": local_id, "item": item}
+
+
+@app.delete("/library/missing")
+async def remove_missing_library_items(request: LibraryPaths):
+    removed = remove_missing_items(request.paths)
+    if request.paths and not removed:
+        raise HTTPException(status_code=404, detail="No missing indexed downloads match the selected entries")
+    if removed:
+        notification_hook("Library entries removed", f"Removed {removed} missing file entr{'y' if removed == 1 else 'ies'} from the library index.")
+    return {"success": True, "removed": removed}
 
 
 @app.post("/query/url")
@@ -1204,9 +1220,10 @@ async def playlist_automation_login():
 async def playlist_automation_callback(code: str = "", state: str | None = None):
     try:
         await _playlist_operation(playlist_automation.callback, code, state)
-        return RedirectResponse(f"{playlist_automation.application_url()}?playlist-automation=connected")
+        return RedirectResponse(f"{playlist_automation.application_url()}?tab=playlist-automation&playlist-automation=connected")
     except HTTPException as exc:
-        return RedirectResponse(f"{playlist_automation.application_url()}?playlist-automation=error&message={exc.detail}")
+        message = quote(str(exc.detail))
+        return RedirectResponse(f"{playlist_automation.application_url()}?tab=playlist-automation&playlist-automation=error&message={message}")
 
 
 @app.post("/playlist-automation/logout")
