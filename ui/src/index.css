@@ -428,16 +428,24 @@ button:focus-visible {
   -webkit-appearance: none !important;
   -moz-appearance: none !important;
   appearance: none !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b3b3b3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-origin: padding-box;
-  background-position: right 0.9rem center;
-  background-repeat: no-repeat;
-  background-size: 0.95rem;
+  background-image: none !important;
   padding-right: 2.85rem;
 }
 
 .ots-select::-ms-expand {
   display: none;
+}
+
+.ots-select-control {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 2.5rem;
+  vertical-align: middle;
+}
+
+.ots-select-control > .ots-select {
+  min-width: 0;
 }
 
 .ots-search-input {
@@ -449,7 +457,7 @@ button:focus-visible {
   height: 2.75rem !important;
 }
 
-.ots-sort-select {
+.ots-sort-select > .ots-select {
   padding-left: 2.5rem !important;
   padding-right: 2.25rem !important;
 }

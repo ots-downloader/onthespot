@@ -4,7 +4,6 @@ import {
   ArrowDownAZ,
   ArrowUpAZ,
   Check,
-  ChevronDown,
   Edit3,
   FolderOpen,
   ListMusic,
@@ -33,6 +32,7 @@ import {
   uploadLibraryCover,
   verifyLibraryFiles,
 } from "../lib/api";
+import { OtsSelect } from "./OtsSelect";
 
 interface LibraryPageProps {
   onQueueChanged?: () => Promise<void>;
@@ -333,15 +333,14 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onQueueChanged }) => {
         </form>
         <div className="relative shrink-0">
           <ArrowDownAZ className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#8f8f8f]" />
-          <select aria-label="Sort library by" value={sort} onChange={(event) => { const nextSort = event.target.value as SortMode; setSort(nextSort); setSortDescending(false); void load(false, { sort: nextSort, sortDescending: false }); }} className="ots-select ots-sort-select ots-toolbar-control min-w-[160px] appearance-none text-sm font-semibold">
+          <OtsSelect aria-label="Sort library by" value={sort} onChange={(event) => { const nextSort = event.target.value as SortMode; setSort(nextSort); setSortDescending(false); void load(false, { sort: nextSort, sortDescending: false }); }} className="ots-sort-select ots-toolbar-control min-w-[160px] text-sm font-semibold">
             <option value="artist">Sort by artist</option>
             <option value="album">Sort by album</option>
             <option value="genre">Sort by genre</option>
             <option value="title">Sort by title</option>
             <option value="date">Sort by date added</option>
             <option value="size">Sort by file size</option>
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8f8f8f]" />
+          </OtsSelect>
         </div>
         <button
           type="button"
@@ -366,7 +365,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onQueueChanged }) => {
       </section>
 
       <section className="ots-panel grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <select value={formatFilter} onChange={(event) => { const nextFormat = event.target.value; setFormatFilter(nextFormat); void load(false, { formatFilter: nextFormat }); }} className="ots-select text-sm">
+        <OtsSelect value={formatFilter} onChange={(event) => { const nextFormat = event.target.value; setFormatFilter(nextFormat); void load(false, { formatFilter: nextFormat }); }} className="text-sm">
           <option value="">All formats</option>
           <option value="mp3">MP3</option>
           <option value="flac">FLAC</option>
@@ -374,7 +373,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onQueueChanged }) => {
           <option value="opus">Opus</option>
           <option value="ogg">OGG</option>
           <option value="wav">WAV</option>
-        </select>
+        </OtsSelect>
         <input value={artistFilter} onChange={(event) => setArtistFilter(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void load(false, { artistFilter: event.currentTarget.value }); } }} placeholder="Filter by artist" className="ots-input text-sm" />
         <input value={genreFilter} onChange={(event) => setGenreFilter(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void load(false, { genreFilter: event.currentTarget.value }); } }} placeholder="Filter by genre" className="ots-input text-sm" />
         <div className="flex items-center gap-2">

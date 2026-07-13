@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Download, FolderOpen, Trash2, RefreshCw, CheckCircle2, AlertCircle, Clock, Zap, Copy, Check, Play, Pause, XCircle, ListMusic, ChevronDown, ChevronUp, GripVertical, ArrowDown, ArrowUp, Square, CheckSquare, Music2, Waves, Cloud, Disc3, CirclePlay, Heart, Headphones, Film } from 'lucide-react';
 import { DownloadQueueItem, OTSConfig } from '../types';
 import { DownloadProfile, getTargetBackendUrl, QueueBatchAction } from '../lib/api';
+import { OtsSelect } from './OtsSelect';
 
 interface DownloadQueueProps {
   queue: DownloadQueueItem[];
@@ -262,14 +263,14 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
           <div className="flex shrink-0 flex-col gap-2.5 lg:min-w-[590px] lg:items-end">
             <div className="flex flex-wrap items-center gap-2">
               {profiles.length > 0 && (
-                <select
+                <OtsSelect
                   value={activeProfile}
                   onChange={(event) => void onProfileChange(event.target.value)}
-                  className="ots-select h-11 max-w-[190px] text-xs font-bold"
+                  className="h-11 max-w-[190px] text-xs font-bold"
                   title="Download profile"
                 >
                   {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-                </select>
+                </OtsSelect>
               )}
               <button
                 onClick={async () => { setLoadingAction(true); await onPauseToggle(); setLoadingAction(false); }}
@@ -351,9 +352,9 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
           <button type="button" onClick={() => void runBatch("retry")} disabled={loadingAction} className="ots-button ots-button-warning ots-button-sm"><RefreshCw className="h-4 w-4" /> Retry</button>
           <button type="button" onClick={() => void runBatch("cancel")} disabled={loadingAction} className="ots-button ots-button-danger ots-button-sm"><XCircle className="h-4 w-4" /> Cancel</button>
           <button type="button" onClick={() => { if (window.confirm(`Delete ${selectedIds.length} selected queue item(s)?`)) void runBatch("delete"); }} disabled={loadingAction} className="ots-button ots-button-danger ots-button-sm"><Trash2 className="h-4 w-4" /> Delete</button>
-          <select value={batchPriority} onChange={(event) => setBatchPriority(Number(event.target.value))} className="ots-select h-9 text-xs"><option value={0}>Normal priority</option><option value={1}>High priority</option><option value={2}>Urgent priority</option></select>
+          <OtsSelect value={batchPriority} onChange={(event) => setBatchPriority(Number(event.target.value))} className="h-9 text-xs"><option value={0}>Normal priority</option><option value={1}>High priority</option><option value={2}>Urgent priority</option></OtsSelect>
           <button type="button" onClick={() => void runBatch("priority", { priority: batchPriority })} disabled={loadingAction} className="ots-button ots-button-secondary ots-button-sm">Apply priority</button>
-          <select value={batchProfile} onChange={(event) => setBatchProfile(event.target.value)} className="ots-select h-9 max-w-44 text-xs"><option value="">Change profile…</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select>
+          <OtsSelect value={batchProfile} onChange={(event) => setBatchProfile(event.target.value)} className="h-9 max-w-44 text-xs"><option value="">Change profile…</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</OtsSelect>
           <button type="button" onClick={() => void runBatch("profile", { profile_id: batchProfile })} disabled={!batchProfile || loadingAction} className="ots-button ots-button-secondary ots-button-sm">Apply profile</button>
         </>}
       </div>

@@ -730,7 +730,7 @@ export default function App() {
           <BrowseSpotify onDownload={handleDownloadItem} />
         )}
 
-        {activeTab === "playlist-automation" && <PlaylistAutomationPage onOpenApiConfig={() => { setSettingsSection("search"); setActiveTab("settings"); }} />}
+        {activeTab === "playlist-automation" && <PlaylistAutomationPage onOpenApiConfig={() => { setSettingsSection("search"); setActiveTab("settings"); }} onDownloadPlaylist={handleDownloadItem} />}
 
         {activeTab === "library" && (
           <LibraryPage onQueueChanged={async () => setQueue(await fetchDownloadQueue())} />
