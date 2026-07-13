@@ -7,7 +7,9 @@ import {
 } from "../types";
 
 const config = {
-  api_url: import.meta.env.VITE_API_URL || "http://localhost:6767",
+  // Production UI is served by FastAPI, so use the current browser origin.
+  // This also works behind Unraid's host/IP and reverse proxies.
+  api_url: import.meta.env.VITE_API_URL || window.location.origin,
 };
 const STORAGE_KEY = "OTS_FASTAPI_URL";
 const DEFAULT_URL = config.api_url;
