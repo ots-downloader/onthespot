@@ -32,6 +32,15 @@ For more further documentation, please see the following:
 1. [**Installation Guide**](docs/INSTALLATION.md)
 2. [**Basic Usage Instructions**](docs/USAGE.md)
 
+### Remote Spotify Connect companion
+
+If the OnTheSpot web/API service runs remotely (for example in Docker on
+Unraid) while Spotify is running on a desktop or phone LAN, use the bundled
+[Spotify Connect companion](companion/README.md). It keeps Spotify's local
+mDNS discovery on the Spotify user's LAN and sends only a short-lived pairing
+payload to the OnTheSpot server over the server URL. Tailscale can carry that
+API request, but it does not extend Spotify's local discovery broadcasts.
+
 > [!CAUTION]
 > Currently 1 user has reported having their Spotify account locked, the account was returned to them by emailing support. This notice will be updated if any further cases come to our attention.
 

@@ -187,6 +187,48 @@ def spotify_connect_status() -> dict:
         }
 
 
+def add_spotify_zeroconf_login(zeroconf_login: dict, account_uuid: str | None = None) -> bool:
+    """Persist a Spotify Connect login received locally or from a companion.
+
+    The companion only forwards the same three fields produced by librespot's
+    ZeroConf login file.  Keep the validation and duplicate handling in one
+    place so local and remote sign-in create identical account records.
+    """
+    if not isinstance(zeroconf_login, dict):
+        return False
+    username = str(zeroconf_login.get("username") or "").strip()
+    credentials = zeroconf_login.get("credentials")
+    credential_type = str(zeroconf_login.get("type") or "").strip()
+    if not username or not isinstance(credentials, str) or not credentials or not credential_type:
+        return False
+    if any(
+        isinstance(account, dict)
+        and account.get("service") == "spotify"
+        and account.get("login", {}).get("username") == username
+        for account in (config.get("accounts", []) or [])
+    ):
+        logger.info("Spotify account already exists")
+        return False
+
+    cfg_copy = list(config.get("accounts", []) or [])
+    cfg_copy.append(
+        {
+            "uuid": account_uuid or str(uuid.uuid4()),
+            "service": "spotify",
+            "active": True,
+            "login": {
+                "username": username,
+                "credentials": credentials,
+                "type": credential_type,
+            },
+        }
+    )
+    config.set("accounts", cfg_copy)
+    config.save()
+    logger.info("New Spotify account added to config for %s", username[:4] + "****")
+    return True
+
+
 def spotify_get_oauth_token():
     """Return an OAuth access token via the Client-Credentials flow using the
     user's own Spotify app credentials, or None if they aren't configured.
@@ -417,16 +459,6 @@ def spotify_new_session():
                 zs._ZeroconfServer__session,
                 zs._ZeroconfServer__session.username(),
             )
-            username = zs._ZeroconfServer__session.username()
-            if any(
-                isinstance(account, dict)
-                and account.get("service") == "spotify"
-                and account.get("login", {}).get("username") == username
-                for account in (config.get("accounts", []) or [])
-            ):
-                logger.info("Account already exists")
-                zs.close_session()
-                return False
             try:
                 with open(session_json_path, "r", encoding="utf-8") as file:
                     zeroconf_login = json.load(file)
@@ -450,26 +482,11 @@ def spotify_new_session():
                     "Unknown Error: %s\nTraceback: %s", str(e), traceback.format_exc()
                 )
                 return False
-            cfg_copy = config.get("accounts").copy()
-            new_user = {
-                "uuid": uuid_uniq,
-                "service": "spotify",
-                "active": True,
-                "login": {
-                    "username": zeroconf_login["username"],
-                    "credentials": zeroconf_login["credentials"],
-                    "type": zeroconf_login["type"],
-                },
-            }
             # Keep the discovery service alive after pairing.  Closing the
             # whole server here was the reason Spotify stopped showing
             # OnTheSpot after the first login.
             zs.close_session()
-            cfg_copy.append(new_user)
-            config.set("accounts", cfg_copy)
-            config.save()
-            logger.info("New account added to config.")
-            return True
+            return add_spotify_zeroconf_login(zeroconf_login, account_uuid=uuid_uniq)
 
 
 def spotify_login_user(account):

@@ -949,6 +949,24 @@ export async function check_api_version(): Promise<boolean> {
   }
 }
 
+export interface SpotifyCompanionPairing {
+  pairing_token: string;
+  expires_at: number;
+  expires_in: number;
+  device_name: string;
+}
+
+export async function createSpotifyCompanionPairing(): Promise<SpotifyCompanionPairing | null> {
+  try {
+    const res = await request("/accounts/spotify/companion/pair", { method: "POST" });
+    if (!res.ok) throw new Error("Create Spotify companion pairing failed");
+    return await res.json();
+  } catch (err) {
+    console.error("Create Spotify companion pairing failed:", err);
+    return null;
+  }
+}
+
 export type YouTubeAuthentication = {
   mode: "none" | "browser" | "cookie_file";
   browser?: string;

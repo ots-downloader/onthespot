@@ -1,5 +1,6 @@
 import os
 import asyncio
+import secrets
 import threading
 import time
 import json
@@ -33,6 +34,7 @@ from .api.qobuz import qobuz_add_account
 from .api.soundcloud import soundcloud_add_account
 from .api.crunchyroll import crunchyroll_add_account
 from .api.spotify import (
+    add_spotify_zeroconf_login,
     spotify_connect_status,
     spotify_get_search_results,
     spotify_new_session,
@@ -95,6 +97,9 @@ downloadworker = DownloadWorker()
 # spotifymirrorworker = MirrorSpotifyPlayback()
 retryworker = RetryWorker()
 fillaccountpool = FillAccountPool()
+_spotify_companion_pairings: dict[str, float] = {}
+_spotify_companion_pairing_lock = threading.Lock()
+_SPOTIFY_COMPANION_PAIRING_TTL = 10 * 60
 
 
 ##ONTHESPOT BRIDGE FUNCTIONS
@@ -257,6 +262,11 @@ app.add_middleware(
 class AccountData(BaseModel):
     username: str | None = None
     token: str | None = None
+
+
+class SpotifyCompanionLogin(BaseModel):
+    pairing_token: str
+    login: dict[str, Any]
 
 
 class YouTubeAuthentication(BaseModel):
@@ -1591,6 +1601,39 @@ async def add_account(service: str, item: AccountData | None = None):
         relogin()
     notification_hook(title="Logging in...")
     return found
+
+
+@app.post("/accounts/spotify/companion/pair")
+async def create_spotify_companion_pairing():
+    """Create a short-lived token for a local Spotify companion."""
+    now = time.time()
+    token = secrets.token_urlsafe(32)
+    with _spotify_companion_pairing_lock:
+        _spotify_companion_pairings.clear()
+        _spotify_companion_pairings[token] = now + _SPOTIFY_COMPANION_PAIRING_TTL
+    return {
+        "pairing_token": token,
+        "expires_at": int(now + _SPOTIFY_COMPANION_PAIRING_TTL),
+        "expires_in": _SPOTIFY_COMPANION_PAIRING_TTL,
+        "device_name": "OnTheSpot Companion",
+    }
+
+
+@app.post("/accounts/spotify/companion/complete")
+async def complete_spotify_companion_pairing(payload: SpotifyCompanionLogin):
+    """Accept one Spotify ZeroConf login from a paired local companion."""
+    token = payload.pairing_token.strip()
+    with _spotify_companion_pairing_lock:
+        expires_at = _spotify_companion_pairings.pop(token, None)
+    if not expires_at or expires_at < time.time():
+        raise HTTPException(status_code=401, detail="The companion pairing code is invalid or expired")
+
+    if not add_spotify_zeroconf_login(payload.login):
+        raise HTTPException(status_code=409, detail="This Spotify account is already configured or the login payload is invalid")
+
+    await run_in_threadpool(relogin)
+    notification_hook("Spotify account connected", "The Spotify companion delivered a new account login.")
+    return {"success": True}
 
 
 @app.post("/accounts/remove")
