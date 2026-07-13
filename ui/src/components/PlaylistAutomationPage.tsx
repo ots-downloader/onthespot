@@ -194,7 +194,7 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
     setCompanionPairing(pairing);
     setMessage("Pairing code created. Run the companion on the computer that is on the same network as Spotify.");
   };
-  const companionCommand = companionPairing ? `python companion/run.py --server-url "${getTargetBackendUrl()}" --pairing-token "${companionPairing.pairing_token}"` : "";
+  const companionCommand = companionPairing ? `.\\.companion-venv\\Scripts\\python.exe companion\\run.py --server-url "${getTargetBackendUrl()}" --pairing-token "${companionPairing.pairing_token}"` : "";
   const copyCompanionCommand = async () => {
     if (!companionCommand) return;
     try {
@@ -326,13 +326,13 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
           <p className="mt-1">This is the computer where the Spotify desktop app is open—not the Unraid server. Spotify and that computer must be on the same LAN. Tailscale is only used to send the completed login back to this OnTheSpot server.</p>
           <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[#b3b3b3]">
             <li>Download or clone the OnTheSpot repository on that computer.</li>
-            <li>Open PowerShell in the repository folder and run the one-time setup below.</li>
+            <li>Open PowerShell in the repository folder; all commands below must be run there.</li>
             <li>Click <strong className="text-white">Create companion pairing code</strong>, then run the generated command.</li>
             <li>In Spotify, open <strong className="text-white">Connect to a device</strong> and select <strong className="text-white">OnTheSpot Companion</strong>.</li>
           </ol>
           <div className="mt-3 border border-[var(--ots-warning)]/40 bg-black/20 p-3 text-[#b3b3b3]">
             <p className="font-semibold text-white">One-time Windows setup</p>
-            <code className="mt-2 block overflow-x-auto whitespace-pre-wrap border border-[var(--ots-border)] bg-black/30 p-2 text-[11px] text-white">py -m venv .companion-venv{`\n`}\.companion-venv\Scripts\python.exe -m pip install -r companion\requirements.txt</code>
+            <code className="mt-2 block overflow-x-auto border border-[var(--ots-border)] bg-black/30 p-2 text-[11px] text-white">py -m venv .companion-venv<br />.{"\\"}.companion-venv{"\\"}Scripts{"\\"}python.exe -m pip install -r companion{"\\"}requirements.txt</code>
             <p className="mt-2 text-[11px]">Run this once. Keep the terminal open while pairing.</p>
           </div>
           <button type="button" onClick={() => void createCompanionPairing()} disabled={busy === "companion"} className="ots-button ots-button-secondary mt-3 border-[var(--ots-warning)] text-[var(--ots-warning)]">{busy === "companion" ? "Creating pairing…" : "Create companion pairing code"}</button>
