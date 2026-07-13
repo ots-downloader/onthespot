@@ -37,5 +37,5 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ONTHESPOT_WEBUI_DIST=/app/ui/dist \
     PATH=/app/.venv/bin:$PATH
 
-EXPOSE 6767
+EXPOSE 6767 6768
 CMD ["fastapi", "run", "/app/app/onthespot/main.py", "--host", "0.0.0.0", "--port", "6767"]

@@ -2,12 +2,14 @@ import base64
 import json
 import os
 import re
+import socket
 import threading
 import time
 import traceback
 import uuid
 
 import requests
+import librespot.zeroconf as librespot_zeroconf
 from librespot.core import Session
 from librespot.zeroconf import ZeroconfServer
 from ..otsconfig import config, cache_dir
@@ -31,6 +33,158 @@ _oauth_token_lock = threading.Lock()
 
 _session_reinit_lock = threading.Lock()
 _SESSION_REINIT_TIMEOUT = 30
+
+# Spotify Connect discovery is a long-lived service.  The old sign-in flow
+# created this listener only while adding an account and then closed it once
+# credentials had been captured, which meant an existing installation could
+# never appear in Spotify's device picker after a restart.
+_spotify_connect_server = None
+_spotify_connect_lock = threading.RLock()
+_SPOTIFY_CONNECT_LOGIN_FILENAME = "spotify_connect_login.json"
+
+
+def _spotify_connect_port() -> int:
+    try:
+        return int(
+            os.environ.get(
+                "ONTHESPOT_SPOTIFY_CONNECT_PORT",
+                str(config.get("spotify_connect_port", 6768) or 0),
+            )
+            or 0
+        )
+    except (TypeError, ValueError):
+        return 0
+
+
+def _spotify_connect_interface() -> str | None:
+    """Choose the host interface Spotify clients can actually reach.
+
+    Hostnames on machines with VPN, Hyper-V, or Tailscale adapters often
+    resolve to the wrong address.  Spotify Connect needs the LAN address in
+    the mDNS record.  An explicit environment value wins; otherwise the
+    default-route address is selected without sending any traffic.
+    """
+    configured = str(os.environ.get("ONTHESPOT_SPOTIFY_CONNECT_INTERFACE", "") or "").strip()
+    if configured:
+        return configured
+
+    # Prefer a normal home/LAN address when one is available.  This avoids
+    # advertising a Hyper-V, VPN, or Tailscale address on Windows while still
+    # leaving ONTHESPOT_SPOTIFY_CONNECT_INTERFACE available for multi-NIC
+    # servers.
+    try:
+        candidates = socket.gethostbyname_ex(socket.gethostname())[2]
+        lan_candidates = [
+            address
+            for address in candidates
+            if address.startswith("192.168.") and not address.startswith("192.168.56.")
+        ]
+        if lan_candidates:
+            return lan_candidates[0]
+    except OSError:
+        pass
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("8.8.8.8", 80))
+        return probe.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        probe.close()
+
+
+def _spotify_connect_login_path() -> str:
+    sessions_dir = os.path.join(cache_dir(), "sessions")
+    os.makedirs(sessions_dir, exist_ok=True)
+    return os.path.join(sessions_dir, _SPOTIFY_CONNECT_LOGIN_FILENAME)
+
+
+def start_spotify_connect_service():
+    """Start the persistent Spotify Connect discovery/login service.
+
+    Spotify's device picker discovers OnTheSpot through mDNS, so this must run
+    for the lifetime of the API process.  It deliberately does not replace
+    the account-pool sessions used for downloading; it only provides the local
+    Connect pairing endpoint and can be reused when a new account is added.
+    """
+    global _spotify_connect_server
+
+    with _spotify_connect_lock:
+        if _spotify_connect_server is not None:
+            return _spotify_connect_server
+
+        client_id = "65b708073fc0480ea92a077233ca87bd"
+        ZeroconfServer._ZeroconfServer__default_get_info_fields["clientID"] = client_id
+        builder = ZeroconfServer.Builder()
+        builder.device_name = "OnTheSpot"
+        port = _spotify_connect_port()
+        if port > 0:
+            builder.set_listen_port(port)
+        builder.conf.stored_credentials_file = _spotify_connect_login_path()
+
+        interface = _spotify_connect_interface()
+        original_zeroconf = librespot_zeroconf.zeroconf.Zeroconf
+        original_hostname = ZeroconfServer.get_useful_hostname
+
+        # librespot-python currently constructs Zeroconf without an interface
+        # argument and advertises the system hostname.  Scope these two small
+        # overrides to creation so VPN/virtual adapters cannot make mDNS
+        # registration time out or publish an unreachable address.
+        if interface:
+            librespot_zeroconf.zeroconf.Zeroconf = lambda *args, **kwargs: original_zeroconf(
+                *args, interfaces=[interface], **kwargs
+            )
+            ZeroconfServer.get_useful_hostname = lambda self: interface
+
+        try:
+            _spotify_connect_server = builder.create()
+        except Exception:
+            logger.exception(
+                "Could not start Spotify Connect discovery service on port %s",
+                port or "auto",
+            )
+            _spotify_connect_server = None
+            return None
+        finally:
+            librespot_zeroconf.zeroconf.Zeroconf = original_zeroconf
+            ZeroconfServer.get_useful_hostname = original_hostname
+
+        logger.info(
+            "Spotify Connect discovery service started as OnTheSpot%s%s",
+            f" on port {port}" if port > 0 else "",
+            f" on {interface}" if interface else "",
+        )
+        return _spotify_connect_server
+
+
+def stop_spotify_connect_service() -> None:
+    """Stop the persistent Spotify Connect service during API shutdown."""
+    global _spotify_connect_server
+
+    with _spotify_connect_lock:
+        server = _spotify_connect_server
+        _spotify_connect_server = None
+        if server is None:
+            return
+        try:
+            server.close_session()
+        except Exception:
+            logger.debug("Spotify Connect session was already closed", exc_info=True)
+        try:
+            server.close()
+        except Exception:
+            logger.debug("Spotify Connect discovery service close failed", exc_info=True)
+
+
+def spotify_connect_status() -> dict:
+    """Return safe discovery-service status for diagnostics/UI health checks."""
+    with _spotify_connect_lock:
+        return {
+            "running": _spotify_connect_server is not None,
+            "device_name": "OnTheSpot",
+            "port": _spotify_connect_port(),
+        }
 
 
 def spotify_get_oauth_token():
@@ -240,29 +394,20 @@ def spotify_new_session():
     os.makedirs(os.path.join(cache_dir(), "sessions"), exist_ok=True)
 
     uuid_uniq = str(uuid.uuid4())
-    session_json_path = os.path.join(
-        os.path.join(cache_dir(), "sessions"), f"ots_login_{uuid_uniq}.json"
-    )
+    session_json_path = _spotify_connect_login_path()
+    zs = start_spotify_connect_service()
+    if zs is None:
+        return False
 
-    CLIENT_ID: str = "65b708073fc0480ea92a077233ca87bd"
-    ZeroconfServer._ZeroconfServer__default_get_info_fields["clientID"] = CLIENT_ID
-    zs_builder = ZeroconfServer.Builder()
-    zs_builder.device_name = "OnTheSpot"
-    configured_port = int(
-        os.environ.get(
-            "ONTHESPOT_SPOTIFY_CONNECT_PORT",
-            str(config.get("spotify_connect_port", 6768) or 0),
-        )
-        or 0
-    )
-    if configured_port > 0:
-        zs_builder.set_listen_port(configured_port)
-    zs_builder.conf.stored_credentials_file = session_json_path
-    zs = zs_builder.create()
-    logger.info(
-        "Spotify Connect login service started as OnTheSpot%s",
-        f" on port {configured_port}" if configured_port > 0 else "",
-    )
+    # A previous device selection may have left a valid Connect session on the
+    # discovery service.  Clear it so this sign-in attempt waits for a new
+    # account rather than treating the old selection as fresh credentials.
+    if zs.has_valid_session():
+        zs.close_session()
+    try:
+        os.remove(session_json_path)
+    except FileNotFoundError:
+        pass
 
     while True:
         time.sleep(1)
@@ -272,9 +417,15 @@ def spotify_new_session():
                 zs._ZeroconfServer__session,
                 zs._ZeroconfServer__session.username(),
             )
-            if zs._ZeroconfServer__session.username() in config.get("accounts"):
+            username = zs._ZeroconfServer__session.username()
+            if any(
+                isinstance(account, dict)
+                and account.get("service") == "spotify"
+                and account.get("login", {}).get("username") == username
+                for account in (config.get("accounts", []) or [])
+            ):
                 logger.info("Account already exists")
-                zs.close()
+                zs.close_session()
                 return False
             try:
                 with open(session_json_path, "r", encoding="utf-8") as file:
@@ -310,7 +461,10 @@ def spotify_new_session():
                     "type": zeroconf_login["type"],
                 },
             }
-            zs.close()
+            # Keep the discovery service alive after pairing.  Closing the
+            # whole server here was the reason Spotify stopped showing
+            # OnTheSpot after the first login.
+            zs.close_session()
             cfg_copy.append(new_user)
             config.set("accounts", cfg_copy)
             config.save()

@@ -1,4 +1,5 @@
 import os
+import asyncio
 import threading
 import time
 import json
@@ -31,7 +32,13 @@ from .api.deezer import deezer_add_account
 from .api.qobuz import qobuz_add_account
 from .api.soundcloud import soundcloud_add_account
 from .api.crunchyroll import crunchyroll_add_account
-from .api.spotify import spotify_get_search_results, spotify_new_session
+from .api.spotify import (
+    spotify_connect_status,
+    spotify_get_search_results,
+    spotify_new_session,
+    start_spotify_connect_service,
+    stop_spotify_connect_service,
+)
 from .api.tidal import tidal_add_account_pt1, tidal_add_account_pt2
 
 from .accounts import FillAccountPool, get_account_token
@@ -199,6 +206,12 @@ async def lifespan(app: FastAPI):
     if config.get("enable_retry_worker"):
         retryworker.start()
     fillaccountpool.start()
+    # Keep OnTheSpot visible in Spotify's Connect device picker even when an
+    # account was already configured before this process started.
+    # Zeroconf registration performs a blocking mDNS operation.  Run it
+    # outside the event-loop thread so the API can start cleanly and Spotify
+    # Connect can finish advertising the device without EventLoopBlocked.
+    await asyncio.to_thread(start_spotify_connect_service)
     start_update_checker(
         lambda title, message, url: notification_hook(title, message, url)
     )
@@ -210,6 +223,7 @@ async def lifespan(app: FastAPI):
     parsing_worker.stop()
     downloadworker.stop()
     fillaccountpool.stop()
+    stop_spotify_connect_service()
     stop_update_checker()
     playlist_automation.stop_scheduler()
     logger.info("Application shutdown")
@@ -1652,6 +1666,7 @@ async def get_account_health():
             "configured": "spotify" in configured_services,
             "connected": spotify_online,
             "status": "Connected" if spotify_online else ("Not configured" if "spotify" not in configured_services else "Needs reconnect"),
+            "connect_service": spotify_connect_status(),
         },
         "configured_accounts": len(configured),
         "authenticated_accounts": len(account_pool),
@@ -1713,6 +1728,7 @@ async def get_system_diagnostics():
             "status": spotify_api_status,
             "rate_limited": spotify_rate_limited,
             "seconds_remaining": int(rate_limit.get("seconds_remaining") or 0) if spotify_rate_limited else 0,
+            "connect_service": spotify_connect_status(),
         },
     }
 

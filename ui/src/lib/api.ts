@@ -623,7 +623,7 @@ export async function fetchAccounts(): Promise<AccountItem[]> {
 
 export interface AccountHealth {
   healthy: boolean;
-  spotify: { configured: boolean; connected: boolean; status: string };
+  spotify: { configured: boolean; connected: boolean; status: string; connect_service?: { running: boolean; device_name: string; port: number } };
   configured_accounts: number;
   authenticated_accounts: number;
   missing_services: string[];
@@ -665,7 +665,7 @@ export interface SystemDiagnostics {
   ffmpeg: { path: string; available: boolean };
   disk: { total: number; free: number; used: number };
   rate_limit: { active: boolean; host: string; seconds_remaining: number; count: number };
-  spotify_api: { configured: boolean; connected: boolean; status: string; rate_limited: boolean; seconds_remaining: number };
+  spotify_api: { configured: boolean; connected: boolean; status: string; rate_limited: boolean; seconds_remaining: number; connect_service?: { running: boolean; device_name: string; port: number } };
 }
 
 export interface UpdateAsset {
