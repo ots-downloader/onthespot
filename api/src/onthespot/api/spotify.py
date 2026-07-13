@@ -248,9 +248,21 @@ def spotify_new_session():
     ZeroconfServer._ZeroconfServer__default_get_info_fields["clientID"] = CLIENT_ID
     zs_builder = ZeroconfServer.Builder()
     zs_builder.device_name = "OnTheSpot"
+    configured_port = int(
+        os.environ.get(
+            "ONTHESPOT_SPOTIFY_CONNECT_PORT",
+            str(config.get("spotify_connect_port", 6768) or 0),
+        )
+        or 0
+    )
+    if configured_port > 0:
+        zs_builder.set_listen_port(configured_port)
     zs_builder.conf.stored_credentials_file = session_json_path
     zs = zs_builder.create()
-    logger.info("Zeroconf login service started")
+    logger.info(
+        "Spotify Connect login service started as OnTheSpot%s",
+        f" on port {configured_port}" if configured_port > 0 else "",
+    )
 
     while True:
         time.sleep(1)
@@ -262,6 +274,7 @@ def spotify_new_session():
             )
             if zs._ZeroconfServer__session.username() in config.get("accounts"):
                 logger.info("Account already exists")
+                zs.close()
                 return False
             try:
                 with open(session_json_path, "r", encoding="utf-8") as file:
@@ -742,7 +755,7 @@ def spotify_get_search_results(
     # on a permanent error; treat both as "no results" rather than crashing.
     try:
         data = make_call(
-            f"{BASE_URL}/search", params=params, headers=headers, skip_cache=True
+            f"{BASE_URL}/search", params=params, headers=headers
         )
     except requests.exceptions.RequestException as e:
         logger.error("Spotify search failed for '%s': %s", search_term, str(e))

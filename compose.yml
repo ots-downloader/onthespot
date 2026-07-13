@@ -5,8 +5,10 @@ services:
       context: .
       dockerfile: Dockerfile
     pull_policy: build
-    ports:
-      - "6767:6767"
+    # Spotify Connect uses mDNS plus a randomly selected pairing port. Bridge
+    # networking hides both from devices on the LAN, so the Unraid deployment
+    # must share the host network for the OnTheSpot worker to appear in Spotify.
+    network_mode: host
     volumes:
       - ./otsdata/Music:/root/Music/OnTheSpot
       - ./otsdata/Videos:/root/Videos/OnTheSpot

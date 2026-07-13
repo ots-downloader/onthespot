@@ -105,11 +105,18 @@ def add_spotify_account_worker():
     """
     Worker function to add a Spotify account.
     """
-    if spotify_new_session():
-        config.set("active_account_number", len(account_pool))
-        config.save()
-    else:
-        logger.info("Account Already Exists")
+    try:
+        if spotify_new_session():
+            config.set("active_account_number", len(account_pool))
+            config.save()
+        else:
+            logger.info("Spotify account already exists or sign-in was cancelled")
+    except Exception as exc:
+        logger.exception("Spotify Connect sign-in worker failed")
+        notification_hook(
+            "Spotify Connect sign-in failed",
+            f"Could not start the local Spotify Connect worker: {exc}",
+        )
 
 
 def add_tidal_account():

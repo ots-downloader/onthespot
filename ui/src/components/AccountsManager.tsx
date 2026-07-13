@@ -33,7 +33,7 @@ const SERVICE_OPTIONS = [
   { value: 'generic', label: 'Generic', mode: 'none', requirement: 'Uses the public generic worker. No sign-in is required.' },
   { value: 'qobuz', label: 'Qobuz', mode: 'email-password', requirement: 'Use your Qobuz email address and password.' },
   { value: 'soundcloud', label: 'SoundCloud', mode: 'token', tokenLabel: 'OAuth Token', requirement: 'Optional for public content; add a token for account access.', tokenRequired: false },
-  { value: 'spotify', label: 'Spotify', mode: 'device', requirement: 'Starts Spotify Connect sign-in. Premium and API credentials in Settings → API config are required.' },
+  { value: 'spotify', label: 'Spotify', mode: 'device', requirement: 'Requires Spotify Premium. Start sign-in, then open Spotify’s Connect to a device menu and select OnTheSpot.' },
   { value: 'tidal', label: 'Tidal', mode: 'device', requirement: 'Starts a Tidal device-link sign-in in your browser.' },
   { value: 'youtube', label: 'YouTube Music', mode: 'youtube', requirement: 'Configure an explicit local YouTube session for videos that require sign-in.' },
 ] as const satisfies ReadonlyArray<{ value: string; label: string; mode: CredentialMode; requirement: string; tokenLabel?: string; tokenRequired?: boolean }>;
@@ -129,7 +129,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
     setLoading(false);
     if (res) {
       if (selectedService.mode === 'device') {
-        setSignInStarted('Sign-in has started. Complete it in Spotify or in the browser, then refresh Accounts when you are finished.');
+        setSignInStarted('Spotify Connect is waiting. In the Spotify app, open Connect to a device and select OnTheSpot, then refresh Accounts.');
         return;
       }
       setShowModal(false);

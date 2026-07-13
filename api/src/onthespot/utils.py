@@ -41,6 +41,7 @@ from .runtimedata import (
     progress_hook,
     notification_hook,
     pending,
+    get_rate_limit_delay,
     record_rate_limit,
 )
 from .constants import ItemStatus
@@ -74,6 +75,95 @@ def _get_host_lock(url):
         return lock
 
 
+def _cache_ttl_seconds(url, cache_ttl_seconds):
+    """Return a safe disk-cache TTL for a public HTTP response.
+
+    Spotify account, library, and playlist responses are deliberately excluded:
+    they are user-specific and should never be persisted in the shared request
+    cache. Public catalogue metadata and search results are safe to reuse.
+    """
+    if cache_ttl_seconds is not None:
+        return max(0, int(cache_ttl_seconds))
+
+    parsed = urlparse(url)
+    if parsed.netloc.casefold() == "api.spotify.com":
+        path = parsed.path.rstrip("/")
+        if path == "/v1/search":
+            return max(0, int(config.get("spotify_search_cache_ttl_seconds", 900)))
+        public_catalogue_paths = (
+            "/v1/albums",
+            "/v1/artists",
+            "/v1/audio-features",
+            "/v1/audiobooks",
+            "/v1/episodes",
+            "/v1/markets",
+            "/v1/shows",
+            "/v1/tracks",
+        )
+        if path.startswith(public_catalogue_paths):
+            return max(0, int(config.get("spotify_metadata_cache_ttl_seconds", 604800)))
+        return 0
+
+    return max(0, int(config.get("api_response_cache_ttl_seconds", 86400)))
+
+
+def _cache_path(url, params, text):
+    """Return a deterministic cache path including the complete query string."""
+    prepared_url = requests.Request("GET", url, params=params).prepare().url
+    cache_key = md5(f"v2|{int(bool(text))}|{prepared_url}".encode()).hexdigest()
+    cache_dir = os.path.join(config.get("_cache_dir"), "reqcache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return cache_key, os.path.join(cache_dir, f"v2-{cache_key}.json")
+
+
+def _read_cached_response(cache_file, text):
+    """Read a v2 cache envelope, returning ``(entry, value)`` or ``(None, None)``."""
+    if not cache_file or not os.path.isfile(cache_file):
+        return None, None
+    try:
+        with open(cache_file, "r", encoding="utf-8") as cache_handle:
+            entry = json.load(cache_handle)
+        if not isinstance(entry, dict) or entry.get("version") != 2:
+            return None, None
+        payload = entry.get("payload")
+        if not isinstance(payload, str):
+            return None, None
+        if text:
+            return entry, payload
+        return entry, json.loads(payload)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None, None
+
+
+def _write_cached_response(cache_file, payload, ttl_seconds, etag=None):
+    if not cache_file or ttl_seconds <= 0:
+        return
+    now = time.time()
+    entry = {
+        "version": 2,
+        "stored_at": now,
+        "expires_at": now + ttl_seconds,
+        "etag": etag or "",
+        "payload": payload,
+    }
+    try:
+        with open(cache_file, "w", encoding="utf-8") as cache_handle:
+            json.dump(entry, cache_handle, ensure_ascii=False)
+    except OSError as error:
+        logger.warning("Could not cache API response at %s: %s", cache_file, error)
+
+
+def _response_cache_ttl(response, default_ttl):
+    """Respect no-store and keep provider cache headers from extending our TTL."""
+    cache_control = str(response.headers.get("Cache-Control") or "").casefold()
+    if "no-store" in cache_control:
+        return 0
+    max_age_match = re.search(r"max-age\s*=\s*(\d+)", cache_control)
+    if max_age_match:
+        return min(default_ttl, int(max_age_match.group(1)))
+    return default_ttl
+
+
 class SSLAdapter(requests.adapters.HTTPAdapter):
     """HTTPAdapter that injects a custom :class:`ssl.SSLContext`."""
 
@@ -94,12 +184,14 @@ def make_call(
     skip_cache=False,
     text=False,
     use_ssl=False,
+    cache_ttl_seconds=None,
 ):
     """Perform a GET request with caching and automatic retry / back-off.
 
-    Responses are cached on disk (keyed by URL MD5) unless *skip_cache* is
-    ``True``.  Rate-limited (429) and server-error (5xx) responses are
-    retried with exponential back-off up to ``api_retry_max_attempts`` times.
+    Public responses are cached on disk using a URL-and-query-aware key unless
+    *skip_cache* is ``True``. Spotify private/account data is never persisted.
+    Rate-limited (429) and server-error (5xx) responses are retried with
+    exponential back-off up to ``api_retry_max_attempts`` times.
 
     Parameters
     ----------
@@ -120,31 +212,37 @@ def make_call(
     use_ssl:
         When ``True`` attach an :class:`SSLAdapter` with certificate
         verification enabled.
+    cache_ttl_seconds:
+        Optional response cache lifetime. ``None`` applies the safe service
+        defaults; ``0`` disables caching for this request.
     """
-    if not skip_cache:
-        request_key = md5(f"{url}".encode()).hexdigest()
-        req_cache_file = os.path.join(
-            config.get("_cache_dir"), "reqcache", request_key + ".json"
-        )
-        os.makedirs(os.path.dirname(req_cache_file), exist_ok=True)
-        if os.path.isfile(req_cache_file):
-            logger.info(
-                f"[CACHE HIT] Retrieved from cache | URL: {url} | MD5: {request_key} | File: {req_cache_file}"
-            )
-            try:
-                with open(req_cache_file, "r", encoding="utf-8") as cf:
-                    if text:
-                        return cf.read()
-                    json_data = json.load(cf)
-                return json_data
-            except json.JSONDecodeError:
-                logger.error(
-                    f"[CACHE ERROR] Invalid JSON data | URL: {url} | MD5: {request_key} | File: {req_cache_file}"
-                )
-                return None
-        logger.info(
-            f"[CACHE MISS] Not found in cache, fetching from API | URL: {url} | MD5: {request_key} | File: {req_cache_file}"
-        )
+    cache_ttl = 0 if skip_cache else _cache_ttl_seconds(url, cache_ttl_seconds)
+    parsed_url = urlparse(url)
+    # A third-party response authenticated with a cookie or bearer token can
+    # belong to one account only. Keep those out of the disk cache unless a
+    # caller deliberately opts in. Spotify has its own public-path allowlist
+    # above, so catalogue results can still be reused safely.
+    if (
+        parsed_url.netloc.casefold() != "api.spotify.com"
+        and cache_ttl_seconds is None
+        and any(key.casefold() in {"authorization", "cookie"} for key in (headers or {}))
+    ):
+        cache_ttl = 0
+    request_key = None
+    req_cache_file = None
+    cached_entry = None
+    cached_value = None
+    if cache_ttl > 0:
+        request_key, req_cache_file = _cache_path(url, params, text)
+        cached_entry, cached_value = _read_cached_response(req_cache_file, text)
+        if cached_entry and float(cached_entry.get("expires_at", 0) or 0) > time.time():
+            logger.debug("[CACHE HIT] %s | %s", url, request_key)
+            return cached_value
+        logger.debug("[CACHE MISS] %s | %s", url, request_key)
+
+    request_headers = dict(headers or {})
+    if cached_entry and cached_entry.get("etag"):
+        request_headers.setdefault("If-None-Match", cached_entry["etag"])
 
     if session is None:
         session = requests.Session()
@@ -162,13 +260,23 @@ def make_call(
     max_delay = config.get("api_retry_max_delay", 60)
 
     for attempt in range(max_retries):
-        # The lock serialises only the request dispatch, so a burst of workers
-        # can't hit the rate limit simultaneously. The backoff sleep below happens
-        # OUTSIDE the lock so a single backing-off call doesn't stall every other
-        # worker (and a long Retry-After can't freeze the whole app).
+        # The lock serialises request dispatch per host. It also keeps a shared
+        # cooldown together with the next request so workers cannot stampede a
+        # provider the moment a Retry-After window ends.
         try:
             with _get_host_lock(url):
-                response = session.get(url, headers=headers, params=params, timeout=30)
+                # Recheck after waiting for this host lock. A concurrent caller
+                # may already have fetched the exact same response.
+                if cache_ttl > 0:
+                    refreshed_entry, refreshed_value = _read_cached_response(req_cache_file, text)
+                    if refreshed_entry and float(refreshed_entry.get("expires_at", 0) or 0) > time.time():
+                        return refreshed_value
+
+                cooldown = get_rate_limit_delay(urlparse(url).netloc)
+                if cooldown > 0:
+                    logger.info("Waiting %.1fs for shared API cooldown on %s", cooldown, urlparse(url).netloc)
+                    time.sleep(cooldown)
+                response = session.get(url, headers=request_headers, params=params, timeout=30)
         except requests.exceptions.Timeout:
             time.sleep(min((2**attempt) * base_delay, max_delay))
             logger.warning(
@@ -178,6 +286,16 @@ def make_call(
         except requests.exceptions.RequestException as e:
             logger.error(f"Request exception on {url}: {str(e)}")
             return None
+
+        if response.status_code == 304 and cached_entry:
+            response_ttl = _response_cache_ttl(response, cache_ttl)
+            _write_cached_response(
+                req_cache_file,
+                cached_entry["payload"],
+                response_ttl,
+                response.headers.get("ETag") or cached_entry.get("etag"),
+            )
+            return cached_value
 
         # Rate limited - honour Retry-After if present (capped at max_delay), else back off.
         if response.status_code == 429:
@@ -212,9 +330,12 @@ def make_call(
         # Success - cache and return.
         elif response.status_code == 200:
             if text:
-                if not skip_cache:
-                    with open(req_cache_file, "w", encoding="utf-8") as cf:
-                        cf.write(response.text)
+                _write_cached_response(
+                    req_cache_file,
+                    response.text,
+                    _response_cache_ttl(response, cache_ttl),
+                    response.headers.get("ETag"),
+                )
                 return response.text
             # Guard against a 200 with a non-JSON body (e.g. an HTML error/captive
             # portal page) so we return None instead of raising into callers.
@@ -223,9 +344,12 @@ def make_call(
             except json.JSONDecodeError:
                 logger.error(f"Invalid JSON in 200 response from {url}")
                 return None
-            if not skip_cache:
-                with open(req_cache_file, "w", encoding="utf-8") as cf:
-                    cf.write(response.text)
+            _write_cached_response(
+                req_cache_file,
+                response.text,
+                _response_cache_ttl(response, cache_ttl),
+                response.headers.get("ETag"),
+            )
             return data
 
         # Permanent client errors - don't retry.

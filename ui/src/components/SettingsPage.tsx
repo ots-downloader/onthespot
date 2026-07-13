@@ -1082,6 +1082,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
                     {renderInput(
+                      "spotify_search_cache_ttl_seconds",
+                      "Spotify Search Cache (seconds)",
+                      "number",
+                      "Cache public catalogue searches for this long",
+                    )}
+                    {renderInput(
+                      "spotify_metadata_cache_ttl_seconds",
+                      "Spotify Metadata Cache (seconds)",
+                      "number",
+                      "Cache public track, album, artist, and episode data",
+                    )}
+                    {renderInput(
+                      "api_response_cache_ttl_seconds",
+                      "Other Public API Cache (seconds)",
+                      "number",
+                      "Cache unauthenticated public API responses",
+                    )}
+                    {renderInput(
+                      "playlist_automation_cache_ttl_seconds",
+                      "Playlist Sorting Cache (seconds)",
+                      "number",
+                      "Keep playlist reads in memory per signed-in account",
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
+                    {renderInput(
                       "spotify_webapi_override_client_id",
                       "Spotify Client ID",
                       "text",

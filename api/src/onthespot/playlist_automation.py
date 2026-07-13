@@ -8,6 +8,8 @@ automation needs a Spotify user token with playlist modification scopes.
 from __future__ import annotations
 
 import csv
+import copy
+import hashlib
 import io
 import json
 import os
@@ -22,7 +24,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 import requests
 
 from .otsconfig import config
-from .runtimedata import record_rate_limit
+from .runtimedata import get_rate_limit_delay, record_rate_limit
 from .export_locations import playlist_backup_directory
 
 
@@ -59,6 +61,10 @@ class PlaylistAutomation:
         self._lock = threading.RLock()
         self._oauth_state = ""
         self._token: dict[str, Any] = {}
+        # Playlist data is user-specific, so this cache stays in memory only.
+        # It is never written to playlist-automation.json or the shared disk
+        # request cache.
+        self._read_cache: dict[str, tuple[float, Any]] = {}
         self._scheduler_stop = threading.Event()
         self._scheduler_thread: threading.Thread | None = None
         self._state_path = os.path.join(
@@ -175,6 +181,7 @@ class PlaylistAutomation:
                 "expires_at": time.time() + int(payload.get("expires_in", 3600)) - 60,
                 "scope": payload.get("scope", SCOPES),
             }
+            self._read_cache.clear()
             self._save_token()
 
     def _save_token(self) -> None:
@@ -214,24 +221,71 @@ class PlaylistAutomation:
             self._save_token()
             return str(self._token["access_token"])
 
+    def _cache_identity(self, access_token: str) -> str:
+        """Return a per-account cache identity without retaining the token."""
+        user = self._token.get("user") or {}
+        user_id = str(user.get("id") or "") if isinstance(user, dict) else ""
+        if user_id:
+            return f"user:{user_id}"
+        return "token:" + hashlib.sha256(access_token.encode("utf-8")).hexdigest()
+
+    def _read_cache_key(self, access_token: str, path: str, params: Any) -> str:
+        normalized_params = json.dumps(params or {}, sort_keys=True, separators=(",", ":"), default=str)
+        return "|".join((self._cache_identity(access_token), path, normalized_params))
+
+    def _cache_ttl(self) -> int:
+        return max(0, int(config.get("playlist_automation_cache_ttl_seconds", 60) or 0))
+
+    def _clear_read_cache(self) -> None:
+        with self._lock:
+            self._read_cache.clear()
+
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        method = method.upper()
         token = self._access_token()
         headers = dict(kwargs.pop("headers", {}) or {})
         headers["Authorization"] = f"Bearer {token}"
         headers.setdefault("Content-Type", "application/json")
-        response = requests.request(method, f"{BASE_URL}{path}", headers=headers, timeout=30, **kwargs)
-        if response.status_code == 401:
+        cache_ttl = self._cache_ttl() if method == "GET" and path != "/me" else 0
+        cache_key = self._read_cache_key(token, path, kwargs.get("params")) if cache_ttl else ""
+        if cache_ttl:
             with self._lock:
-                self._token["expires_at"] = 0
-            token = self._access_token()
-            headers["Authorization"] = f"Bearer {token}"
+                cached = self._read_cache.get(cache_key)
+            if cached and cached[0] > time.time():
+                return copy.deepcopy(cached[1])
+
+        response = None
+        for attempt in range(2):
+            cooldown = get_rate_limit_delay("api.spotify.com")
+            if cooldown > 0:
+                time.sleep(cooldown)
             response = requests.request(method, f"{BASE_URL}{path}", headers=headers, timeout=30, **kwargs)
+            if response.status_code == 401 and attempt == 0:
+                with self._lock:
+                    self._token["expires_at"] = 0
+                token = self._access_token()
+                headers["Authorization"] = f"Bearer {token}"
+                if cache_ttl:
+                    cache_key = self._read_cache_key(token, path, kwargs.get("params"))
+                continue
+            if response.status_code == 429 and attempt == 0:
+                try:
+                    retry_after = max(0, int(float(response.headers.get("Retry-After", "0") or 0)))
+                except ValueError:
+                    retry_after = 0
+                delay = max(1, retry_after)
+                record_rate_limit("api.spotify.com", retry_after, delay)
+                time.sleep(delay)
+                continue
+            break
+        if response is None:
+            raise PlaylistAutomationError("Spotify API did not return a response")
         if response.status_code == 429:
             try:
                 retry_after = max(0, int(float(response.headers.get("Retry-After", "0") or 0)))
             except ValueError:
                 retry_after = 0
-            record_rate_limit("api.spotify.com", retry_after, retry_after)
+            record_rate_limit("api.spotify.com", retry_after, max(1, retry_after))
         if not response.ok:
             detail = ""
             try:
@@ -240,8 +294,16 @@ class PlaylistAutomation:
                 detail = response.text[:200]
             raise PlaylistAutomationError(f"Spotify API error ({response.status_code}){': ' + detail if detail else ''}")
         if response.status_code == 204 or not response.content:
+            if method != "GET":
+                self._clear_read_cache()
             return {}
-        return response.json()
+        value = response.json()
+        if method == "GET" and cache_ttl:
+            with self._lock:
+                self._read_cache[cache_key] = (time.time() + cache_ttl, copy.deepcopy(value))
+        elif method != "GET":
+            self._clear_read_cache()
+        return value
 
     def _remember_user(self) -> None:
         if self._token.get("user"):
@@ -255,6 +317,7 @@ class PlaylistAutomation:
     def logout(self) -> None:
         with self._lock:
             self._token = {}
+            self._read_cache.clear()
             state = self._load_state()
             state.pop("oauth", None)
             self._save_state(state)

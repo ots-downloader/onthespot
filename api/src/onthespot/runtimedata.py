@@ -212,6 +212,19 @@ def record_rate_limit(host: str, retry_after: int | float, delay: int | float) -
     return is_new_limit
 
 
+def get_rate_limit_delay(host: str) -> float:
+    """Return the remaining shared cooldown for *host*, if one is active.
+
+    Network workers use this before dispatching a request so a 429 received by
+    one worker prevents the other workers from immediately repeating it.
+    """
+    now = time.time()
+    with rate_limit_lock:
+        if str(rate_limit_state.get("host") or "") != host:
+            return 0.0
+        return max(0.0, float(rate_limit_state.get("until", 0) or 0) - now)
+
+
 def get_rate_limit_state() -> dict:
     """Return a JSON-safe rate-limit snapshot with a live countdown."""
     with rate_limit_lock:
