@@ -322,13 +322,25 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
           </button>
         </div>
         {spotifyAccessMode === "remote" && <aside className="mt-3 border-l-4 border-[var(--ots-warning)] bg-[color-mix(in_srgb,var(--ots-warning)_10%,var(--spotify-surface))] p-3 text-xs leading-5 text-[var(--ots-warning)]">
-          <p>Remote mode keeps the web app on your Tailscale address, while Spotify Connect discovery stays on the local network. Use the companion on the computer that is on the same network as Spotify.</p>
+          <p className="font-semibold text-white">Use the companion on your Spotify computer</p>
+          <p className="mt-1">This is the computer where the Spotify desktop app is open—not the Unraid server. Spotify and that computer must be on the same LAN. Tailscale is only used to send the completed login back to this OnTheSpot server.</p>
+          <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[#b3b3b3]">
+            <li>Download or clone the OnTheSpot repository on that computer.</li>
+            <li>Open PowerShell in the repository folder and run the one-time setup below.</li>
+            <li>Click <strong className="text-white">Create companion pairing code</strong>, then run the generated command.</li>
+            <li>In Spotify, open <strong className="text-white">Connect to a device</strong> and select <strong className="text-white">OnTheSpot Companion</strong>.</li>
+          </ol>
+          <div className="mt-3 border border-[var(--ots-warning)]/40 bg-black/20 p-3 text-[#b3b3b3]">
+            <p className="font-semibold text-white">One-time Windows setup</p>
+            <code className="mt-2 block overflow-x-auto whitespace-pre-wrap border border-[var(--ots-border)] bg-black/30 p-2 text-[11px] text-white">py -m venv .companion-venv{`\n`}\.companion-venv\Scripts\python.exe -m pip install -r companion\requirements.txt</code>
+            <p className="mt-2 text-[11px]">Run this once. Keep the terminal open while pairing.</p>
+          </div>
           <button type="button" onClick={() => void createCompanionPairing()} disabled={busy === "companion"} className="ots-button ots-button-secondary mt-3 border-[var(--ots-warning)] text-[var(--ots-warning)]">{busy === "companion" ? "Creating pairing…" : "Create companion pairing code"}</button>
           {companionPairing && <div className="mt-3 border border-[var(--ots-warning)]/40 bg-black/20 p-3 text-[#b3b3b3]">
-            <p className="font-semibold text-white">Run this on the local Spotify computer</p>
+            <p className="font-semibold text-white">Now run this in the same PowerShell window</p>
             <code className="mt-2 block overflow-x-auto whitespace-pre-wrap break-all border border-[var(--ots-border)] bg-black/30 p-2 text-[11px] text-white">{companionCommand}</code>
-            <div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void copyCompanionCommand()} className="ots-button ots-button-secondary h-8 px-3 text-xs">Copy command</button><span>Code expires in {Math.max(0, Math.ceil((companionPairing.expires_at * 1000 - Date.now()) / 60000))} minutes.</span></div>
-            <p className="mt-2 text-[11px]">The companion advertises “{companionPairing.device_name}” locally, then sends the Spotify login to this OnTheSpot server once.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void copyCompanionCommand()} className="ots-button ots-button-secondary h-8 px-3 text-xs">Copy run command</button><span>Code expires in {Math.max(0, Math.ceil((companionPairing.expires_at * 1000 - Date.now()) / 60000))} minutes.</span></div>
+            <p className="mt-2 text-[11px]">When pairing succeeds, the companion exits automatically and the new worker appears in Accounts. You can then finish playlist sorting sign-in separately if needed.</p>
           </div>}
         </aside>}
       </section>

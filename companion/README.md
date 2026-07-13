@@ -3,6 +3,11 @@
 Use this when the OnTheSpot API runs remotely (for example, in Docker on
 Unraid) but Spotify runs on a desktop or phone on the local LAN.
 
+This is a small helper for the Spotify computer. Do **not** run it inside the
+OnTheSpot Docker container: the container cannot receive Spotify's local mDNS
+discovery from a different network. Run it on the Windows, macOS, or Linux
+computer where Spotify is open.
+
 The companion runs Spotify Connect discovery locally, so Spotify can find it.
 After the user selects it, the companion sends the one-time login payload to
 the OnTheSpot URL over HTTPS or Tailscale. The Spotify credentials are not
