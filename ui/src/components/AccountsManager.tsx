@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Users, Plus, Trash2, Loader2, Server, RefreshCw, CircleCheck, AlertTriangle, Music2, Waves, Cloud, Disc3, CirclePlay, Heart, Headphones, Film, Download } from 'lucide-react';
+import { Users, Plus, Trash2, Loader2, Server, RefreshCw, CircleCheck, AlertTriangle, Music2, Waves, Cloud, Disc3, CirclePlay, Heart, Headphones, Film, Download, Globe2, Wifi } from 'lucide-react';
 import { AccountItem } from '../types';
+import { createSpotifyCompanionPairing, getTargetBackendUrl } from '../lib/api';
 import type { AccountHealth } from '../lib/api';
 
 interface AccountsManagerProps {
@@ -24,6 +25,7 @@ type ServicePresentation = {
 };
 
 type CredentialMode = 'none' | 'device' | 'token' | 'email-password' | 'youtube';
+type SpotifyAccessMode = 'local' | 'remote';
 
 const SERVICE_OPTIONS = [
   { value: 'applemusic', label: 'Apple Music', mode: 'token', tokenLabel: 'Media User Token', requirement: 'Paste a valid Apple Music media-user token.', tokenRequired: true },
@@ -77,6 +79,8 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   const [youtubeAuthMode, setYoutubeAuthMode] = useState<'browser' | 'cookie_file'>('browser');
   const [youtubeBrowser, setYoutubeBrowser] = useState('edge');
   const [youtubeCookieFile, setYoutubeCookieFile] = useState('');
+  const [spotifyAccessMode, setSpotifyAccessMode] = useState<SpotifyAccessMode>('local');
+  const [companionPairing, setCompanionPairing] = useState<{ pairing_token: string; expires_at: number; expires_in: number; device_name: string } | null>(null);
   const sortedAccounts = [...accounts].sort((left, right) =>
     getServicePresentation(left.service).label.localeCompare(getServicePresentation(right.service).label),
   );
@@ -92,10 +96,37 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
     setShowModal(true);
   };
 
+  const createCompanionPairing = async () => {
+    setLoading(true);
+    const pairing = await createSpotifyCompanionPairing();
+    setLoading(false);
+    if (!pairing) {
+      setFormError('Could not create a companion pairing code.');
+      return;
+    }
+    setCompanionPairing(pairing);
+    setSignInStarted('Pairing code created. Run the command below on the computer where Spotify is open.');
+  };
+
+  const companionCommand = companionPairing ? `.\\.companion-venv\\Scripts\\python.exe companion\\run.py --server-url "${getTargetBackendUrl()}" --pairing-token "${companionPairing.pairing_token}"` : '';
+  const companionCloneCommand = "cd $HOME\ngit clone --branch fastapi-dev --single-branch https://github.com/JamyPatch44/onthespot.git OnTheSpot-companion\ncd .\\OnTheSpot-companion";
+  const copyText = async (value: string, success: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setSignInStarted(success);
+    } catch {
+      setSignInStarted('Copy was blocked by the browser. Select the command and copy it manually.');
+    }
+  };
+
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setSignInStarted('');
+    if (selectedService.value === 'spotify' && spotifyAccessMode === 'remote') {
+      await createCompanionPairing();
+      return;
+    }
     if (selectedService.mode === 'email-password' && (!username.trim() || !token.trim())) {
       setFormError('Enter both your email address and password to continue.');
       return;
@@ -254,7 +285,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       {/* Standard Material Dialog */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="ots-panel relative w-full max-w-md overflow-hidden bg-[#1c1c1c] p-6 shadow-2xl sm:p-8">
+          <div className={`ots-panel relative w-full overflow-hidden bg-[#1c1c1c] p-6 shadow-2xl sm:p-8 ${service === 'spotify' && spotifyAccessMode === 'remote' ? 'max-w-2xl' : 'max-w-md'}`}>
             <div className="flex items-center gap-3 mb-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#173b25]">
                 <Server className="h-5 w-5 text-[#1ed760]" />
@@ -273,7 +304,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 <label className="text-xs font-medium text-gray-700 dark:text-neutral-300 mb-1.5 block">Platform Service</label>
                 <select
                   value={service}
-                  onChange={(e) => { setService(e.target.value); setFormError(''); setSignInStarted(''); setUsername(''); setToken(''); setYoutubeCookieFile(''); }}
+                  onChange={(e) => { setService(e.target.value); setFormError(''); setSignInStarted(''); setUsername(''); setToken(''); setYoutubeCookieFile(''); setCompanionPairing(null); setSpotifyAccessMode('local'); }}
                   className="ots-select w-full"
                 >
                   {SERVICE_OPTIONS.map((option) => (
@@ -310,7 +341,38 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
               {selectedService.mode === 'none' && (
                 <div className="rounded-lg border border-[#3a3a3a] bg-[#242424] px-4 py-3 text-sm text-[#b3b3b3]">This worker is ready to add without credentials.</div>
               )}
-              {selectedService.mode === 'device' && (
+              {selectedService.value === 'spotify' && (
+                <div className="space-y-3 border border-[#3a3a3a] bg-[#242424] p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Where is Spotify running?</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#b3b3b3]">Choose local if OnTheSpot and Spotify share a network. Choose remote if OnTheSpot is in Docker/Unraid and you access it through Tailscale.</p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button type="button" aria-pressed={spotifyAccessMode === 'local'} onClick={() => { setSpotifyAccessMode('local'); setCompanionPairing(null); setSignInStarted(''); }} className={spotifyAccessMode === 'local' ? 'border border-[#1ed760] bg-[#173b25] p-3 text-left' : 'border border-[#3a3a3a] p-3 text-left hover:border-[#666]'}>
+                      <span className="flex items-center gap-2 font-semibold text-white"><Wifi className="h-4 w-4 text-[#1ed760]" /> Local network</span>
+                      <span className="mt-1 block text-xs text-[#b3b3b3]">Use Spotify Connect directly.</span>
+                    </button>
+                    <button type="button" aria-pressed={spotifyAccessMode === 'remote'} onClick={() => { setSpotifyAccessMode('remote'); setSignInStarted(''); }} className={spotifyAccessMode === 'remote' ? 'border border-[#f6b94a] bg-[#3b321d] p-3 text-left' : 'border border-[#3a3a3a] p-3 text-left hover:border-[#666]'}>
+                      <span className="flex items-center gap-2 font-semibold text-white"><Globe2 className="h-4 w-4 text-[#f6b94a]" /> Remote access</span>
+                      <span className="mt-1 block text-xs text-[#b3b3b3]">Use the local companion with Tailscale.</span>
+                    </button>
+                  </div>
+                  {spotifyAccessMode === 'remote' && <div className="border-l-4 border-[#f6b94a] bg-[#3b321d] p-3 text-xs leading-relaxed text-[#f6b94a]">
+                    <p className="font-semibold text-white">Run this on the computer where Spotify is open—not Unraid.</p>
+                    <p className="mt-1">Spotify and that computer must be on the same LAN. Tailscale sends the completed login back to this OnTheSpot server.</p>
+                    <ol className="mt-2 list-decimal space-y-1 pl-4 text-[#b3b3b3]"><li>Download or clone this repository on the Spotify computer.</li><li>Open PowerShell in the repository folder.</li><li>Run the setup commands below once.</li><li>Create a pairing code, run the generated command, then select OnTheSpot Companion in Spotify.</li></ol>
+                    <p className="mt-3 font-semibold text-white">If you need to download it:</p>
+                    <code className="mt-1 block overflow-x-auto whitespace-pre-wrap bg-black/30 p-2 text-[11px] text-white">{companionCloneCommand}</code>
+                    <button type="button" onClick={() => void copyText(companionCloneCommand, 'Repository setup command copied.')} className="ots-button ots-button-secondary mt-2 h-8 px-3 text-xs">Copy download commands</button>
+                    <p className="mt-3 font-semibold text-white">One-time Windows setup:</p>
+                    <code className="mt-1 block overflow-x-auto bg-black/30 p-2 text-[11px] text-white">py -m venv .companion-venv<br />.{"\\"}.companion-venv{"\\"}Scripts{"\\"}python.exe -m pip install -r companion{"\\"}requirements.txt</code>
+                    <p className="mt-2 text-[11px]">Run these setup commands first. Do not paste them together with the pairing command.</p>
+                    <p className="mt-2 text-[11px] font-semibold text-[#f6b94a]">Important: create the pairing code on this same OnTheSpot address. A code created at localhost will not work with your Tailscale/Unraid URL, and each code expires after ten minutes.</p>
+                    {companionPairing && <><p className="mt-3 font-semibold text-white">Now run this separately:</p><code className="mt-1 block overflow-x-auto whitespace-pre-wrap break-all bg-black/30 p-2 text-[11px] text-white">{companionCommand}</code><div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void copyText(companionCommand, 'Companion command copied.')} className="ots-button ots-button-secondary h-8 px-3 text-xs">Copy pairing command</button><span>Expires in {Math.max(0, Math.ceil((companionPairing.expires_at * 1000 - Date.now()) / 60000))} minutes.</span></div></>}
+                  </div>}
+                </div>
+              )}
+              {selectedService.mode === 'device' && selectedService.value !== 'spotify' && (
                 <div className="rounded-lg border border-[#3a3a3a] bg-[#242424] px-4 py-3 text-sm text-[#b3b3b3]">Click Start sign-in, then follow the service prompt. You do not need to enter credentials here.</div>
               )}
               {selectedService.mode === 'youtube' && (
@@ -352,7 +414,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                   className="ots-button ots-button-primary"
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {loading ? 'Starting…' : selectedService.mode === 'device' ? 'Start sign-in' : selectedService.mode === 'youtube' ? 'Save YouTube setup' : 'Add Account'}
+                  {loading ? 'Working…' : selectedService.value === 'spotify' && spotifyAccessMode === 'remote' ? 'Create pairing code' : selectedService.mode === 'device' ? 'Start sign-in' : selectedService.mode === 'youtube' ? 'Save YouTube setup' : 'Add Account'}
                 </button>
               </div>
             </form>

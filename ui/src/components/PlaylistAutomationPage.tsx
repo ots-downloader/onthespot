@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Archive, ArrowDown, ArrowUp, Check, CheckCircle2, Clock3, Download, ExternalLink, Eye, Globe2, GripVertical, History, Info, ListMusic, Loader2, LogIn, LogOut, Music2, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Trash2, Upload, WandSparkles, Wifi, X } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, Check, CheckCircle2, Clock3, Download, ExternalLink, Eye, GripVertical, History, Info, ListMusic, Loader2, LogIn, LogOut, Music2, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Trash2, Upload, WandSparkles, X } from "lucide-react";
 import {
   applySelectedPlaylistSorting, clearPlaylistAutomationHistory, comparePlaylistAutomation, configurePlaylistAutomation,
   createPlaylistAutomationBackup, deletePlaylistAutomationConfig, deletePlaylistAutomationHistory, deletePlaylistAutomationSchedule,
@@ -9,13 +9,12 @@ import {
   PlaylistAutomationConfig, PlaylistAutomationHistoryItem, PlaylistAutomationSchedule, PlaylistAutomationSortRule, PlaylistAutomationStatus,
   PlaylistSortChange, PlaylistSortPreview, removeIgnoredPlaylistAutomationTracks, removePlaylistAutomationTrack, restorePlaylistAutomationBackup,
   restorePlaylistAutomationHistory, reorderPlaylistAutomationConfigs, runAllPlaylistAutomationConfigs, runPlaylistAutomationConfig, savePlaylistAutomationConfig,
-  savePlaylistAutomationConfigFile, savePlaylistAutomationSchedule, savePlaylistBackupDirectory, saveSelectedPlaylistsCsv, saveTextExport, scanSelectedPlaylistsForSorting, SpotifyPlaylistSummary, createSpotifyCompanionPairing, getTargetBackendUrl,
+  savePlaylistAutomationConfigFile, savePlaylistAutomationSchedule, savePlaylistBackupDirectory, saveSelectedPlaylistsCsv, saveTextExport, scanSelectedPlaylistsForSorting, SpotifyPlaylistSummary,
 } from "../lib/api";
 import { OtsSelect } from "./OtsSelect";
 
 type ModalName = "dynamic" | "schedules" | "backup" | "history" | "ignored" | "compare" | "review" | "export" | "csv" | "debug" | null;
 type FilterMode = "all" | "editable" | "owned" | "collaborative" | "public" | "private";
-type SpotifyAccessMode = "local" | "remote";
 type DebugLevel = "Info" | "Search" | "Passed" | "Rejected" | "Skipped" | "Found" | "Error" | "Comparison" | "Warning";
 interface DebugLog { id: string; level: DebugLevel; message: string; timestamp: number; }
 interface IgnoredTrack { track_id: string; name: string; artist: string; album?: string; context?: string; source_playlist?: string; added_at?: number | string; }
@@ -118,11 +117,6 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
   const [debugQuery, setDebugQuery] = useState("");
   const [debugFilter, setDebugFilter] = useState<DebugLevel | "All">("All");
   const [debugAutoScroll, setDebugAutoScroll] = useState(true);
-  const [spotifyAccessMode, setSpotifyAccessMode] = useState<SpotifyAccessMode>(() => {
-    const stored = typeof window === "undefined" ? null : window.localStorage.getItem("ots-spotify-access-mode");
-    return stored === "remote" ? "remote" : "local";
-  });
-  const [companionPairing, setCompanionPairing] = useState<{ pairing_token: string; expires_at: number; expires_in: number; device_name: string } | null>(null);
 
   const demoRows: SpotifyPlaylistSummary[] = [
     { id: "demo-modern", name: "Favourites", owner: "Demo account", editable: true, collaborative: false, public: false, tracks: 22, image: "" },
@@ -154,7 +148,6 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
   useEffect(() => { void refresh(); }, []);
   useEffect(() => { void fetchExportDirectory().then(setExportFolder); }, []);
   useEffect(() => { void fetchPlaylistBackupDirectory().then(setBackupFolder); }, []);
-  useEffect(() => { window.localStorage.setItem("ots-spotify-access-mode", spotifyAccessMode); }, [spotifyAccessMode]);
   useEffect(() => { const stopDragging = () => { setDragSelectMode(null); setDynamicSourceDragMode(null); }; window.addEventListener("pointerup", stopDragging); return () => window.removeEventListener("pointerup", stopDragging); }, []);
 
   const requireLive = () => { if (!demo) return true; setMessage("Demo mode is read-only. Connect Spotify to make changes."); return false; };
@@ -182,27 +175,6 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
     const next = await saveConnectionSettings("connect");
     if (!next) return;
     window.location.assign(getPlaylistAutomationLoginUrl());
-  };
-  const createCompanionPairing = async () => {
-    setBusy("companion");
-    const pairing = await createSpotifyCompanionPairing();
-    setBusy("");
-    if (!pairing) {
-      setMessage("Could not create a companion pairing code.");
-      return;
-    }
-    setCompanionPairing(pairing);
-    setMessage("Pairing code created. Run the companion on the computer that is on the same network as Spotify.");
-  };
-  const companionCommand = companionPairing ? `.\\.companion-venv\\Scripts\\python.exe companion\\run.py --server-url "${getTargetBackendUrl()}" --pairing-token "${companionPairing.pairing_token}"` : "";
-  const copyCompanionCommand = async () => {
-    if (!companionCommand) return;
-    try {
-      await navigator.clipboard.writeText(companionCommand);
-      setMessage("Companion command copied.");
-    } catch {
-      setMessage("Copy was blocked by the browser. Select the command and copy it manually.");
-    }
   };
   const openDemo = () => { setDemo(true); setStatus({ configured: true, authenticated: true, redirect_uri: redirectUri, scope: "Demo mode", credentials_source: "Local demo data", user: { display_name: "Demo account" } }); setPlaylists(demoRows); setSelected(["demo-modern", "demo-2step"]); setMessage("Demo mode is active. Nothing will be changed in Spotify."); };
   const setRule = (id: string, patch: Partial<PlaylistAutomationSortRule>) => setRules((current) => current.map((rule) => rule.id === id ? { ...rule, ...patch } : rule));
@@ -308,42 +280,6 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
     <section className="ots-hero p-7"><p className="ots-kicker">Playlist sorting</p><h1 className="mt-2 text-3xl font-black text-white">Sort your Spotify playlists</h1><p className="mt-2 text-sm text-[#b3b3b3]">Spotify Sorter-style rules, duplicates, versions, dynamic playlists, schedules, backup, history, and CSV export.</p></section>
     <section className="ots-panel max-w-3xl p-6">
       <div className="mb-6 flex items-start gap-3"><Settings2 className="mt-0.5 h-5 w-5 text-[var(--spotify-green)]" /><div><h2 className="font-bold text-white">Connect Spotify</h2><p className="mt-1 text-sm text-[#b3b3b3]">Playlist sorting automatically reuses the Spotify credentials saved in Settings → API config.</p></div></div>
-      <section className="mb-5 border border-[var(--ots-border)] bg-[var(--spotify-surface-elevated)] p-4">
-        <h3 className="font-bold text-white">How will you access OnTheSpot?</h3>
-        <p className="mt-1 text-sm text-[#b3b3b3]">Choose where the Spotify app will be when you connect this installation.</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <button type="button" aria-pressed={spotifyAccessMode === "local"} onClick={() => setSpotifyAccessMode("local")} className={spotifyAccessMode === "local" ? "border border-[var(--spotify-green)] bg-[var(--ots-accent-soft)] p-3 text-left" : "border border-[var(--ots-border)] bg-[var(--spotify-surface)] p-3 text-left hover:border-[var(--ots-border-strong)]"}>
-            <span className="flex items-center gap-2 font-bold text-white"><Wifi className="h-4 w-4 text-[var(--spotify-green)]" /> Local network</span>
-            <span className="mt-1 block text-xs leading-5 text-[#b3b3b3]">Spotify and OnTheSpot are on the same home or office network. Uses built-in Spotify Connect discovery.</span>
-          </button>
-          <button type="button" aria-pressed={spotifyAccessMode === "remote"} onClick={() => setSpotifyAccessMode("remote")} className={spotifyAccessMode === "remote" ? "border border-[var(--ots-warning)] bg-[color-mix(in_srgb,var(--ots-warning)_10%,var(--spotify-surface))] p-3 text-left" : "border border-[var(--ots-border)] bg-[var(--spotify-surface)] p-3 text-left hover:border-[var(--ots-border-strong)]"}>
-            <span className="flex items-center gap-2 font-bold text-white"><Globe2 className="h-4 w-4 text-[var(--ots-warning)]" /> Remote access</span>
-            <span className="mt-1 block text-xs leading-5 text-[#b3b3b3]">You open OnTheSpot through Tailscale or the internet. The web UI works remotely, but Spotify Connect needs a local companion or mDNS bridge.</span>
-          </button>
-        </div>
-        {spotifyAccessMode === "remote" && <aside className="mt-3 border-l-4 border-[var(--ots-warning)] bg-[color-mix(in_srgb,var(--ots-warning)_10%,var(--spotify-surface))] p-3 text-xs leading-5 text-[var(--ots-warning)]">
-          <p className="font-semibold text-white">Use the companion on your Spotify computer</p>
-          <p className="mt-1">This is the computer where the Spotify desktop app is open—not the Unraid server. Spotify and that computer must be on the same LAN. Tailscale is only used to send the completed login back to this OnTheSpot server.</p>
-          <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[#b3b3b3]">
-            <li>Download or clone the OnTheSpot repository on that computer.</li>
-            <li>Open PowerShell in the repository folder; all commands below must be run there.</li>
-            <li>Click <strong className="text-white">Create companion pairing code</strong>, then run the generated command.</li>
-            <li>In Spotify, open <strong className="text-white">Connect to a device</strong> and select <strong className="text-white">OnTheSpot Companion</strong>.</li>
-          </ol>
-          <div className="mt-3 border border-[var(--ots-warning)]/40 bg-black/20 p-3 text-[#b3b3b3]">
-            <p className="font-semibold text-white">One-time Windows setup</p>
-            <code className="mt-2 block overflow-x-auto border border-[var(--ots-border)] bg-black/30 p-2 text-[11px] text-white">py -m venv .companion-venv<br />.{"\\"}.companion-venv{"\\"}Scripts{"\\"}python.exe -m pip install -r companion{"\\"}requirements.txt</code>
-            <p className="mt-2 text-[11px]">Run this once. Keep the terminal open while pairing.</p>
-          </div>
-          <button type="button" onClick={() => void createCompanionPairing()} disabled={busy === "companion"} className="ots-button ots-button-secondary mt-3 border-[var(--ots-warning)] text-[var(--ots-warning)]">{busy === "companion" ? "Creating pairing…" : "Create companion pairing code"}</button>
-          {companionPairing && <div className="mt-3 border border-[var(--ots-warning)]/40 bg-black/20 p-3 text-[#b3b3b3]">
-            <p className="font-semibold text-white">Now run this in the same PowerShell window</p>
-            <code className="mt-2 block overflow-x-auto whitespace-pre-wrap break-all border border-[var(--ots-border)] bg-black/30 p-2 text-[11px] text-white">{companionCommand}</code>
-            <div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void copyCompanionCommand()} className="ots-button ots-button-secondary h-8 px-3 text-xs">Copy run command</button><span>Code expires in {Math.max(0, Math.ceil((companionPairing.expires_at * 1000 - Date.now()) / 60000))} minutes.</span></div>
-            <p className="mt-2 text-[11px]">When pairing succeeds, the companion exits automatically and the new worker appears in Accounts. You can then finish playlist sorting sign-in separately if needed.</p>
-          </div>}
-        </aside>}
-      </section>
       {status?.configured ? <div className="mb-5 flex items-start gap-3 border border-[var(--ots-accent-border)] bg-[var(--ots-accent-soft)] p-4 text-sm"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--spotify-green)]" /><div><p className="font-bold text-white">Credentials ready</p><p className="mt-1 text-[#b3b3b3]">Source: {status.credentials_source || "API config"}. No need to enter them again here.</p></div></div> : <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border border-[var(--ots-warning)] bg-[color-mix(in_srgb,var(--ots-warning)_10%,var(--spotify-surface))] p-3 text-sm text-[var(--ots-warning)]"><span>Add a Spotify Client ID and Secret in API config before connecting.</span><button type="button" onClick={onOpenApiConfig} className="ots-button ots-button-secondary border-[var(--ots-warning)] text-[var(--ots-warning)]">Open API config</button></div>}
       <label className="ots-field-label grid gap-1">Redirect URI<input className="ots-input h-10 w-full" value={redirectUri} onChange={(event) => setRedirectUri(event.target.value)} /></label>
       <p className="mt-2 text-xs leading-5 text-[#777]">This defaults to the address you are using now. Add this exact HTTPS address to your Spotify Developer Dashboard before connecting. For Unraid, open OnTheSpot through your Tailscale Serve URL or HTTPS domain — not its LAN address. <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--spotify-green)] underline-offset-2 hover:text-white hover:underline">Open Spotify Developer Dashboard</a></p>

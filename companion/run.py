@@ -15,6 +15,11 @@ import sys
 import time
 from pathlib import Path
 
+# librespot currently ships protobuf files generated for the compatibility
+# runtime. Set this before importing librespot so a fresh companion venv works
+# with both older and newer protobuf package versions.
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+
 import requests
 import librespot.zeroconf as librespot_zeroconf
 from librespot.zeroconf import ZeroconfServer
