@@ -423,12 +423,21 @@ button:focus-visible {
 }
 
 .ots-select {
-  appearance: none;
+  /* Chromium can otherwise retain its native select affordance alongside the
+     themed chevron, which puts an extra arrow at the left edge on some themes. */
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b3b3b3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-origin: padding-box;
   background-position: right 0.9rem center;
   background-repeat: no-repeat;
   background-size: 0.95rem;
   padding-right: 2.85rem;
+}
+
+.ots-select::-ms-expand {
+  display: none;
 }
 
 .ots-search-input {
