@@ -98,6 +98,12 @@ class Config:
                     json.dump(self.__template_data, cf, indent=4, ensure_ascii=False)
                 self.__config = self.__template_data
 
+        # Version identifies the bundled application build, not a user setting.
+        # Keep existing configuration volumes from pinning the UI to an older
+        # release after the Docker image has been upgraded.
+        if self.__template_data.get("version"):
+            self.__config["version"] = self.__template_data["version"]
+
         # The bundled defaults are written for the Linux/Docker image. When
         # running the API directly on Windows, translate those container paths
         # to the user's normal Music/Videos folders instead of creating a

@@ -40,7 +40,8 @@ for (const locale of locales) {
     if (!response.ok) throw new Error(`Translation request failed for ${locale}: ${response.status}`);
     const body = await response.json();
     const translated = body?.[0]?.map((part) => part?.[0] || "").join("") || "";
-    const values = translated.split(new RegExp(`\\s*${split}\\s*`));
+    const escapedSplit = split.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const values = translated.split(new RegExp(`\\s*${escapedSplit}\\s*`));
     phrasesInBatch.forEach((phrase, index) => { dictionary[phrase] = values[index] || phrase; });
   }
   await writeFile(`src/locales/${locale}.json`, `${JSON.stringify(dictionary, null, 2)}\n`);
