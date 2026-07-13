@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Save,
   RotateCcw,
@@ -16,6 +16,7 @@ import {
   Palette,
   Trash2,
   Archive,
+  GripVertical,
 } from "lucide-react";
 import {
   CustomTheme,
@@ -27,11 +28,13 @@ import {
   ThemeMode,
   ThemePreset,
 } from "../types";
-import { DownloadProfile, exportBackup, importBackup } from "../lib/api";
+import { DownloadProfile, exportBackup, importBackup, saveBackupFile } from "../lib/api";
+import { translate } from "../lib/i18n";
 import { DownloadProfilesPanel } from "./DownloadProfilesPanel";
 import { UpdatePanel } from "./UpdatePanel";
 
 interface SettingsPageProps {
+  initialSection?: SettingsSection;
   config: OTSConfig | null;
   onUpdateValue: (key: string, value: any) => Promise<boolean>;
   onSave: () => Promise<boolean>;
@@ -53,7 +56,7 @@ interface SettingsPageProps {
   onDeleteCustomTheme: (id: string) => Promise<void>;
 }
 
-type SettingsSection =
+export type SettingsSection =
   | "general"
   | "audio"
   | "profiles"
@@ -65,7 +68,49 @@ type SettingsSection =
 
 type FormatterKey = "track_path_formatter" | "playlist_path_formatter";
 
+const APPLICATION_LANGUAGES = [
+  { value: "en_US", label: "English (United States)" },
+  { value: "en_GB", label: "English (United Kingdom)" },
+  { value: "es_ES", label: "Español (España)" },
+  { value: "fr_FR", label: "Français (France)" },
+  { value: "de_DE", label: "Deutsch (Deutschland)" },
+  { value: "it_IT", label: "Italiano (Italia)" },
+  { value: "nl_NL", label: "Nederlands (Nederland)" },
+  { value: "pl_PL", label: "Polski (Polska)" },
+  { value: "pt_BR", label: "Português (Brasil)" },
+  { value: "ja_JP", label: "日本語" },
+  { value: "ko_KR", label: "한국어" },
+  { value: "zh_CN", label: "简体中文" },
+  { value: "zh_TW", label: "繁體中文" },
+  { value: "pt_PT", label: "Português (Portugal)" },
+  { value: "tr_TR", label: "Türkçe (Türkiye)" },
+  { value: "uk_UA", label: "Українська" },
+] as const;
+
+const SETTINGS_NAV_ITEMS: Array<{ id: SettingsSection; icon: React.ElementType; label: string }> = [
+  { id: "search", icon: Search, label: "API config" },
+  { id: "audio", icon: Music, label: "Audio Outputs" },
+  { id: "backup", icon: Archive, label: "Backup & Restore" },
+  { id: "display", icon: Eye, label: "Display Settings" },
+  { id: "profiles", icon: Download, label: "Download Profiles" },
+  { id: "general", icon: Cpu, label: "General & Workers" },
+  { id: "metadata", icon: Tag, label: "ID3 Tagging" },
+  { id: "video", icon: Film, label: "Video Media" },
+];
+
+const readSettingsNavOrder = (): SettingsSection[] => {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem("ots-settings-nav-order") || "[]");
+    if (Array.isArray(stored)) {
+      const valid = stored.filter((id): id is SettingsSection => SETTINGS_NAV_ITEMS.some((item) => item.id === id));
+      if (valid.length === SETTINGS_NAV_ITEMS.length) return valid;
+    }
+  } catch { /* Use the default order. */ }
+  return SETTINGS_NAV_ITEMS.map((item) => item.id);
+};
+
 export const SettingsPage: React.FC<SettingsPageProps> = ({
+  initialSection,
   config,
   onUpdateValue,
   onSave,
@@ -86,15 +131,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onLoadCustomTheme,
   onDeleteCustomTheme,
 }) => {
-  const [section, setSection] = useState<SettingsSection>("general");
+  const [section, setSection] = useState<SettingsSection>(initialSection || "general");
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [customThemeName, setCustomThemeName] = useState("");
   const [customThemeMessage, setCustomThemeMessage] = useState("");
+  const [backupMessage, setBackupMessage] = useState("");
   const [formatterTarget, setFormatterTarget] = useState<FormatterKey>("track_path_formatter");
+  const [settingsNavOrder, setSettingsNavOrder] = useState<SettingsSection[]>(readSettingsNavOrder);
+  const [editingSettingsNav, setEditingSettingsNav] = useState(false);
+  const [draggedSettingsNav, setDraggedSettingsNav] = useState<SettingsSection | null>(null);
   const activeCustomPalette = customTheme[themeMode];
+
+  useEffect(() => {
+    if (initialSection) setSection(initialSection);
+  }, [initialSection]);
 
   if (!config) {
     return (
@@ -111,6 +164,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const handleTextChange = (key: string, val: string | number) => {
     onUpdateValue(key, val);
+  };
+
+  const handleApplicationLanguageChange = async (language: string) => {
+    const languageIndex = APPLICATION_LANGUAGES.findIndex((option) => option.value === language);
+    await onUpdateValue("language", language);
+    await onUpdateValue("language_index", Math.max(languageIndex, 0));
   };
 
   const insertFormatterVariable = async (variable: string) => {
@@ -176,13 +235,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       custom: window.localStorage.getItem("ots-custom-theme"),
       saved: window.localStorage.getItem("ots-custom-themes"),
     };
-    const blob = new Blob([JSON.stringify({ ...data, themes }, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "onthespot-backup.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
+    const path = await saveBackupFile({ ...data, themes }, config?.export_folder_path || "");
+    setBackupMessage(path ? `Backup saved to ${path}` : "Could not save the backup. Check the default export folder and try again.");
   };
 
   const triggerImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -327,13 +381,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     const isActive = section === id;
     return (
       <button
+        draggable={editingSettingsNav}
+        onDragStart={() => setDraggedSettingsNav(id)}
+        onDragOver={(event) => { if (editingSettingsNav) event.preventDefault(); }}
+        onDrop={(event) => { event.preventDefault(); if (!draggedSettingsNav || draggedSettingsNav === id) return; setSettingsNavOrder((current) => { const next = [...current]; const from = next.indexOf(draggedSettingsNav); const to = next.indexOf(id); next.splice(from, 1); next.splice(to, 0, draggedSettingsNav); window.localStorage.setItem("ots-settings-nav-order", JSON.stringify(next)); return next; }); setDraggedSettingsNav(null); }}
+        onDragEnd={() => setDraggedSettingsNav(null)}
         onClick={() => setSection(id)}
-        className={`ots-nav-item flex w-full shrink-0 items-center gap-3 text-left text-sm font-bold transition-colors lg:shrink ${
+        className={`ots-nav-item flex w-full shrink-0 items-center gap-3 text-left text-sm font-bold transition-colors lg:shrink ${editingSettingsNav ? "cursor-grab" : ""} ${
           isActive
             ? "ots-nav-item-active"
             : "text-[#8f8f8f] hover:bg-[#242424] hover:text-white"
         }`}
       >
+        {editingSettingsNav && <GripVertical className="h-4 w-4 shrink-0 text-[#777]" aria-label="Drag to reorder" />}
         <Icon className="w-[18px] h-[18px]" />
         <span>{label}</span>
       </button>
@@ -350,14 +410,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             System Configuration
           </h2>
           <p className="text-sm text-gray-500 dark:text-neutral-400 mt-1">
-            Configurations sync automatically with FastAPI engine state •
+            Configurations sync automatically with the OnTheSpot service •
             Version {config.version}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={triggerExport} className="ots-button ots-button-secondary"><Download className="h-4 w-4" /> Export</button>
-          <label className="ots-button ots-button-secondary cursor-pointer"><Upload className="h-4 w-4" /> {importing ? "Importing…" : "Import"}<input type="file" accept="application/json,.json" className="hidden" onChange={triggerImport} /></label>
           <button
             onClick={triggerReset}
             disabled={resetting}
@@ -387,15 +445,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-4">
         {/* Navigation Sidebar */}
-        <div className="ots-panel lg:sticky lg:top-8 lg:col-span-1 flex flex-row gap-1 overflow-x-auto p-2 shadow-xl shadow-black/10 lg:flex-col">
-          <NavButton id="general" icon={Cpu} label="General & Workers" />
-          <NavButton id="audio" icon={Music} label="Audio Outputs" />
-          <NavButton id="profiles" icon={Download} label="Download Profiles" />
-          <NavButton id="video" icon={Film} label="Video Media" />
-          <NavButton id="metadata" icon={Tag} label="ID3 Tagging" />
-          <NavButton id="search" icon={Search} label="Search API" />
-          <NavButton id="display" icon={Eye} label="Display Settings" />
-          <NavButton id="backup" icon={Archive} label="Backup & Restore" />
+        <div className="lg:sticky lg:top-8 lg:col-span-1">
+          <div className="ots-panel flex flex-row gap-1 overflow-x-auto p-2 shadow-xl shadow-black/10 lg:flex-col">
+            {settingsNavOrder.map((id) => { const item = SETTINGS_NAV_ITEMS.find((candidate) => candidate.id === id)!; return <NavButton key={item.id} {...item} />; })}
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditingSettingsNav((current) => !current)}
+            className={`ots-nav-item mt-2 hidden w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold transition-colors focus:outline-none lg:flex ${
+              editingSettingsNav
+                ? "bg-[#282828] text-white"
+                : "text-[#b3b3b3] hover:bg-[#1f1f1f] hover:text-white"
+            }`}
+            aria-pressed={editingSettingsNav}
+          >
+            <GripVertical className="h-5 w-5" />
+            <span>{editingSettingsNav ? translate(config.language, "done_editing", "Done editing") : translate(config.language, "edit_sections", "Edit sections")}</span>
+          </button>
         </div>
 
         {/* Content Panels */}
@@ -485,13 +551,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   "Automatically check for updates",
                   "Check the configured release feed in the background and notify you when a new version is available",
                 )}
-                <div className="py-2">
-                  {renderInput(
-                    "language",
-                    "Application Language (Coming Soon)",
-                    "text",
-                    "Default interface locale (e.g., en_US)",
-                  )}
+                <div className="flex flex-col gap-1.5 py-4">
+                  <label
+                    htmlFor="application-language"
+                    className="text-sm font-medium text-gray-900 dark:text-neutral-100"
+                  >
+                    {translate(config.language, "application_language", "Application Language")}
+                  </label>
+                  <select
+                    id="application-language"
+                    value={APPLICATION_LANGUAGES.some((option) => option.value === config.language) ? config.language : "en_US"}
+                    onChange={(event) => void handleApplicationLanguageChange(event.target.value)}
+                    className="ots-select w-full cursor-pointer appearance-none text-sm"
+                  >
+                    {APPLICATION_LANGUAGES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5 leading-relaxed">
+                    Uses the bundled application language pack. Your library metadata and filenames are never sent to a translation service.
+                  </p>
                 </div>
                 <div className="py-2">
                   {renderInput(
@@ -961,7 +1042,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <div className="animate-[fadeIn_0.2s_ease-out]">
               <div className="mb-6">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">
-                  Search & API Configuration
+                  API Configuration
                 </h3>
                 <p className="text-sm text-gray-500 mt-1">
                   Optimize third-party platform API limits and toggle library
@@ -1002,12 +1083,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
                     {renderInput(
                       "spotify_webapi_override_client_id",
-                      "Spotify Client ID Override",
+                      "Spotify Client ID",
                       "text",
                     )}
                     {renderInput(
                       "spotify_webapi_override_client_secret",
-                      "Spotify Client Secret Override",
+                      "Spotify Client Secret",
                       "text",
                     )}
                   </div>
@@ -1306,6 +1387,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <div className="mb-6">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">Backup & Restore</h3>
                 <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">Back up settings, profiles, themes, queue history, and local-library metadata in one portable JSON file.</p>
+              </div>
+              <div className="mb-5 border border-[var(--ots-border)] bg-[var(--spotify-surface-elevated)] p-4">
+                {renderInput("export_folder_path", "Default export folder", "text", "CSV exports, automation-config exports, and general backups use this folder. Leave blank to use Documents/OnTheSpot Exports.")}
+                {renderInput("playlist_backup_folder_path", "Playlist backup folder", "text", "Optional separate folder for Playlist sorting backups and restores. Leave blank to use a Playlist backups subfolder inside the default export folder.")}
+                <p className="mt-2 text-xs text-[#777]">Click Save Config after changing this default. Restore can still import a backup file from any folder.</p>
+                {backupMessage && <p className="mt-3 text-sm text-[var(--spotify-green)]">{backupMessage}</p>}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="ots-card p-5"><Archive className="h-5 w-5 text-[var(--spotify-green)]" /><h4 className="mt-3 font-bold text-gray-900 dark:text-neutral-100">Create a backup</h4><p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">Includes your saved themes, download profiles, statistics history, and library index.</p><button type="button" onClick={() => void triggerExport()} className="ots-button ots-button-primary mt-4"><Download className="h-4 w-4" /> Export backup</button></div>

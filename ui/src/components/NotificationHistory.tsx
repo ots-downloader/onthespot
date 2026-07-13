@@ -5,18 +5,23 @@ import { NotificationBannerItem } from "../types";
 interface NotificationHistoryProps {
   history: NotificationBannerItem[];
   onClear: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }
 
-export const NotificationHistory: React.FC<NotificationHistoryProps> = ({ history, onClear }) => {
-  const [open, setOpen] = useState(false);
+export const NotificationHistory: React.FC<NotificationHistoryProps> = ({ history, onClear, open: controlledOpen, onOpenChange, hideTrigger = false }) => {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="fixed bottom-5 left-5 z-40 flex items-center gap-2.5 rounded-lg border border-[#282828] bg-[#181818] px-3.5 py-2.5 text-sm font-semibold text-[#b3b3b3] shadow-lg shadow-black/20 transition-colors hover:bg-[#242424] hover:text-white md:left-[17.25rem]" title="Notification history" aria-label="Notification history">
+      {!hideTrigger && <button type="button" onClick={() => setOpen(true)} className="fixed bottom-5 left-5 z-40 flex items-center gap-2.5 rounded-lg border border-[#282828] bg-[#181818] px-3.5 py-2.5 text-sm font-semibold text-[#b3b3b3] shadow-lg shadow-black/20 transition-colors hover:bg-[#242424] hover:text-white" title="Notification history" aria-label="Notification history">
         <Bell className="h-4 w-4 text-[#1ed760]" />
         <span>History</span>
         {history.length > 0 && <span className="min-w-5 rounded-full bg-[#147f3e] px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white ots-on-green-text">{history.length}</span>}
-      </button>
+      </button>}
       {open && (
         <div className="fixed inset-0 z-[60] flex items-end justify-start bg-black/50 p-5 sm:items-center sm:justify-center">
           <div className="flex max-h-[75vh] w-full max-w-lg flex-col border border-[#333] bg-[#202020] shadow-2xl">

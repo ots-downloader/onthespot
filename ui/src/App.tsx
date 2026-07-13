@@ -2,10 +2,11 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Navbar, NavTab } from "./components/Navbar";
 import { SearchDashboard } from "./components/SearchDashboard";
 import { BrowseSpotify } from "./components/BrowseSpotify";
+import { PlaylistAutomationPage } from "./components/PlaylistAutomationPage";
 import { LibraryPage } from "./components/LibraryPage";
 import { StatisticsPanel } from "./components/StatisticsPanel";
 import { DownloadQueue } from "./components/DownloadQueue";
-import { SettingsPage } from "./components/SettingsPage";
+import { SettingsPage, type SettingsSection } from "./components/SettingsPage";
 import { AccountsManager } from "./components/AccountsManager";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { LogViewer } from "./components/LogViewer";
@@ -27,6 +28,7 @@ import {
   ThemeMode,
 } from "./types";
 import { useNotifications } from "./lib/notifications";
+import { installDocumentLocalization } from "./lib/localizeDocument";
 import {
   fetchOTSConfig,
   fetchDownloadQueue,
@@ -43,6 +45,7 @@ import {
   saveOTSConfig,
   resetOTSConfig,
   addAccountService,
+  configureYouTubeAuthentication,
   removeAccountUUID,
   check_api_version,
   fetchUpdateInfo,
@@ -250,12 +253,14 @@ const getCustomThemeStyle = (theme: CustomTheme, mode: ThemeMode = theme.mode): 
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>("dashboard");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [config, setConfig] = useState<OTSConfig | null>(null);
   const [queue, setQueue] = useState<DownloadQueueItem[]>([]);
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
   const [accountHealth, setAccountHealth] = useState<AccountHealth | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const { notifications, history, dismissNotification, clearHistory, lastStatusChange } = useNotifications("webui");
+  const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [themePreset, setThemePreset] = useState<ThemePreset>(() => readStoredThemePreset() ?? "spotify");
   const [customTheme, setCustomTheme] = useState<CustomTheme>(() => readStoredCustomTheme());
@@ -325,6 +330,14 @@ export default function App() {
       document.documentElement.classList.remove("dark");
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    const locale = (config?.language || "en_US").replace("_", "-");
+    document.documentElement.lang = locale;
+    document.documentElement.dataset.applicationLanguage = locale;
+  }, [config?.language]);
+
+  useEffect(() => installDocumentLocalization(config?.language || "en_US"), [config?.language]);
 
   useEffect(() => {
     if (!config || config.check_for_updates === false) {
@@ -632,6 +645,15 @@ export default function App() {
     return acc;
   };
 
+  const handleConfigureYouTubeAuthentication = async (authentication: { mode: "none" | "browser" | "cookie_file"; browser?: string; cookie_file?: string }) => {
+    const ok = await configureYouTubeAuthentication(authentication);
+    if (ok) {
+      const fresh = await fetchOTSConfig();
+      if (fresh) setConfig(fresh._Config__config);
+    }
+    return ok;
+  };
+
   const handleRemoveAccount = async (uuid: string) => {
     const ok = await removeAccountUUID(uuid);
     if (ok) {
@@ -681,8 +703,12 @@ export default function App() {
         }
         activeDownloads={activeDownloadsCount}
         accountCount={accounts.length}
+        appVersion={config?.version || "v2.0.0 Alpha 2"}
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
+        notificationHistoryCount={history.length}
+        onOpenNotificationHistory={() => setNotificationHistoryOpen(true)}
+        language={config?.language || "en_US"}
       />
 
       <main className="min-h-screen pb-10 md:ml-64">
@@ -697,6 +723,8 @@ export default function App() {
         {activeTab === "browse" && (
           <BrowseSpotify onDownload={handleDownloadItem} />
         )}
+
+        {activeTab === "playlist-automation" && <PlaylistAutomationPage onOpenApiConfig={() => { setSettingsSection("search"); setActiveTab("settings"); }} />}
 
         {activeTab === "library" && (
           <LibraryPage onQueueChanged={async () => setQueue(await fetchDownloadQueue())} />
@@ -725,6 +753,7 @@ export default function App() {
 
         {activeTab === "settings" && (
           <SettingsPage
+            initialSection={settingsSection}
             config={config}
             onUpdateValue={handleUpdateConfigValue}
             onSave={handleSaveConfig}
@@ -754,6 +783,10 @@ export default function App() {
             onRemoveAccount={handleRemoveAccount}
             health={accountHealth}
             onReconnect={handleReconnectAccounts}
+            onConfigureYouTubeAuthentication={handleConfigureYouTubeAuthentication}
+            youtubeAuthenticationMode={config?.youtube_auth_mode || "none"}
+            youtubeBrowser={config?.youtube_cookies_browser || ""}
+            youtubeCookieFile={config?.youtube_cookies_file || ""}
           />
         )}
 
@@ -776,7 +809,7 @@ export default function App() {
         onDismiss={handleDismissNotification}
         disabled={config?.disable_download_popups}
       />
-      <NotificationHistory history={history} onClear={clearHistory} />
+      <NotificationHistory history={history} onClear={clearHistory} open={notificationHistoryOpen} onOpenChange={setNotificationHistoryOpen} hideTrigger />
     </div>
   );
 }

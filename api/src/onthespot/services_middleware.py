@@ -33,6 +33,7 @@ from .runtimedata import get_logger, progress_hook, wait_for_download_resume, yt
 from .resources.exceptions import TrackUnavailableError, DownloadCancelled
 from .otsconfig import config
 from .utils import requeue_item, run_ffmpeg
+from .youtube_auth import is_youtube_url, youtube_ydl_options
 
 
 logger = get_logger("services_middleware")
@@ -313,6 +314,7 @@ def download_via_ytdlp_audio(
                 "player_client": ["android_vr"],
             }
         }
+        ydl_opts.update(youtube_ydl_options())
 
     ydl_opts.update(
         {
@@ -328,6 +330,9 @@ def download_via_ytdlp_audio(
         }
     )
     ydl_opts["progress_hooks"] = [lambda d: yt_dlp_progress_hook(item, d)]
+
+    if is_youtube_url(item_id):
+        ydl_opts.update(youtube_ydl_options())
 
     with YoutubeDL(ydl_opts) as downloader:
         if service == "soundcloud" and token["oauth_token"]:
@@ -394,6 +399,8 @@ def download_apple_music(item, item_id, token, temp_path):
         "fragment_retries": 3,
     }
     ydl_opts["progress_hooks"] = [lambda d: yt_dlp_progress_hook(item, d)]
+    if is_youtube_url(item_id):
+        ydl_opts.update(youtube_ydl_options())
 
     with YoutubeDL(ydl_opts) as downloader:
         downloader.download(stream_url)
@@ -627,6 +634,8 @@ def download_generic(item, item_id, temp_path):
     }
 
     ydl_opts["progress_hooks"] = [lambda d: yt_dlp_progress_hook(item, d)]
+    if is_youtube_url(item_id):
+        ydl_opts.update(youtube_ydl_options())
 
     with YoutubeDL(ydl_opts) as downloader:
         info = downloader.extract_info(item_id, download=False)
@@ -662,6 +671,8 @@ def download_generic_v2a(item, item_id, temp_path):
     }
 
     ydl_opts["progress_hooks"] = [lambda d: yt_dlp_progress_hook(item, d)]
+    if is_youtube_url(item_id):
+        ydl_opts.update(youtube_ydl_options())
 
     with YoutubeDL(ydl_opts) as downloader:
         info = downloader.extract_info(item_id, download=False)

@@ -76,7 +76,7 @@ def _version_key(value: str | None) -> tuple[int, int, int, int, int]:
     suffix = text[match.end() :]
     if not suffix:
         return (major, minor, patch, 3, 0)
-    prerelease = re.search(r"(alpha|beta|rc|preview|dev)[.-]?(\d*)", suffix)
+    prerelease = re.search(r"(alpha|beta|rc|preview|dev)[.\-\s]?(\d*)", suffix)
     if not prerelease:
         return (major, minor, patch, 2, 0)
     rank = {"dev": 0, "alpha": 0, "beta": 1, "preview": 2, "rc": 2}[prerelease.group(1)]

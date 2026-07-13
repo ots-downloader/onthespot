@@ -5,16 +5,19 @@ import json
 import uuid
 import re
 import shutil
+from pathlib import Path
+from typing import Any
 from contextlib import asynccontextmanager
 import mimetypes
 
 
 import uvicorn
 from pydantic import BaseModel
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 # dev env flag for protobufs
 # os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
@@ -66,6 +69,8 @@ from .library import (
 from .utils import format_local_id, open_item, retry_single_item
 from .statistics import clear_history, export_history, get_statistics, import_history
 from .updater import check_for_updates, install_update, start_update_checker, stop_update_checker
+from .playlist_automation import PlaylistAutomationError, playlist_automation
+from .export_locations import default_export_directory, playlist_backup_directory, set_default_export_directory, set_playlist_backup_directory, write_export_file
 
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
@@ -188,6 +193,7 @@ async def lifespan(app: FastAPI):
     start_update_checker(
         lambda title, message, url: notification_hook(title, message, url)
     )
+    playlist_automation.start_scheduler()
     logger.info("Initializing...")
 
     yield
@@ -196,6 +202,7 @@ async def lifespan(app: FastAPI):
     downloadworker.stop()
     fillaccountpool.stop()
     stop_update_checker()
+    playlist_automation.stop_scheduler()
     logger.info("Application shutdown")
 
 
@@ -227,6 +234,12 @@ app.add_middleware(
 class AccountData(BaseModel):
     username: str | None = None
     token: str | None = None
+
+
+class YouTubeAuthentication(BaseModel):
+    mode: str = "none"
+    browser: str | None = None
+    cookie_file: str | None = None
 
 
 class QueueOrder(BaseModel):
@@ -1008,6 +1021,54 @@ async def save_config():
     return config.save()
 
 
+@app.get("/exports/location")
+async def get_export_location():
+    return {"directory": default_export_directory()}
+
+
+@app.post("/exports/location")
+async def update_export_location(payload: dict[str, Any]):
+    try:
+        return {"directory": set_default_export_directory(str(payload.get("directory") or ""))}
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/exports/playlist-backup-location")
+async def get_playlist_backup_location():
+    return {"directory": playlist_backup_directory()}
+
+
+@app.post("/exports/playlist-backup-location")
+async def update_playlist_backup_location(payload: dict[str, Any]):
+    try:
+        return {"directory": set_playlist_backup_directory(str(payload.get("directory") or ""))}
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/exports/write")
+async def write_text_export(payload: dict[str, Any]):
+    filename = re.sub(r"[^A-Za-z0-9._-]+", "-", str(payload.get("filename") or "export.txt")).strip(".-") or "export.txt"
+    stem, extension = os.path.splitext(filename)
+    try:
+        path = write_export_file(stem or "export", extension or ".txt", str(payload.get("content") or ""), str(payload.get("directory") or ""))
+        return {"success": True, "path": path}
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/exports/open-folder")
+async def open_export_folder(payload: dict[str, Any]):
+    try:
+        directory = playlist_backup_directory() if payload.get("playlist_backups") else default_export_directory()
+        os.makedirs(directory, exist_ok=True)
+        open_item(directory)
+        return {"success": True, "path": directory}
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.post("/config/reset")
 async def reset_config():
     """
@@ -1039,6 +1100,15 @@ def _exportable_config() -> dict:
 @app.get("/config/export")
 async def export_config():
     return JSONResponse(content=_exportable_config())
+
+
+@app.post("/config/export-file")
+async def export_config_file(payload: dict[str, Any]):
+    try:
+        path = write_export_file("onthespot-config", "json", json.dumps(_exportable_config(), indent=2, ensure_ascii=False), str(payload.get("directory") or ""))
+        return {"success": True, "path": path}
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/config/import")
@@ -1096,6 +1166,250 @@ async def clear_download_statistics():
     return {"success": True}
 
 
+# ---------------------------------------------------------------------------
+# SPOTIFY PLAYLIST AUTOMATION
+# ---------------------------------------------------------------------------
+
+async def _playlist_operation(function, *args):
+    try:
+        return await run_in_threadpool(function, *args)
+    except PlaylistAutomationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/playlist-automation/status")
+async def playlist_automation_status():
+    return playlist_automation.status()
+
+
+@app.post("/playlist-automation/config")
+async def configure_playlist_automation(payload: dict[str, Any]):
+    return await _playlist_operation(
+        playlist_automation.configure,
+        str(payload.get("client_id") or ""),
+        str(payload.get("client_secret") or ""),
+        str(payload.get("redirect_uri") or ""),
+    )
+
+
+@app.get("/playlist-automation/login")
+async def playlist_automation_login():
+    try:
+        return RedirectResponse(await _playlist_operation(playlist_automation.login_url))
+    except HTTPException:
+        raise
+
+
+@app.get("/playlist-automation/callback")
+async def playlist_automation_callback(code: str = "", state: str | None = None):
+    try:
+        await _playlist_operation(playlist_automation.callback, code, state)
+        return RedirectResponse("http://localhost:3001/?playlist-automation=connected")
+    except HTTPException as exc:
+        return RedirectResponse(f"http://localhost:3001/?playlist-automation=error&message={exc.detail}")
+
+
+@app.post("/playlist-automation/logout")
+async def playlist_automation_logout():
+    return await _playlist_operation(playlist_automation.logout)
+
+
+@app.get("/playlist-automation/playlists")
+async def playlist_automation_playlists():
+    return {"playlists": await _playlist_operation(playlist_automation.playlists)}
+
+
+@app.post("/playlist-automation/scan")
+async def playlist_automation_scan(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.scan, payload)
+
+
+@app.post("/playlist-automation/apply")
+async def playlist_automation_apply(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.apply, payload)
+
+
+@app.post("/playlist-automation/sort/scan")
+async def scan_selected_playlists_for_sorting(payload: dict[str, Any]):
+    return {"playlists": await _playlist_operation(playlist_automation.sort_scan, payload)}
+
+
+@app.post("/playlist-automation/sort/apply")
+async def apply_selected_playlist_sorting(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.sort_apply, payload)
+
+
+@app.get("/playlist-automation/history")
+async def playlist_automation_history():
+    return {"history": playlist_automation.history()}
+
+
+@app.delete("/playlist-automation/history")
+async def clear_playlist_automation_history():
+    playlist_automation.clear_history()
+    return {"success": True}
+
+
+@app.delete("/playlist-automation/history/{history_id}")
+async def delete_playlist_automation_history(history_id: str):
+    await _playlist_operation(playlist_automation.delete_history, history_id)
+    return {"success": True}
+
+
+@app.post("/playlist-automation/history/{history_id}/restore")
+async def restore_playlist_automation_history(history_id: str):
+    return await _playlist_operation(playlist_automation.restore_history, history_id)
+
+
+@app.post("/playlist-automation/compare")
+async def compare_playlist_automation(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.compare, [str(value) for value in payload.get("playlist_ids", []) if value])
+
+
+@app.post("/playlist-automation/remove-track")
+async def remove_playlist_automation_track(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.remove_track, str(payload.get("playlist_id") or ""), str(payload.get("track_uri") or ""))
+
+
+@app.get("/playlist-automation/ignored")
+async def get_ignored_playlist_tracks():
+    return {"items": playlist_automation.ignored()}
+
+
+@app.post("/playlist-automation/ignored")
+async def add_ignored_playlist_track(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.ignore, payload)
+
+
+@app.delete("/playlist-automation/ignored")
+async def remove_ignored_playlist_tracks(payload: dict[str, Any]):
+    playlist_automation.remove_ignored([str(value) for value in payload.get("track_ids", []) if value])
+    return {"success": True}
+
+
+@app.get("/playlist-automation/configs")
+async def get_playlist_automation_configs():
+    return {"configs": playlist_automation.configs()}
+
+
+@app.post("/playlist-automation/configs")
+async def save_playlist_automation_config(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.save_config, payload, str(payload.get("id") or "") or None)
+
+
+@app.post("/playlist-automation/configs/reorder")
+async def reorder_playlist_automation_configs(payload: dict[str, Any]):
+    return {"configs": playlist_automation.reorder_configs([str(value) for value in payload.get("config_ids", []) if value])}
+
+
+@app.delete("/playlist-automation/configs/{config_id}")
+async def delete_playlist_automation_config(config_id: str):
+    playlist_automation.delete_config(config_id)
+    return {"success": True}
+
+
+@app.post("/playlist-automation/configs/{config_id}/run")
+async def run_playlist_automation_config(config_id: str):
+    return await _playlist_operation(playlist_automation.run_config, config_id)
+
+
+@app.post("/playlist-automation/configs/run-all")
+async def run_all_playlist_automation_configs():
+    return await _playlist_operation(playlist_automation.run_all_configs)
+
+
+@app.get("/playlist-automation/export/config")
+async def export_playlist_automation_config():
+    return playlist_automation.export_config()
+
+
+@app.post("/playlist-automation/export/config-file")
+async def export_playlist_automation_config_file(payload: dict[str, Any]):
+    try:
+        path = write_export_file("playlist-automation-config", "json", json.dumps(playlist_automation.export_config(), indent=2, ensure_ascii=False), str(payload.get("directory") or ""))
+        return {"success": True, "path": path}
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/playlist-automation/import/config")
+async def import_playlist_automation_config(payload: dict[str, Any]):
+    playlist_automation.import_config(payload)
+    return {"success": True}
+
+
+@app.post("/playlist-automation/export/csv")
+async def export_playlist_automation_csv(payload: dict[str, Any]):
+    content = playlist_automation.export_csv(payload.get("tracks", []) if isinstance(payload.get("tracks", []), list) else [])
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=playlist-automation.csv"},
+    )
+
+
+@app.post("/playlist-automation/export/playlists-csv")
+async def export_selected_playlists_csv(payload: dict[str, Any]):
+    content = await _playlist_operation(playlist_automation.export_playlists_csv, [str(value) for value in payload.get("playlist_ids", []) if value])
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=spotify-playlists.csv"},
+    )
+
+
+@app.post("/playlist-automation/export/playlists-csv-file")
+async def export_selected_playlists_csv_file(payload: dict[str, Any]):
+    content = await _playlist_operation(playlist_automation.export_playlists_csv, [str(value) for value in payload.get("playlist_ids", []) if value])
+    try:
+        path = write_export_file("spotify-playlists", "csv", content, str(payload.get("directory") or ""))
+        return {"success": True, "path": path}
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/playlist-automation/export/playlists-csv")
+async def download_selected_playlists_csv(playlist_ids: str = Query("")):
+    identifiers = [value.strip() for value in playlist_ids.split(",") if value.strip()]
+    content = await _playlist_operation(playlist_automation.export_playlists_csv, identifiers)
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=spotify-playlists.csv"},
+    )
+
+
+@app.get("/playlist-automation/backups")
+async def get_playlist_automation_backups():
+    return {"backups": playlist_automation.backups()}
+
+
+@app.post("/playlist-automation/backups")
+async def create_playlist_automation_backup(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.create_backup, [str(value) for value in payload.get("playlist_ids", []) if value])
+
+
+@app.post("/playlist-automation/backups/restore")
+async def restore_playlist_automation_backup(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.restore_backup, str(payload.get("filename") or ""), str(payload.get("target_playlist_id") or ""))
+
+
+@app.get("/playlist-automation/schedules")
+async def get_playlist_automation_schedules():
+    return {"schedules": playlist_automation.schedules()}
+
+
+@app.post("/playlist-automation/schedules")
+async def save_playlist_automation_schedule(payload: dict[str, Any]):
+    return await _playlist_operation(playlist_automation.save_schedule, payload)
+
+
+@app.delete("/playlist-automation/schedules/{schedule_id}")
+async def delete_playlist_automation_schedule(schedule_id: str):
+    playlist_automation.delete_schedule(schedule_id)
+    return {"success": True}
+
+
 @app.get("/backup/export")
 async def export_backup():
     return JSONResponse(
@@ -1109,6 +1423,16 @@ async def export_backup():
             "library_metadata": export_index(),
         }
     )
+
+
+@app.post("/backup/export-file")
+async def export_backup_file(payload: dict[str, Any]):
+    backup = payload.get("backup") if isinstance(payload.get("backup"), dict) else payload
+    try:
+        path = write_export_file("onthespot-backup", "json", json.dumps(backup, indent=2, ensure_ascii=False), str(payload.get("directory") or ""))
+        return {"success": True, "path": path}
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/backup/import")
@@ -1155,6 +1479,33 @@ async def updates_install():
 
 
 # ACCOUNTS ENDPOINTS
+@app.post("/accounts/youtube-auth")
+async def configure_youtube_auth(authentication: YouTubeAuthentication):
+    """Save explicit local-only yt-dlp authentication settings for YouTube."""
+    allowed_browsers = {"chrome", "chromium", "edge", "firefox", "brave", "opera", "vivaldi"}
+    mode = authentication.mode.strip().lower()
+    if mode not in {"none", "browser", "cookie_file"}:
+        raise HTTPException(status_code=400, detail="Unsupported YouTube authentication mode")
+
+    browser = (authentication.browser or "").strip().lower()
+    cookie_file = (authentication.cookie_file or "").strip()
+    if mode == "browser" and browser not in allowed_browsers:
+        raise HTTPException(status_code=400, detail="Choose a supported browser profile")
+    if mode == "cookie_file":
+        path = Path(cookie_file).expanduser()
+        if not path.is_absolute() or not path.is_file():
+            raise HTTPException(status_code=400, detail="Choose an existing absolute cookies-file path")
+        cookie_file = str(path)
+
+    config.set("youtube_auth_mode", mode)
+    config.set("youtube_cookies_browser", browser if mode == "browser" else "")
+    config.set("youtube_cookies_file", cookie_file if mode == "cookie_file" else "")
+    config.save()
+    status = "disabled" if mode == "none" else "configured"
+    notification_hook("YouTube authentication updated", f"YouTube session authentication is {status}.")
+    return {"success": True, "mode": mode, "browser": browser if mode == "browser" else "", "cookie_file": cookie_file if mode == "cookie_file" else ""}
+
+
 @app.post("/accounts/add")
 async def add_account(service: str, item: AccountData | None = None):
     """
@@ -1310,6 +1661,10 @@ async def get_system_diagnostics():
         disk = {"total": usage.total, "free": usage.free, "used": usage.used}
     except OSError:
         disk = {"total": 0, "free": 0, "used": 0}
+    rate_limit = get_rate_limit_state()
+    spotify_status = playlist_automation.status()
+    spotify_rate_limited = bool(rate_limit.get("active")) and "spotify" in str(rate_limit.get("host") or "").casefold()
+    spotify_api_status = "Rate limited" if spotify_rate_limited else ("Connected" if spotify_status.get("authenticated") else ("Needs sign-in" if spotify_status.get("configured") else "Not configured"))
     return {
         "backend": {"status": "online", "version": config.get("version")},
         "workers": {
@@ -1327,7 +1682,14 @@ async def get_system_diagnostics():
         },
         "ffmpeg": {"path": config.get("_ffmpeg_bin_path", ""), "available": bool(config.get("_ffmpeg_bin_path"))},
         "disk": disk,
-        "rate_limit": get_rate_limit_state(),
+        "rate_limit": rate_limit,
+        "spotify_api": {
+            "configured": bool(spotify_status.get("configured")),
+            "connected": bool(spotify_status.get("authenticated")),
+            "status": spotify_api_status,
+            "rate_limited": spotify_rate_limited,
+            "seconds_remaining": int(rate_limit.get("seconds_remaining") or 0) if spotify_rate_limited else 0,
+        },
     }
 
 
@@ -1425,6 +1787,14 @@ async def sse_endpoint(user_id: str, request: Request):
     return StreamingResponse(
         event_generator(user_id, request), media_type="text/event-stream"
     )
+
+
+# The production UI is built by Vite into ui/dist and served by this same
+# FastAPI process. Set ONTHESPOT_WEBUI_DIST when the files live elsewhere.
+_workspace_root = Path(__file__).resolve().parents[3]
+_ui_dist = Path(os.environ.get("ONTHESPOT_WEBUI_DIST") or _workspace_root / "ui" / "dist")
+if _ui_dist.is_dir():
+    app.mount("/", StaticFiles(directory=str(_ui_dist), html=True), name="web-ui")
 
 
 if __name__ == "__main__":

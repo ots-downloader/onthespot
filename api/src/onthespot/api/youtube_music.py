@@ -5,6 +5,7 @@ import requests
 from yt_dlp import YoutubeDL
 from ..otsconfig import config
 from ..runtimedata import get_logger, account_pool
+from ..youtube_auth import youtube_ydl_options
 
 logger = get_logger("api.youtube_music")
 
@@ -58,6 +59,7 @@ def youtube_music_get_search_results(_, search_term, content_types):
         "quiet": True,
         "extract_flat": True,
     }
+    ydl_opts.update(youtube_ydl_options())
 
     search_results = []
     if "track" in content_types:
@@ -96,7 +98,9 @@ def youtube_music_get_track_metadata(_, item_id, item = None):
             info_dict = json.load(cf)
 
     else:
-        info_dict = YoutubeDL({"quiet": True}).extract_info(url, download=False)
+        ydl_opts = {"quiet": True}
+        ydl_opts.update(youtube_ydl_options())
+        info_dict = YoutubeDL(ydl_opts).extract_info(url, download=False)
         json_output = json.dumps(info_dict, indent=4)
         with open(req_cache_file, "w", encoding="utf-8") as cf:
             cf.write(json_output)
@@ -172,6 +176,7 @@ def youtube_music_get_playlist_data(_, playlist_id):
         "quiet": True,
         "extract_flat": True,
     }
+    ydl_opts.update(youtube_ydl_options())
 
     with YoutubeDL(ydl_opts) as ytdl:
         playlist_data = ytdl.extract_info(url, download=False)
@@ -193,6 +198,7 @@ def youtube_music_get_channel_track_ids(_, channel_id):
         "extract_flat": True,
         "extractor_args": {"youtube": {"player_client": ["tv"]}},
     }
+    ydl_opts.update(youtube_ydl_options())
 
     with YoutubeDL(ydl_opts) as ytdl:
         channel_data = ytdl.extract_info(url, download=False)

@@ -1,5 +1,5 @@
 {
-  "version": "v2.0.0alpha1",
+  "version": "v2.0.0 Alpha 2",
   "debug_mode": false,
   "language_index": 0,
   "total_downloaded_items": 0,
@@ -39,6 +39,11 @@
   "language": "en_US",
   "theme": "dark",
   "active_download_profile": "mp3-320",
+  "export_folder_path": "",
+  "playlist_backup_folder_path": "",
+  "youtube_auth_mode": "none",
+  "youtube_cookies_browser": "",
+  "youtube_cookies_file": "",
   "download_profiles": [
     {
       "id": "mp3-320",

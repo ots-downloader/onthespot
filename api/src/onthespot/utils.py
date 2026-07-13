@@ -362,17 +362,13 @@ def sanitize_data(value):
 
 
 def translate(string):
-    """Translate *string* to the configured app language via Google Translate.
+    """Return metadata unchanged.
 
-    Returns the original string unchanged if the request fails.
+    The web interface uses bundled language packs.  Metadata is deliberately
+    left untouched: translating song and album names would be lossy and would
+    require sending a user's library to a third-party translation service.
     """
-    try:
-        response = requests.get(
-            f"https://translate.googleapis.com/translate_a/single?dj=1&dt=t&dt=sp&dt=ld&dt=bd&client=dict-chrome-ex&sl=auto&tl={config.get('language')}&q={string}"
-        )
-        return response.json()["sentences"][0]["trans"]
-    except (requests.exceptions.RequestException, KeyError, IndexError):
-        return string
+    return string
 
 
 def conv_list_format(items):

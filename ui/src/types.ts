@@ -142,6 +142,11 @@ export interface OTSConfig {
   webui_password: string;
   theme: string;
   active_download_profile?: string;
+  export_folder_path?: string;
+  playlist_backup_folder_path?: string;
+  youtube_auth_mode?: "none" | "browser" | "cookie_file";
+  youtube_cookies_browser?: string;
+  youtube_cookies_file?: string;
   download_profiles?: Array<{
     id: string;
     name: string;

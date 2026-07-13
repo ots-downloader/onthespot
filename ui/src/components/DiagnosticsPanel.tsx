@@ -27,7 +27,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ wsConnected,
     setLoading(false);
   };
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => { void refresh(); const interval = window.setInterval(() => void refresh(), 10_000); return () => window.clearInterval(interval); }, []);
 
   if (loading && !data) return <div className="flex items-center gap-2 p-4 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Reading worker diagnostics…</div>;
   if (!data) return <div className="p-4 text-sm text-red-600">Diagnostics are unavailable.</div>;
@@ -35,7 +35,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ wsConnected,
   const activeWorkers = Object.values(data.workers).filter(Boolean).length;
   const queueStatuses = Object.entries(data.queue.statuses);
   const apiUrl = getTargetBackendUrl();
-  const uiVersion = import.meta.env.PACKAGE_VERSION || "n/d";
+  const spotifyApi = data.spotify_api || { configured: false, connected: false, status: "Unavailable", rate_limited: false, seconds_remaining: 0 };
 
   return (
     <div className="spotify-fade-up ots-page flex flex-col font-sans">
@@ -43,8 +43,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ wsConnected,
         <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#1ed760]">System health</p>
-            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-white"><Activity className="h-6 w-6 text-[#1ed760]" /> Backend diagnostics</h1>
-            <p className="mt-2 text-sm text-[#b3b3b3]">Live worker, queue, storage, FFmpeg, and API rate-limit status.</p>
+            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-white"><Activity className="h-6 w-6 text-[#1ed760]" /> OnTheSpot diagnostics</h1>
+            <p className="mt-2 text-sm text-[#b3b3b3]">Live service, worker, queue, storage, FFmpeg, and API rate-limit status.</p>
             <div className="mt-3 flex min-w-0 items-center gap-2 text-xs">
               {wsConnected ? <Wifi className="h-4 w-4 shrink-0 text-[#1ed760]" /> : <WifiOff className="h-4 w-4 shrink-0 text-[#f6b94a]" />}
               <span className="font-bold text-white">{wsConnected ? "Connected" : "Connecting"}</span>
@@ -60,11 +60,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ wsConnected,
               </a>
             </div>
           </div>
-          <div className="flex w-full shrink-0 flex-col gap-2 xl:max-w-[560px]">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <span className="ots-status-cell ots-status-cell--online"><CheckCircle2 className="h-4 w-4 shrink-0" /> Backend online</span>
-              <button type="button" onClick={() => void checkVersion()} className="ots-status-cell">API {data.backend.version || "n/d"}</button>
-              <span className="ots-status-cell">UI v{uiVersion}</span>
+          <div className="flex w-full shrink-0 flex-col gap-2 xl:max-w-[640px]">
+            <div className="grid grid-cols-2 gap-2">
+              <span className="ots-status-cell ots-status-cell--online"><CheckCircle2 className="h-4 w-4 shrink-0" /> OnTheSpot online</span>
+              <span className={spotifyApi.connected && !spotifyApi.rate_limited ? "ots-status-cell ots-status-cell--online" : spotifyApi.rate_limited ? "ots-status-cell border-[var(--ots-warning)] text-[var(--ots-warning)]" : "ots-status-cell"}>{spotifyApi.rate_limited ? <WifiOff className="h-4 w-4 shrink-0" /> : <Wifi className="h-4 w-4 shrink-0" />} Spotify API: {spotifyApi.status}</span>
+              <span className={spotifyApi.rate_limited ? "ots-status-cell border-[var(--ots-warning)] text-[var(--ots-warning)]" : "ots-status-cell"}>{spotifyApi.rate_limited ? `Rate limited: ${spotifyApi.seconds_remaining}s` : "No Spotify rate limit"}</span>
               <button type="button" onClick={() => void refresh()} className="ots-status-cell text-white" disabled={loading}><RefreshCw className={`h-4 w-4 shrink-0 ${loading ? "animate-spin" : ""}`} /> Refresh</button>
             </div>
             {newVersion && <span className="flex items-center justify-end gap-1.5 px-1 text-xs font-bold text-[#1ed760]"><Sparkles className="h-3.5 w-3.5" /> New update available</span>}
@@ -72,11 +72,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ wsConnected,
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="ots-tile"><p className="ots-tile-label">Queue</p><p className="mt-2 text-2xl font-bold text-white">{data.queue.downloads}</p><p className="text-xs text-[#8f8f8f]">{data.queue.pending} pending · {data.queue.parsing} parsing</p></div>
         <div className="ots-tile"><p className="ots-tile-label">Disk free</p><p className="mt-2 text-2xl font-bold text-white">{formatBytes(data.disk.free)}</p><p className="text-xs text-[#8f8f8f]">of {formatBytes(data.disk.total)}</p></div>
         <div className="ots-tile"><p className="ots-tile-label">FFmpeg</p><p className="mt-2 flex items-center gap-2 text-sm font-bold text-white">{data.ffmpeg.available ? <CheckCircle2 className="h-4 w-4 text-[#1ed760]" /> : <XCircle className="h-4 w-4 text-[#ff7b7b]" />} {data.ffmpeg.available ? "Available" : "Missing"}</p><p className="mt-1 truncate text-xs text-[#777]" title={data.ffmpeg.path}>{data.ffmpeg.path || "Set FFMPEG_PATH"}</p></div>
-        <div className="ots-tile"><p className="ots-tile-label">Rate limit</p><p className="mt-2 text-sm font-bold text-white">{data.rate_limit.active ? `${data.rate_limit.seconds_remaining}s remaining` : "No active limit"}</p><p className="mt-1 truncate text-xs text-[#777]">{data.rate_limit.host || "No recent 429 responses"}</p></div>
       </section>
 
       <section className="ots-panel p-5">

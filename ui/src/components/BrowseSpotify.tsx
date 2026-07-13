@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ExternalLink, Loader2, Search } from "lucide-react";
+import { ExternalLink, Loader2, Search, Music2 } from "lucide-react";
 import { SearchResultItem } from "../types";
 import { fetchSpotifyCatalog } from "../lib/api";
 
@@ -110,6 +110,7 @@ export const BrowseSpotify: React.FC<BrowseSpotifyProps> = ({ onDownload }) => {
                     <p className="mt-1 truncate text-xs text-[#b3b3b3]">{item.artist || "Spotify"}</p>
                   </div>
                   <span className="hidden text-xs capitalize text-[#8f8f8f] sm:block">{item.item_type}</span>
+                  <span title="Downloads from Spotify" className="hidden items-center gap-1 border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-green-300 sm:inline-flex"><Music2 className="h-3 w-3" />Spotify</span>
                   <a href={item.item_url || item.url} target="_blank" rel="noopener noreferrer" className="ots-icon-button hidden sm:flex" title="Open in Spotify">
                     <ExternalLink className="h-4 w-4" />
                   </a>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Download, FolderOpen, Trash2, RefreshCw, CheckCircle2, AlertCircle, Clock, Zap, Copy, Check, Play, Pause, XCircle, ListMusic, ChevronDown, ChevronUp, GripVertical, ArrowDown, ArrowUp, Square, CheckSquare } from 'lucide-react';
+import { Download, FolderOpen, Trash2, RefreshCw, CheckCircle2, AlertCircle, Clock, Zap, Copy, Check, Play, Pause, XCircle, ListMusic, ChevronDown, ChevronUp, GripVertical, ArrowDown, ArrowUp, Square, CheckSquare, Music2, Waves, Cloud, Disc3, CirclePlay, Heart, Headphones, Film } from 'lucide-react';
 import { DownloadQueueItem, OTSConfig } from '../types';
 import { DownloadProfile, getTargetBackendUrl, QueueBatchAction } from '../lib/api';
 
@@ -182,17 +182,20 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
 
   // Standardized service badges
   const getServiceBadge = (service: string) => {
-    const base = "px-2 py-0.5 rounded-md text-[10px] font-medium tracking-wide transition-colors";
+    const base = "inline-flex items-center gap-1.5 border px-2 py-1 text-[10px] font-semibold tracking-wide transition-colors";
     switch (service.toLowerCase()) {
-      case 'spotify': return <span className={`${base} bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300`}>Spotify</span>;
-      case 'tidal': return <span className={`${base} bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300`}>Tidal</span>;
+      case 'spotify': return <span title="Source service: Spotify" className={`${base} border-green-500/30 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300`}><Music2 className="h-3 w-3" />Spotify</span>;
+      case 'tidal': return <span title="Source service: Tidal" className={`${base} border-cyan-500/30 bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300`}><Waves className="h-3 w-3" />Tidal</span>;
       case 'apple_music':
-      case 'applemusic': return <span className={`${base} bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300`}>Apple Music</span>;
-      case 'soundcloud': return <span className={`${base} bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300`}>SoundCloud</span>;
-      case 'bandcamp': return <span className={`${base} bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300`}>Bandcamp</span>;
+      case 'applemusic': return <span title="Source service: Apple Music" className={`${base} border-rose-500/30 bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300`}><Music2 className="h-3 w-3" />Apple Music</span>;
+      case 'soundcloud': return <span title="Source service: SoundCloud" className={`${base} border-orange-500/30 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300`}><Cloud className="h-3 w-3" />SoundCloud</span>;
+      case 'bandcamp': return <span title="Source service: Bandcamp" className={`${base} border-blue-500/30 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300`}><Disc3 className="h-3 w-3" />Bandcamp</span>;
       case 'youtube_music':
-      case 'youtube': return <span className={`${base} bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300`}>YT Music</span>;
-      default: return <span className={`${base} bg-gray-100 text-gray-800 dark:bg-neutral-800 dark:text-neutral-300`}>Generic DL</span>;
+      case 'youtube': return <span title="Source service: YouTube Music" className={`${base} border-red-500/30 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300`}><CirclePlay className="h-3 w-3" />YouTube Music</span>;
+      case 'deezer': return <span title="Source service: Deezer" className={`${base} border-violet-500/30 bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300`}><Heart className="h-3 w-3" />Deezer</span>;
+      case 'qobuz': return <span title="Source service: Qobuz" className={`${base} border-sky-500/30 bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300`}><Headphones className="h-3 w-3" />Qobuz</span>;
+      case 'crunchyroll': return <span title="Source service: Crunchyroll" className={`${base} border-amber-500/30 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300`}><Film className="h-3 w-3" />Crunchyroll</span>;
+      default: return <span title="Source service: Generic" className={`${base} border-gray-300 bg-gray-100 text-gray-800 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300`}><Download className="h-3 w-3" />Generic</span>;
     }
   };
 

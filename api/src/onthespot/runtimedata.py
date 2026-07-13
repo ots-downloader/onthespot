@@ -188,10 +188,11 @@ def update_download_telemetry(
         item["_telemetry_time"] = now
 
 
-def record_rate_limit(host: str, retry_after: int | float, delay: int | float) -> None:
+def record_rate_limit(host: str, retry_after: int | float, delay: int | float) -> bool:
     """Record the latest API rate-limit window for the diagnostics UI."""
     now = time.time()
     with rate_limit_lock:
+        was_active_for_host = float(rate_limit_state.get("until", 0) or 0) > now and str(rate_limit_state.get("host") or "") == host
         rate_limit_state.update(
             {
                 "active": True,
@@ -202,6 +203,13 @@ def record_rate_limit(host: str, retry_after: int | float, delay: int | float) -
                 "last_event": now,
             }
         )
+    is_new_limit = not was_active_for_host
+    if is_new_limit and "spotify" in host.casefold():
+        notification_hook(
+            "Spotify API rate limited",
+            f"Spotify asked OnTheSpot to wait {max(0, int(delay or 0))} second(s) before retrying.",
+        )
+    return is_new_limit
 
 
 def get_rate_limit_state() -> dict:

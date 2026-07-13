@@ -4,6 +4,7 @@ import os
 from yt_dlp import YoutubeDL, extractor
 from ..otsconfig import config
 from ..runtimedata import get_logger, account_pool
+from ..youtube_auth import is_youtube_url, youtube_ydl_options
 
 logger = get_logger("api.generic")
 
@@ -46,7 +47,10 @@ def generic_get_track_metadata(_, url):
                 info_dict = json.load(cf)
         
         else:
-            info_dict = YoutubeDL({"quiet": True, "extract_flat": True}).extract_info(
+            ydl_opts = {"quiet": True, "extract_flat": True}
+            if is_youtube_url(url):
+                ydl_opts.update(youtube_ydl_options())
+            info_dict = YoutubeDL(ydl_opts).extract_info(
                 url, download=False
             )
             json_output = json.dumps(info_dict, indent=4)

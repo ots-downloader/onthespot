@@ -12,6 +12,12 @@ import {
   Check,
   Loader2,
   Sparkles,
+  Music2,
+  Waves,
+  Cloud,
+  CirclePlay,
+  Heart,
+  Headphones,
 } from "lucide-react";
 import { SearchResultItem, OTSConfig } from "../types";
 
@@ -69,16 +75,19 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
   };
 
 
-  const getServiceText = (service: string) => {
+  const getServiceBadge = (service: string) => {
+    const base = "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold";
     switch (service.toLowerCase()) {
-      case "spotify": return "Spotify";
-      case "tidal": return "Tidal";
+      case "spotify": return <span title="Downloads from Spotify" className={`${base} border-green-500/30 bg-green-500/10 text-green-300`}><Music2 className="h-3 w-3" />Spotify</span>;
+      case "tidal": return <span title="Downloads from Tidal" className={`${base} border-cyan-500/30 bg-cyan-500/10 text-cyan-300`}><Waves className="h-3 w-3" />Tidal</span>;
       case "apple_music":
-      case "applemusic": return "Apple Music";
-      case "soundcloud": return "SoundCloud";
+      case "applemusic": return <span title="Downloads from Apple Music" className={`${base} border-rose-500/30 bg-rose-500/10 text-rose-300`}><Music2 className="h-3 w-3" />Apple Music</span>;
+      case "soundcloud": return <span title="Downloads from SoundCloud" className={`${base} border-orange-500/30 bg-orange-500/10 text-orange-300`}><Cloud className="h-3 w-3" />SoundCloud</span>;
       case "youtube_music":
-      case "youtube": return "YouTube Music";
-      default: return "Generic";
+      case "youtube": return <span title="Downloads from YouTube Music" className={`${base} border-red-500/30 bg-red-500/10 text-red-300`}><CirclePlay className="h-3 w-3" />YouTube Music</span>;
+      case "deezer": return <span title="Downloads from Deezer" className={`${base} border-violet-500/30 bg-violet-500/10 text-violet-300`}><Heart className="h-3 w-3" />Deezer</span>;
+      case "qobuz": return <span title="Downloads from Qobuz" className={`${base} border-sky-500/30 bg-sky-500/10 text-sky-300`}><Headphones className="h-3 w-3" />Qobuz</span>;
+      default: return <span title="Downloads from the selected source service" className={`${base} border-[#4a4a4a] bg-[#282828] text-[#b3b3b3]`}><Download className="h-3 w-3" />Generic</span>;
     }
   };
 
@@ -189,7 +198,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                     <h3 className="truncate text-sm font-bold text-white" title={item.name}>{item.name}</h3>
                     <p className="mt-1 truncate text-xs text-[#b3b3b3]" title={`${item.artist}${item.album ? ` • ${item.album}` : ""}`}>{item.artist}{item.album && ` • ${item.album}`}</p>
                     <div className="mt-3 flex items-center gap-1.5 truncate text-[10px] font-semibold text-[#8f8f8f]">
-                      {getTypeIcon(item.item_type)} <span className="capitalize">{item.item_type}</span><span>•</span><span>{getServiceText(item.item_service)}</span>
+                      {getTypeIcon(item.item_type)} <span className="capitalize">{item.item_type}</span><span>•</span>{getServiceBadge(item.item_service)}
                     </div>
                     <div className="mt-3 flex items-center gap-2 border-t border-[#2e2e2e] pt-3">
                       <button onClick={() => triggerDownload(item)} disabled={isEnqueued} className={`ots-button ots-button-sm flex-1 ${isEnqueued ? "ots-queued-state" : "ots-button-primary"}`}>
