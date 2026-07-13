@@ -1204,9 +1204,9 @@ async def playlist_automation_login():
 async def playlist_automation_callback(code: str = "", state: str | None = None):
     try:
         await _playlist_operation(playlist_automation.callback, code, state)
-        return RedirectResponse("http://localhost:3001/?playlist-automation=connected")
+        return RedirectResponse(f"{playlist_automation.application_url()}?playlist-automation=connected")
     except HTTPException as exc:
-        return RedirectResponse(f"http://localhost:3001/?playlist-automation=error&message={exc.detail}")
+        return RedirectResponse(f"{playlist_automation.application_url()}?playlist-automation=error&message={exc.detail}")
 
 
 @app.post("/playlist-automation/logout")

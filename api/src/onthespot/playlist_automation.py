@@ -17,7 +17,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -108,7 +108,12 @@ class PlaylistAutomation:
 
     def redirect_uri(self) -> str:
         configured = str(config.get("playlist_automation_redirect_uri") or "").strip()
-        return configured or "http://localhost:6767/playlist-automation/callback"
+        return configured or "http://127.0.0.1:6767/playlist-automation/callback"
+
+    def application_url(self) -> str:
+        """Return the public UI origin associated with the OAuth callback."""
+        parsed = urlsplit(self.redirect_uri())
+        return urlunsplit((parsed.scheme, parsed.netloc, "/", "", ""))
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -134,7 +139,12 @@ class PlaylistAutomation:
         elif not self._client_id() or not self._client_secret():
             raise PlaylistAutomationError("Configure Spotify Client ID and Client Secret in Settings → API config first")
         if redirect_uri.strip():
-            config.set("playlist_automation_redirect_uri", redirect_uri.strip())
+            candidate = redirect_uri.strip()
+            parsed = urlsplit(candidate)
+            loopback = parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "::1"}
+            if not ((parsed.scheme == "https" or loopback) and parsed.netloc and parsed.path == "/playlist-automation/callback"):
+                raise PlaylistAutomationError("Use an HTTPS public URL ending in /playlist-automation/callback. HTTP is only allowed for 127.0.0.1 local development.")
+            config.set("playlist_automation_redirect_uri", candidate)
         config.save()
         return self.status()
 
