@@ -37,6 +37,9 @@ const direction = (rule: PlaylistAutomationSortRule) => rule.field === "release_
 const cronForSchedule = (frequency: string, time: string) => { const [hours = "0", minutes = "0"] = time.split(":"); const prefix = minutes + " " + hours; if (frequency === "weekdays") return prefix + " * * 1-5"; if (frequency === "weekly") return prefix + " * * 1"; if (frequency === "monthly") return prefix + " 1 * *"; return prefix + " * * *"; };
 const debugTone = (level: DebugLevel) => level === "Error" || level === "Rejected" ? "text-[#ff6b6b]" : level === "Passed" ? "text-[var(--spotify-green)]" : level === "Found" ? "text-[#c88cff]" : level === "Warning" ? "text-[var(--ots-warning)]" : level === "Search" ? "text-[#69a8ff]" : "text-[#b3b3b3]";
 const csvValue = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+const playlistCallbackPath = "/playlist-automation/callback";
+const playlistLocalCallbackFallback = `http://127.0.0.1:6767${playlistCallbackPath}`;
+const browserPlaylistCallbackUri = () => `${window.location.origin}${playlistCallbackPath}`;
 
 const Modal: React.FC<{ title: string; wide?: boolean; compact?: boolean; close: () => void; children: React.ReactNode }> = ({ title, wide, compact, close, children }) => (
   <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4">
@@ -103,7 +106,7 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [showCredentialOverride, setShowCredentialOverride] = useState(false);
-  const [redirectUri, setRedirectUri] = useState(() => `${window.location.origin}/playlist-automation/callback`);
+  const [redirectUri, setRedirectUri] = useState(browserPlaylistCallbackUri);
   const [exportFolder, setExportFolder] = useState("");
   const [backupFolder, setBackupFolder] = useState("");
   const [busy, setBusy] = useState("");
@@ -116,9 +119,9 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
   const [debugAutoScroll, setDebugAutoScroll] = useState(true);
 
   const demoRows: SpotifyPlaylistSummary[] = [
-    { id: "demo-modern", name: "Dancefloor - Modern", owner: "Demo account", editable: true, collaborative: false, public: false, tracks: 22, image: "" },
-    { id: "demo-2step", name: "Dancefloor - 2 step", owner: "Demo account", editable: true, collaborative: false, public: false, tracks: 16, image: "" },
-    { id: "demo-local", name: "Local Files - Sorted", owner: "Demo account", editable: true, collaborative: false, public: false, tracks: 12, image: "" },
+    { id: "demo-modern", name: "Favourites", owner: "Demo account", editable: true, collaborative: false, public: false, tracks: 22, image: "" },
+    { id: "demo-2step", name: "Road Trip", owner: "Demo account", editable: true, collaborative: false, public: false, tracks: 16, image: "" },
+    { id: "demo-local", name: "Recently Added", owner: "Demo account", editable: true, collaborative: false, public: false, tracks: 12, image: "" },
   ];
   const connected = Boolean(status?.authenticated) || demo;
   const visible = useMemo(() => { const currentOwner = status?.user?.display_name || status?.user?.id || ""; return playlists.filter((playlist) => { const matchesFilter = filter === "all" || (filter === "editable" && playlist.editable) || (filter === "owned" && Boolean(currentOwner) && playlist.owner === currentOwner) || (filter === "collaborative" && playlist.collaborative) || (filter === "public" && playlist.public) || (filter === "private" && !playlist.public); return matchesFilter && (playlist.name + " " + playlist.owner).toLowerCase().includes(query.toLowerCase()); }); }, [filter, playlists, query, status?.user?.display_name, status?.user?.id]);
@@ -134,7 +137,9 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
     if (demo) return;
     const next = await fetchPlaylistAutomationStatus();
     setStatus(next);
-    if (next?.redirect_uri) setRedirectUri(next.redirect_uri);
+    // Do not replace the browser's current secure address with the server-only
+    // local fallback. This keeps a Tailscale Serve or reverse-proxy URL usable.
+    if (next?.redirect_uri && next.redirect_uri !== playlistLocalCallbackFallback) setRedirectUri(next.redirect_uri);
     if (!next?.authenticated) return;
     const values = await Promise.all([fetchPlaylistAutomationPlaylists(), fetchPlaylistAutomationConfigs(), fetchPlaylistAutomationSchedules(), fetchPlaylistAutomationHistory(), fetchPlaylistAutomationBackups(), fetchIgnoredPlaylistAutomationTracks()]);
     setPlaylists(values[0]); setConfigs(values[1]); setSchedules(values[2]); setHistory(values[3]); setBackups(values[4]); setIgnored(values[5]);
@@ -147,7 +152,30 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
 
   const requireLive = () => { if (!demo) return true; setMessage("Demo mode is read-only. Connect Spotify to make changes."); return false; };
   const appendDebug = (level: DebugLevel, message: string) => setDebugLogs((current) => [{ id: crypto.randomUUID(), level, message, timestamp: Date.now() }, ...current].slice(0, 500));
-  const configure = async () => { if (showCredentialOverride && (!clientId.trim() || !clientSecret.trim())) { setMessage("Enter both values for a separate playlist-sorting credential override."); return; } setBusy("credentials"); const next = await configurePlaylistAutomation({ client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri }); setStatus(next); setBusy(""); setMessage(next ? (showCredentialOverride ? "Playlist sorting credentials saved. Connect Spotify to continue." : "Redirect URI saved. Connect Spotify to continue.") : "Could not save Spotify settings."); };
+  const saveConnectionSettings = async (operation: string) => {
+    if (showCredentialOverride && (!clientId.trim() || !clientSecret.trim())) {
+      setMessage("Enter both values for a separate playlist-sorting credential override.");
+      return null;
+    }
+    setBusy(operation);
+    const next = await configurePlaylistAutomation({ client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri });
+    setBusy("");
+    if (!next) {
+      setMessage("Could not save Spotify settings.");
+      return null;
+    }
+    setStatus(next);
+    return next;
+  };
+  const configure = async () => {
+    const next = await saveConnectionSettings("credentials");
+    if (next) setMessage(showCredentialOverride ? "Playlist sorting credentials saved. Connect Spotify to continue." : "Redirect URI saved. Connect Spotify to continue.");
+  };
+  const connectSpotify = async () => {
+    const next = await saveConnectionSettings("connect");
+    if (!next) return;
+    window.location.assign(getPlaylistAutomationLoginUrl());
+  };
   const openDemo = () => { setDemo(true); setStatus({ configured: true, authenticated: true, redirect_uri: redirectUri, scope: "Demo mode", credentials_source: "Local demo data", user: { display_name: "Demo account" } }); setPlaylists(demoRows); setSelected(["demo-modern", "demo-2step"]); setMessage("Demo mode is active. Nothing will be changed in Spotify."); };
   const setRule = (id: string, patch: Partial<PlaylistAutomationSortRule>) => setRules((current) => current.map((rule) => rule.id === id ? { ...rule, ...patch } : rule));
   const moveRule = (index: number, delta: number) => setRules((current) => { const target = index + delta; if (target < 0 || target >= current.length) return current; const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next; });
@@ -201,7 +229,7 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
 
   const createBackup = async () => { if (!requireLive()) return; if (!selected.length) { setMessage("Select playlists to back up."); return; } setBusy("backup"); const ok = await createPlaylistAutomationBackup(selected); setBusy(""); setBackups(await fetchPlaylistAutomationBackups()); setMessage(ok ? "Backup created in " + backupFolder + "." : "Could not create backup."); };
   const saveBackupFolder = async () => { setBusy("backup-folder"); const saved = await savePlaylistBackupDirectory(backupFolder); setBusy(""); if (saved) { setBackupFolder(saved); setBackups(await fetchPlaylistAutomationBackups()); setMessage("Playlist backup folder saved to " + saved); } else setMessage("Could not save the playlist backup folder."); };
-  const compareSelected = async () => { if (selected.length < 2) { setMessage("Select at least two playlists to compare."); return; } appendDebug("Comparison", "Comparing " + selected.length + " selected playlists."); setBusy("compare"); const result = demo ? { playlists_compared: 2, duplicate_count: 1, duplicates: [{ track_id: "demo-dupe", name: "Night Drive", artist: "Demo Artist", found_in_playlists: ["Dancefloor - Modern", "Dancefloor - 2 step"] }] } : await comparePlaylistAutomation(selected); setCompare(result); setBusy(""); appendDebug(result?.duplicate_count ? "Found" : "Info", result?.duplicate_count ? "Found " + result.duplicate_count + " shared track group" + (result.duplicate_count === 1 ? "." : "s.") : "No shared tracks found."); };
+  const compareSelected = async () => { if (selected.length < 2) { setMessage("Select at least two playlists to compare."); return; } appendDebug("Comparison", "Comparing " + selected.length + " selected playlists."); setBusy("compare"); const result = demo ? { playlists_compared: 2, duplicate_count: 1, duplicates: [{ track_id: "demo-dupe", name: "Night Drive", artist: "Demo Artist", found_in_playlists: ["Favourites", "Road Trip"] }] } : await comparePlaylistAutomation(selected); setCompare(result); setBusy(""); appendDebug(result?.duplicate_count ? "Found" : "Info", result?.duplicate_count ? "Found " + result.duplicate_count + " shared track group" + (result.duplicate_count === 1 ? "." : "s.") : "No shared tracks found."); };
   const exportCsv = async () => {
     if (!selected.length) { setMessage("Select playlists to export."); return false; }
     if (demo) {
@@ -254,10 +282,10 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
       <div className="mb-6 flex items-start gap-3"><Settings2 className="mt-0.5 h-5 w-5 text-[var(--spotify-green)]" /><div><h2 className="font-bold text-white">Connect Spotify</h2><p className="mt-1 text-sm text-[#b3b3b3]">Playlist sorting automatically reuses the Spotify credentials saved in Settings → API config.</p></div></div>
       {status?.configured ? <div className="mb-5 flex items-start gap-3 border border-[var(--ots-accent-border)] bg-[var(--ots-accent-soft)] p-4 text-sm"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--spotify-green)]" /><div><p className="font-bold text-white">Credentials ready</p><p className="mt-1 text-[#b3b3b3]">Source: {status.credentials_source || "API config"}. No need to enter them again here.</p></div></div> : <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border border-[var(--ots-warning)] bg-[color-mix(in_srgb,var(--ots-warning)_10%,var(--spotify-surface))] p-3 text-sm text-[var(--ots-warning)]"><span>Add a Spotify Client ID and Secret in API config before connecting.</span><button type="button" onClick={onOpenApiConfig} className="ots-button ots-button-secondary border-[var(--ots-warning)] text-[var(--ots-warning)]">Open API config</button></div>}
       <label className="ots-field-label grid gap-1">Redirect URI<input className="ots-input h-10 w-full" value={redirectUri} onChange={(event) => setRedirectUri(event.target.value)} /></label>
-      <p className="mt-2 text-xs leading-5 text-[#777]">Add this exact HTTPS address to your Spotify Developer Dashboard before connecting. For Unraid, use your HTTPS domain or reverse-proxy address — not localhost. <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--spotify-green)] underline-offset-2 hover:text-white hover:underline">Open Spotify Developer Dashboard</a></p>
+      <p className="mt-2 text-xs leading-5 text-[#777]">This defaults to the address you are using now. Add this exact HTTPS address to your Spotify Developer Dashboard before connecting. For Unraid, open OnTheSpot through your Tailscale Serve URL or HTTPS domain — not its LAN address. <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--spotify-green)] underline-offset-2 hover:text-white hover:underline">Open Spotify Developer Dashboard</a></p>
       <button type="button" onClick={() => setShowCredentialOverride((current) => !current)} className="mt-4 text-sm font-semibold text-[#b3b3b3] underline-offset-2 hover:text-white hover:underline">{showCredentialOverride ? "Hide separate credentials" : "Use different credentials for playlist sorting"}</button>
       {showCredentialOverride && <div className="mt-3 grid gap-4 border border-[var(--ots-border)] bg-[var(--spotify-surface-elevated)] p-4 md:grid-cols-2"><label className="ots-field-label grid gap-1">Client ID<input className="ots-input h-10 w-full" value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="Spotify Client ID" /></label><label className="ots-field-label grid gap-1">Client Secret<input className="ots-input h-10 w-full" type="password" value={clientSecret} onChange={(event) => setClientSecret(event.target.value)} placeholder="Spotify Client Secret" /></label></div>}
-      <div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => void configure()} disabled={busy === "credentials"} className={buttonClass}><Save className="h-4 w-4" /> {showCredentialOverride ? "Save separate credentials" : "Save redirect URI"}</button>{status?.configured && <button type="button" onClick={() => { window.location.href = getPlaylistAutomationLoginUrl(); }} className="ots-button ots-button-primary"><LogIn className="h-4 w-4" /> Connect Spotify</button>}<button type="button" onClick={openDemo} className={buttonClass}><Eye className="h-4 w-4" /> Preview demo</button></div>{message && <p className="mt-4 text-sm text-[#b3b3b3]">{message}</p>}
+      <div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => void configure()} disabled={busy === "credentials" || busy === "connect"} className={buttonClass}><Save className="h-4 w-4" /> {showCredentialOverride ? "Save separate credentials" : "Save redirect URI"}</button>{status?.configured && <button type="button" onClick={() => void connectSpotify()} disabled={busy === "credentials" || busy === "connect"} className="ots-button ots-button-primary"><LogIn className="h-4 w-4" /> Connect Spotify</button>}<button type="button" onClick={openDemo} className={buttonClass}><Eye className="h-4 w-4" /> Preview demo</button></div>{message && <p className="mt-4 text-sm text-[#b3b3b3]">{message}</p>}
     </section>
   </div>;
 
