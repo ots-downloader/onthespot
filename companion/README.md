@@ -22,7 +22,8 @@ py -m venv .companion-venv
 .\.companion-venv\Scripts\python.exe -m pip install -r companion\requirements.txt
 .\.companion-venv\Scripts\python.exe companion\run.py `
   --server-url https://your-onthe-spot-url.example `
-  --pairing-token YOUR_ONE_TIME_TOKEN
+  --pairing-token YOUR_ONE_TIME_TOKEN `
+  --cleanup
 ```
 
 The command is also shown in Playlist Sorting after selecting Remote access
@@ -36,9 +37,16 @@ python3 -m venv .companion-venv
 python -m pip install -r companion/requirements.txt
 python companion/run.py \
   --server-url https://your-onthe-spot-url.example \
-  --pairing-token YOUR_ONE_TIME_TOKEN
+  --pairing-token YOUR_ONE_TIME_TOKEN \
+  --cleanup
 ```
 
 The pairing token expires after ten minutes and can only be used once. The
 desktop and Spotify must be on the same LAN; Tailscale carries the API request
 but does not carry Spotify's mDNS discovery packets.
+
+The companion is a one-time pairing helper. With `--cleanup`, it exits
+automatically after the login is delivered successfully and removes the cloned
+`OnTheSpot-companion` folder (including `.companion-venv`) after the process has
+closed. The temporary local login file is removed as well. The account remains
+saved on the OnTheSpot server.

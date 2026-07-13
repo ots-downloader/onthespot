@@ -7,11 +7,14 @@ and forwards only the short-lived pairing payload to the remote OnTheSpot API.
 from __future__ import annotations
 
 import argparse
+import base64
 import ipaddress
 import json
 import os
 import socket
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -80,6 +83,61 @@ def create_server(name: str, port: int, state_file: Path, interface: str | None)
         ZeroconfServer.get_useful_hostname = original_hostname
 
 
+def schedule_repository_cleanup() -> None:
+    """Remove the one-shot cloned companion after this process exits.
+
+    The cleanup is deliberately limited to a directory named
+    ``OnTheSpot-companion`` so a user cannot accidentally delete an arbitrary
+    working directory by enabling the one-shot cleanup option.
+    """
+    repository = Path(__file__).resolve().parents[1]
+    if repository.name.lower() != "onthespot-companion":
+        print("Cleanup skipped: the companion folder is not named OnTheSpot-companion.", flush=True)
+        return
+
+    process_id = os.getpid()
+    if os.name == "nt":
+        def powershell_literal(value: str) -> str:
+            return "'" + value.replace("'", "''") + "'"
+
+        script = "\n".join(
+            [
+                "$target = " + powershell_literal(str(repository)),
+                "$parent = " + str(process_id),
+                "Set-Location -LiteralPath $env:TEMP",
+                "while (Get-Process -Id $parent -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }",
+                "Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue",
+            ]
+        )
+        encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+        subprocess.Popen(
+            ["powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+            cwd=tempfile.gettempdir(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) | 0x00000008,
+            close_fds=True,
+        )
+        return
+
+    import shlex
+
+    command = (
+        f"while kill -0 {process_id} 2>/dev/null; do sleep 0.5; done; "
+        f"rm -rf -- {shlex.quote(str(repository))}"
+    )
+    subprocess.Popen(
+        ["sh", "-c", command],
+        cwd=tempfile.gettempdir(),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the OnTheSpot Spotify Connect companion")
     parser.add_argument("--server-url", required=True, help="HTTPS/Tailscale URL of the remote OnTheSpot server")
@@ -91,6 +149,11 @@ def parse_args() -> argparse.Namespace:
         "--state-file",
         default="",
         help="Local credential state path; defaults to the user's OnTheSpot companion directory",
+    )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="Delete the cloned OnTheSpot-companion folder after successful pairing",
     )
     return parser.parse_args()
 
@@ -134,6 +197,9 @@ def main() -> int:
             print(f"OnTheSpot rejected the companion login: {response.text}", file=sys.stderr, flush=True)
             return 1
         print("Spotify account delivered to OnTheSpot successfully.", flush=True)
+        if args.cleanup:
+            print("Pairing complete. The temporary companion folder will be removed.", flush=True)
+            schedule_repository_cleanup()
         return 0
     except KeyboardInterrupt:
         print("Stopped.", flush=True)
@@ -150,6 +216,15 @@ def main() -> int:
             server.close()
         except Exception:
             pass
+        # The login file contains the Spotify Connect credentials that were
+        # just forwarded to OnTheSpot. It is only needed while this one-shot
+        # pairing process is running, so do not leave it on the desktop.
+        try:
+            state_file.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            print(f"Warning: could not remove temporary login state: {exc}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

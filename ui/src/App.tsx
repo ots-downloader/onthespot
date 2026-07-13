@@ -651,6 +651,13 @@ export default function App() {
     return acc;
   };
 
+  const handleRefreshAccounts = useCallback(async () => {
+    const [freshAccounts, freshHealth] = await Promise.all([fetchAccounts(), fetchAccountHealth()]);
+    setAccounts(freshAccounts);
+    setAccountHealth(freshHealth);
+    return freshAccounts;
+  }, []);
+
   const handleConfigureYouTubeAuthentication = async (authentication: { mode: "none" | "browser" | "cookie_file"; browser?: string; cookie_file?: string }) => {
     const ok = await configureYouTubeAuthentication(authentication);
     if (ok) {
@@ -787,6 +794,7 @@ export default function App() {
             accounts={accounts.length > 0 ? accounts : config?.accounts || []}
             onAddAccount={handleAddAccount}
             onRemoveAccount={handleRemoveAccount}
+            onRefreshAccounts={handleRefreshAccounts}
             health={accountHealth}
             onReconnect={handleReconnectAccounts}
             onConfigureYouTubeAuthentication={handleConfigureYouTubeAuthentication}
