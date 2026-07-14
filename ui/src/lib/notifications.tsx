@@ -51,8 +51,10 @@ export function useNotifications(userId: string) {
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error("SSE Connection Error. Browser will auto-reconnect.", error);
+    eventSource.onerror = () => {
+      // The backend deliberately recycles idle SSE streams so graceful
+      // shutdown cannot be held open indefinitely. EventSource reconnects on
+      // its own; logging that expected cycle as an error floods the console.
     };
 
     // CLEANUP: Close connection when the component unmounts

@@ -90,6 +90,7 @@
   "api_retry_base_delay": 2,
   "api_retry_max_delay": 60,
   "api_request_delay": 1,
+  "cache_api_calls": true,
   "api_response_cache_ttl_seconds": 86400,
   "spotify_metadata_cache_ttl_seconds": 604800,
   "spotify_search_cache_ttl_seconds": 900,

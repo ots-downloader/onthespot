@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Download,
@@ -19,20 +19,33 @@ import {
   Heart,
   Headphones,
 } from "lucide-react";
-import { SearchResultItem, OTSConfig } from "../types";
+import { AccountItem, SearchResultItem, OTSConfig } from "../types";
+import {
+  getAvailableCatalogServices,
+  getCatalogServiceLabel,
+} from "../lib/catalogServices";
 
 interface SearchDashboardProps {
-  onSearch: (q: string, filters: Record<string, boolean>) => Promise<boolean | SearchResultItem[]>;
+  onSearch: (
+    q: string,
+    filters: Record<string, boolean>,
+    services?: string[],
+  ) => Promise<SearchResultItem[]>;
   onDownload: (q: string, filters?: Record<string, boolean>) => Promise<boolean>;
   config: OTSConfig | null;
+  accounts: AccountItem[];
+  query: string;
+  onQueryChange: (query: string) => void;
 }
 
 export const SearchDashboard: React.FC<SearchDashboardProps> = ({
   onSearch,
   onDownload,
   config,
+  accounts,
+  query,
+  onQueryChange,
 }) => {
-  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [enqueuedIds, setEnqueuedIds] = useState<Set<string>>(new Set());
@@ -44,7 +57,43 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
     podcasts: config?.enable_search_podcasts ?? true,
     movies: true,
   });
-  const [prefix] = useState<string>(config?.search_prefix || "the");
+  const availableServices = useMemo(
+    () => getAvailableCatalogServices(accounts),
+    [accounts],
+  );
+  const [selectedServiceOverride, setSelectedServiceOverride] = useState<string[] | null>(null);
+  const preferredServices = useMemo(
+    () => availableServices.includes("spotify")
+      ? ["spotify"]
+      : availableServices.slice(0, 1),
+    [availableServices],
+  );
+  const selectedServices = useMemo(
+    () => (selectedServiceOverride ?? preferredServices)
+      .filter((service) => availableServices.includes(service)),
+    [availableServices, preferredServices, selectedServiceOverride],
+  );
+  const resultServiceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    results.forEach((item) => {
+      counts.set(item.item_service, (counts.get(item.item_service) ?? 0) + 1);
+    });
+    return Array.from(counts.entries()).sort(([left], [right]) =>
+      getCatalogServiceLabel(left).localeCompare(getCatalogServiceLabel(right)),
+    );
+  }, [results]);
+
+  useEffect(() => {
+    // Account workers briefly disappear while the backend reconnects. Keep the
+    // user's choices during that transient state, while deriving an empty
+    // effective selection above so Search remains safely disabled.
+    if (availableServices.length === 0) return;
+    setSelectedServiceOverride((current) =>
+      current === null
+        ? null
+        : current.filter((service) => availableServices.includes(service)),
+    );
+  }, [availableServices]);
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,12 +101,13 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
 
     setLoading(true);
     try {
-      const formattedQ = query.startsWith("http")
-        ? query
-        : `${prefix !== "none" ? prefix + " " : ""}${query}`;
-      const data = await onSearch(formattedQ, filters);
-      setResults(Array.isArray(data) ? data : []);
-      setQuery("");
+      if (/^https?:\/\//i.test(query.trim())) {
+        await onDownload(query.trim(), filters);
+        return;
+      }
+      if (selectedServices.length === 0) return;
+      const data = await onSearch(query.trim(), filters, selectedServices);
+      setResults(data);
     } catch (err) {
       console.error("Search error", err);
     } finally {
@@ -72,6 +122,26 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
 
   const toggleFilter = (key: string) => {
     setFilters((prev) => ({ ...prev, [key]: !prev[key] }));
+    setResults([]);
+  };
+
+  const toggleService = (service: string) => {
+    setResults([]);
+    setSelectedServiceOverride((current) => {
+      const selected = current ?? preferredServices;
+      return selected.includes(service)
+        ? selected.filter((value) => value !== service)
+        : [...selected, service];
+    });
+  };
+
+  const toggleAllServices = () => {
+    setResults([]);
+    setSelectedServiceOverride(
+      selectedServices.length === availableServices.length
+        ? preferredServices
+        : availableServices,
+    );
   };
 
 
@@ -83,11 +153,16 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
       case "apple_music":
       case "applemusic": return <span title="Downloads from Apple Music" className={`${base} border-rose-500/30 bg-rose-500/10 text-rose-300`}><Music2 className="h-3 w-3" />Apple Music</span>;
       case "soundcloud": return <span title="Downloads from SoundCloud" className={`${base} border-orange-500/30 bg-orange-500/10 text-orange-300`}><Cloud className="h-3 w-3" />SoundCloud</span>;
+      case "bandcamp": return <span title="Downloads from Bandcamp" className={`${base} border-sky-500/30 bg-sky-500/10 text-sky-300`}><Disc className="h-3 w-3" />Bandcamp</span>;
       case "youtube_music":
       case "youtube": return <span title="Downloads from YouTube Music" className={`${base} border-red-500/30 bg-red-500/10 text-red-300`}><CirclePlay className="h-3 w-3" />YouTube Music</span>;
+      case "crunchyroll": return <span title="Downloads from Crunchyroll" className={`${base} border-orange-500/30 bg-orange-500/10 text-orange-300`}><Tv className="h-3 w-3" />Crunchyroll</span>;
       case "deezer": return <span title="Downloads from Deezer" className={`${base} border-violet-500/30 bg-violet-500/10 text-violet-300`}><Heart className="h-3 w-3" />Deezer</span>;
       case "qobuz": return <span title="Downloads from Qobuz" className={`${base} border-sky-500/30 bg-sky-500/10 text-sky-300`}><Headphones className="h-3 w-3" />Qobuz</span>;
-      default: return <span title="Downloads from the selected source service" className={`${base} border-[#4a4a4a] bg-[#282828] text-[#b3b3b3]`}><Download className="h-3 w-3" />Generic</span>;
+      default: {
+        const label = getCatalogServiceLabel(service);
+        return <span title={`Downloads from ${label}`} className={`${base} border-[#4a4a4a] bg-[#282828] text-[#b3b3b3]`}><Download className="h-3 w-3" />{label}</span>;
+      }
     }
   };
 
@@ -125,14 +200,14 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                   id="global-search"
                   type="text"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => onQueryChange(e.target.value)}
                   placeholder="What do you want to download?"
                   className="w-full bg-transparent px-3 py-0 text-sm text-white outline-none placeholder:text-[#6f6f6f]"
                 />
               </div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (!/^https?:\/\//i.test(query.trim()) && selectedServices.length === 0)}
                 className="ots-button ots-button-primary ots-button-lg shrink-0 px-7 text-sm"
               >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
@@ -156,6 +231,35 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                 ))}
               </div>
             </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="mr-1 flex items-center gap-1.5 text-xs font-semibold text-[#8f8f8f]"><Headphones className="h-3.5 w-3.5" /> Search services</span>
+              {availableServices.length > 0 ? (
+                <div className="ots-browse-tabs max-w-full">
+                  <button
+                    type="button"
+                    aria-pressed={selectedServices.length === availableServices.length}
+                    onClick={toggleAllServices}
+                    className={`ots-browse-tab ${selectedServices.length === availableServices.length ? "ots-browse-tab-active" : ""}`}
+                  >
+                    All services
+                  </button>
+                  {availableServices.map((service) => (
+                    <button
+                      key={service}
+                      type="button"
+                      aria-pressed={selectedServices.includes(service)}
+                      onClick={() => toggleService(service)}
+                      className={`ots-browse-tab ${selectedServices.includes(service) ? "ots-browse-tab-active" : ""}`}
+                    >
+                      {getCatalogServiceLabel(service)}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-[var(--ots-warning)]">Add or reconnect a searchable account first.</span>
+              )}
+            </div>
           </form>
 
         </div>
@@ -167,7 +271,16 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1ed760]">Discover</p>
             <h2 className="mt-1 text-2xl font-bold tracking-tight text-white">Search results</h2>
           </div>
-          {results.length > 0 && <span className="text-xs font-semibold text-[#b3b3b3]">{results.length} items</span>}
+          {results.length > 0 && (
+            <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs font-semibold text-[#b3b3b3]">
+              <span>{results.length} items</span>
+              {resultServiceCounts.map(([service, count]) => (
+                <span key={service} className="rounded border border-[var(--ots-border)] bg-[var(--ots-field)] px-2 py-1">
+                  {getCatalogServiceLabel(service)} {count}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {loading ? (

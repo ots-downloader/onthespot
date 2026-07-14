@@ -3,6 +3,7 @@ import json
 import os
 import requests
 from yt_dlp import YoutubeDL
+from ..constants import HTTP_TIMEOUT
 from ..otsconfig import config
 from ..runtimedata import get_logger, account_pool
 from ..youtube_auth import youtube_ydl_options
@@ -10,11 +11,21 @@ from ..youtube_auth import youtube_ydl_options
 logger = get_logger("api.youtube_music")
 
 
+def _youtube_search(search_term, ydl_opts):
+    """Return flat yt-dlp search entries for *search_term*."""
+    with YoutubeDL(ydl_opts) as ytdl:
+        result = ytdl.extract_info(
+            f"ytsearch{config.get('max_search_results')}:{search_term}",
+            download=False,
+        )
+    return (result or {}).get("entries") or []
+
+
 def youtube_music_login_user(account):
     logger.info("Logging into Youtube account...")
     try:
         # Ping to verify connectivity
-        requests.get("https://youtube.com")
+        requests.get("https://youtube.com", timeout=HTTP_TIMEOUT)
         if account["uuid"] == "public_youtube_music":
             account_pool.append(
                 {
@@ -55,31 +66,48 @@ def youtube_music_add_account():
 
 
 def youtube_music_get_search_results(_, search_term, content_types):
-    ydl_opts = {
+    base_opts = {
         "quiet": True,
+        "no_warnings": True,
         "extract_flat": True,
+        "skip_download": True,
     }
-    ydl_opts.update(youtube_ydl_options())
+    auth_opts = youtube_ydl_options()
+    ydl_opts = {**base_opts, **auth_opts}
 
     search_results = []
     if "track" in content_types:
-        with YoutubeDL(ydl_opts) as ytdl:
-            result = ytdl.extract_info(
-                f"ytsearch{config.get('max_search_results')}:{search_term}",
-                download=False,
+        try:
+            entries = _youtube_search(search_term, ydl_opts)
+        except Exception as exc:
+            if not auth_opts:
+                raise
+            # A browser profile may be locked (especially Chrome on Windows),
+            # or configured on a host that differs from Docker. Public search
+            # does not require that session, so retry without authentication.
+            logger.warning(
+                "Configured YouTube session could not be used for catalogue "
+                "search; retrying public search: %s",
+                exc,
             )
-            for result in result["entries"]:
-                search_results.append(
-                    {
-                        "item_id": result["id"],
-                        "item_name": result["title"],
-                        "item_by": result["channel"],
-                        "item_type": "track",
-                        "item_service": "youtube_music",
-                        "item_url": f"https://music.youtube.com/watch?v={result['id']}",
-                        "item_thumbnail_url": f"https://i.ytimg.com/vi/{result['id']}/hqdefault.jpg",
-                    }
-                )
+            entries = _youtube_search(search_term, base_opts)
+
+        for result in entries:
+            item_id = str(result.get("id") or "").strip()
+            title = str(result.get("title") or "").strip()
+            if not item_id or not title:
+                continue
+            search_results.append(
+                {
+                    "item_id": item_id,
+                    "item_name": title,
+                    "item_by": result.get("channel") or result.get("uploader"),
+                    "item_type": "track",
+                    "item_service": "youtube_music",
+                    "item_url": f"https://music.youtube.com/watch?v={item_id}",
+                    "item_thumbnail_url": f"https://i.ytimg.com/vi/{item_id}/hqdefault.jpg",
+                }
+            )
 
     logger.debug(search_results)
     return search_results
@@ -87,7 +115,7 @@ def youtube_music_get_search_results(_, search_term, content_types):
 
 def youtube_music_get_track_metadata(_, item_id, item = None):
     url = f"https://music.youtube.com/watch?v={item_id}"
-    request_key = md5(f"{url}".encode()).hexdigest()
+    request_key = md5(f"{url}".encode(), usedforsecurity=False).hexdigest()
     cache_dir = os.path.join(config.get("_cache_dir"), "reqcache")
     os.makedirs(cache_dir, exist_ok=True)
     req_cache_file = os.path.join(cache_dir, request_key + ".json")

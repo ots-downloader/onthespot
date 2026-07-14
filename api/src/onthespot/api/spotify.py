@@ -1,9 +1,12 @@
 import base64
+import concurrent.futures
+import inspect
 import json
 import os
 import re
 import socket
 import threading
+import textwrap
 import time
 import traceback
 import uuid
@@ -41,6 +44,102 @@ _SESSION_REINIT_TIMEOUT = 30
 _spotify_connect_server = None
 _spotify_connect_lock = threading.RLock()
 _SPOTIFY_CONNECT_LOGIN_FILENAME = "spotify_connect_login.json"
+
+
+def _patch_librespot_zeroconf_runner() -> bool:
+    """Repair shutdown support in the bundled librespot HTTP runner.
+
+    The current librespot-python ``HttpRunner.close`` implementation is an
+    empty method.  Its listening socket and non-daemon thread therefore keep
+    the Python process alive after Uvicorn has completed shutdown.  Keep this
+    compatibility patch narrowly version-gated so a future upstream lifecycle
+    implementation takes precedence automatically.
+    """
+    runner_type = ZeroconfServer.HttpRunner
+    if getattr(runner_type, "_onthespot_lifecycle_patch", False):
+        return True
+
+    try:
+        close_source = textwrap.dedent(inspect.getsource(runner_type.close)).strip()
+    except (OSError, TypeError):
+        close_source = ""
+    if not close_source.endswith("pass"):
+        return False
+
+    original_init = runner_type.__init__
+
+    def patched_init(self, zeroconf_server, port):
+        original_init(self, zeroconf_server, port)
+        # Upstream currently stores these on the class, which would make
+        # shutting down one service poison every later reconnect.  Give each
+        # discovery server its own state and request pool instead.
+        self._HttpRunner__should_stop = False
+        self._HttpRunner__worker = concurrent.futures.ThreadPoolExecutor(
+            thread_name_prefix="spotify-connect-request"
+        )
+
+    def patched_run(self):
+        self._onthespot_runner_thread = threading.current_thread()
+        try:
+            while not self._HttpRunner__should_stop:
+                try:
+                    client_socket, _address = self._HttpRunner__socket.accept()
+                except OSError:
+                    if self._HttpRunner__should_stop:
+                        break
+                    raise
+
+                def handle_client(sock=client_socket):
+                    try:
+                        self._HttpRunner__handle(sock)
+                    except OSError:
+                        if not self._HttpRunner__should_stop:
+                            logger.debug(
+                                "Spotify Connect request ended unexpectedly",
+                                exc_info=True,
+                            )
+                    finally:
+                        try:
+                            sock.close()
+                        except OSError:
+                            pass
+
+                try:
+                    self._HttpRunner__worker.submit(handle_client)
+                except RuntimeError:
+                    # The pool can only reject work while shutdown is racing an
+                    # accepted connection.  Close that connection explicitly.
+                    client_socket.close()
+                    if not self._HttpRunner__should_stop:
+                        raise
+        finally:
+            self._onthespot_runner_thread = None
+
+    def patched_close(self):
+        if self._HttpRunner__should_stop:
+            return
+        self._HttpRunner__should_stop = True
+        try:
+            self._HttpRunner__socket.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            self._HttpRunner__socket.close()
+        except OSError:
+            pass
+        self._HttpRunner__worker.shutdown(wait=True, cancel_futures=True)
+        runner_thread = getattr(self, "_onthespot_runner_thread", None)
+        if runner_thread is not None and runner_thread is not threading.current_thread():
+            runner_thread.join(timeout=2)
+            if runner_thread.is_alive():
+                logger.warning("Spotify Connect listener did not stop within two seconds")
+
+    runner_type.__init__ = patched_init
+    runner_type.run = patched_run
+    runner_type.close = patched_close
+    runner_type._onthespot_lifecycle_patch = True
+    logger.info("Applied Spotify Connect shutdown compatibility patch")
+    return True
 
 
 def _spotify_connect_port() -> int:
@@ -114,6 +213,7 @@ def start_spotify_connect_service():
         if _spotify_connect_server is not None:
             return _spotify_connect_server
 
+        _patch_librespot_zeroconf_runner()
         client_id = "65b708073fc0480ea92a077233ca87bd"
         ZeroconfServer._ZeroconfServer__default_get_info_fields["clientID"] = client_id
         builder = ZeroconfServer.Builder()
@@ -327,39 +427,49 @@ def spotify_playlist_call(token, url):
 
 
 class MirrorSpotifyPlayback:
-    # declare here to avoid Circular Import
-
     def __init__(self):
-        super().__init__()
-        self.thread = None
+        self.thread: threading.Thread | None = None
         self.is_running = False
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
 
     def start(self):
-        if self.thread is None:
+        with self._lock:
+            if self.thread is not None and self.thread.is_alive():
+                logger.debug("SpotifyMirrorPlayback is already running.")
+                return
             logger.info("Starting SpotifyMirrorPlayback")
+            self._stop_event.clear()
             self.is_running = True
-            self.thread = threading.Thread(target=self.run)
+            self.thread = threading.Thread(
+                target=self.run,
+                name="spotify-playback-mirror",
+                daemon=True,
+            )
             self.thread.start()
-        else:
-            logger.warning("SpotifyMirrorPlayback is already running.")
 
-    def stop(self):
-        if self.thread is not None:
+    def stop(self, timeout: float = 15.0):
+        with self._lock:
+            thread = self.thread
+            if thread is None:
+                self.is_running = False
+                return
             logger.info("Stopping SpotifyMirrorPlayback")
             self.is_running = False
-            self.thread.join()
-            self.thread = None
-        else:
-            logger.warning("SpotifyMirrorPlayback is not running.")
+            self._stop_event.set()
+        thread.join(timeout=timeout)
+        with self._lock:
+            if thread.is_alive():
+                logger.warning("SpotifyMirrorPlayback did not stop within %.1f seconds", timeout)
+            elif self.thread is thread:
+                self.thread = None
 
     def run(self):
-
         get_account_token = spotify_get_token
-        while self.is_running:
-            time.sleep(5)
+        while not self._stop_event.wait(5):
             try:
                 token = get_account_token("spotify").tokens()
-            except (AttributeError, IndexError):
+            except (AttributeError, IndexError, KeyError, TypeError):
                 # Account pool hasn't been filled yet
                 continue
             url = f"{BASE_URL}/me/player/currently-playing"
@@ -371,16 +481,23 @@ class MirrorSpotifyPlayback:
                     },
                     timeout=10,
                 )
-            except Exception:
+            except requests.RequestException:
                 logger.info("Session Expired, reinitializing...")
                 parsing_index = config.get("active_account_number")
-                spotify_re_init_session(account_pool[parsing_index])
-                token = account_pool[parsing_index]["login"]["session"]
+                try:
+                    spotify_re_init_session(account_pool[parsing_index])
+                except (IndexError, KeyError, TypeError):
+                    logger.debug("No Spotify account is available to refresh mirroring")
                 continue
             if resp.status_code == 200:
-                data = resp.json()
-                if data["currently_playing_type"] == "track":
-                    item_id = data["item"]["id"]
+                try:
+                    data = resp.json()
+                    item = data.get("item") or {}
+                except (ValueError, TypeError):
+                    logger.debug("Spotify returned an invalid playback response")
+                    continue
+                if data.get("currently_playing_type") == "track" and item.get("id"):
+                    item_id = item["id"]
                     if item_id not in pending and item_id not in download_queue:
                         parent_category = "track"
                         playlist_name = ""
@@ -430,6 +547,7 @@ class MirrorSpotifyPlayback:
                     continue
             else:
                 continue
+        self.is_running = False
 
 
 def spotify_new_session():
@@ -913,13 +1031,6 @@ def spotify_get_search_results(
     params["q"] = search_term
     # Changed params[] expression below - it does not need transform!
     params["type"] = ",".join(content_types)
-
-    rejected_albums = 0
-    rejected_artists = 0
-    rejected_tracks = 0
-    rejected_playlists = 0
-    # set article (prefix) removed from items for filters ensuring the last character is a space.
-    prefix = search_prefix.strip().lower() + " "
 
     # Route through make_call so search shares the central 429/Retry-After/backoff
     # and per-host serialisation. It raises on exhausted retries and returns None

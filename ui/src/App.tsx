@@ -1,15 +1,7 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { lazy, Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { Navbar, NavTab } from "./components/Navbar";
 import { SearchDashboard } from "./components/SearchDashboard";
-import { BrowseSpotify } from "./components/BrowseSpotify";
-import { PlaylistAutomationPage } from "./components/PlaylistAutomationPage";
-import { LibraryPage } from "./components/LibraryPage";
-import { StatisticsPanel } from "./components/StatisticsPanel";
-import { DownloadQueue } from "./components/DownloadQueue";
-import { SettingsPage, type SettingsSection } from "./components/SettingsPage";
-import { AccountsManager } from "./components/AccountsManager";
-import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
-import { LogViewer } from "./components/LogViewer";
+import type { SettingsSection } from "./components/SettingsPage";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { NotificationHistory } from "./components/NotificationHistory";
 import {
@@ -36,8 +28,8 @@ import {
   fetchAccountHealth,
   reconnectAccounts,
   fetchServerLogs,
+  searchCatalog,
   searchMedia,
-  enqueueDownload,
   clearQueueItems,
   triggerRetryFailed,
   performQueueAction,
@@ -46,6 +38,7 @@ import {
   resetOTSConfig,
   addAccountService,
   configureYouTubeAuthentication,
+  uploadYouTubeCookies,
   removeAccountUUID,
   check_api_version,
   fetchUpdateInfo,
@@ -61,6 +54,21 @@ import {
 } from "./lib/api";
 import type { DownloadProfile, QueueBatchAction } from "./lib/api";
 import type { AccountHealth } from "./lib/api";
+
+const PlaylistAutomationPage = lazy(() => import("./components/PlaylistAutomationPage").then((module) => ({ default: module.PlaylistAutomationPage })));
+const LibraryPage = lazy(() => import("./components/LibraryPage").then((module) => ({ default: module.LibraryPage })));
+const StatisticsPanel = lazy(() => import("./components/StatisticsPanel").then((module) => ({ default: module.StatisticsPanel })));
+const DownloadQueue = lazy(() => import("./components/DownloadQueue").then((module) => ({ default: module.DownloadQueue })));
+const SettingsPage = lazy(() => import("./components/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const AccountsManager = lazy(() => import("./components/AccountsManager").then((module) => ({ default: module.AccountsManager })));
+const DiagnosticsPanel = lazy(() => import("./components/DiagnosticsPanel").then((module) => ({ default: module.DiagnosticsPanel })));
+const LogViewer = lazy(() => import("./components/LogViewer").then((module) => ({ default: module.LogViewer })));
+
+const PageLoading = () => (
+  <div className="ots-page flex min-h-[40vh] items-center justify-center text-sm text-[var(--spotify-text-muted)]">
+    Loading…
+  </div>
+);
 
 const isThemePreset = (value: string | null): value is ThemePreset =>
   value === "spotify" ||
@@ -253,12 +261,13 @@ const getCustomThemeStyle = (theme: CustomTheme, mode: ThemeMode = theme.mode): 
 
 const initialTabFromLocation = (): NavTab => {
   const tab = new URLSearchParams(window.location.search).get("tab");
-  const validTabs: NavTab[] = ["dashboard", "browse", "playlist-automation", "library", "queue", "statistics", "settings", "accounts", "diagnostics", "logs"];
+  const validTabs: NavTab[] = ["dashboard", "playlist-automation", "library", "queue", "statistics", "settings", "accounts", "diagnostics", "logs"];
   return validTabs.includes(tab as NavTab) ? (tab as NavTab) : "dashboard";
 };
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>(initialTabFromLocation);
+  const [searchQuery, setSearchQuery] = useState("");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [config, setConfig] = useState<OTSConfig | null>(null);
   const [queue, setQueue] = useState<DownloadQueueItem[]>([]);
@@ -302,10 +311,10 @@ export default function App() {
     ]);
     if (cfg) {
       setWsConnected(true); // Set Connection status
-      setConfig(cfg._Config__config);
+      setConfig(cfg);
       // Respect a browser-selected preset; otherwise initialize from backend theme state.
       if (!readStoredThemePreset()) {
-        const backendThemeMode: ThemeMode = cfg._Config__config.theme === "dark" ? "dark" : "light";
+        const backendThemeMode: ThemeMode = cfg.theme === "dark" ? "dark" : "light";
         setThemePreset(backendThemeMode === "dark" ? "spotify" : "light");
         setThemeMode(backendThemeMode);
       }
@@ -514,11 +523,7 @@ export default function App() {
     query: string,
     filters?: Record<string, boolean>,
   ): Promise<boolean> => {
-    const res = await searchMedia(query, filters);
-    if (res) {
-      setActiveTab("queue");
-    }
-    return res;
+    return searchMedia(query, filters);
   };
 
   const handleClearCompleted = async () => {
@@ -543,7 +548,22 @@ export default function App() {
     local_id: string,
     action: "cancel" | "delete" | "retry",
   ) => {
-    await performQueueAction(local_id, action);
+    const succeeded = await performQueueAction(local_id, action);
+    if (succeeded && action === "cancel") {
+      // Reflect the terminal state immediately while the worker unwinds its
+      // current network/read operation and publishes the same event.
+      setQueue((current) =>
+        current.map((item) =>
+          item.local_id === local_id
+            ? {
+                ...item,
+                item_status: "Cancelled",
+                error: "Cancelled by the user.",
+              }
+            : item,
+        ),
+      );
+    }
     const q = await fetchDownloadQueue();
     setQueue(q);
   };
@@ -662,9 +682,18 @@ export default function App() {
     const ok = await configureYouTubeAuthentication(authentication);
     if (ok) {
       const fresh = await fetchOTSConfig();
-      if (fresh) setConfig(fresh._Config__config);
+      if (fresh) setConfig(fresh);
     }
     return ok;
+  };
+
+  const handleUploadYouTubeCookies = async (file: File) => {
+    const status = await uploadYouTubeCookies(file);
+    if (status) {
+      const fresh = await fetchOTSConfig();
+      if (fresh) setConfig(fresh);
+    }
+    return status;
   };
 
   const handleRemoveAccount = async (uuid: string) => {
@@ -725,16 +754,16 @@ export default function App() {
       />
 
       <main className="min-h-screen pb-10 md:ml-64">
+        <Suspense fallback={<PageLoading />}>
         {activeTab === "dashboard" && (
           <SearchDashboard
-            onSearch={handleDownloadItem}
+            onSearch={searchCatalog}
             onDownload={handleDownloadItem}
             config={config}
+            accounts={accounts}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
           />
-        )}
-
-        {activeTab === "browse" && (
-          <BrowseSpotify onDownload={handleDownloadItem} />
         )}
 
         {activeTab === "playlist-automation" && <PlaylistAutomationPage onOpenApiConfig={() => { setSettingsSection("search"); setActiveTab("settings"); }} onDownloadPlaylist={handleDownloadItem} />}
@@ -798,6 +827,7 @@ export default function App() {
             health={accountHealth}
             onReconnect={handleReconnectAccounts}
             onConfigureYouTubeAuthentication={handleConfigureYouTubeAuthentication}
+            onUploadYouTubeCookies={handleUploadYouTubeCookies}
             youtubeAuthenticationMode={config?.youtube_auth_mode || "none"}
             youtubeBrowser={config?.youtube_cookies_browser || ""}
             youtubeCookieFile={config?.youtube_cookies_file || ""}
@@ -815,6 +845,7 @@ export default function App() {
             onClear={handleClearLogs}
           />
         )}
+        </Suspense>
       </main>
 
       {/* Real-time floating notification banners */}

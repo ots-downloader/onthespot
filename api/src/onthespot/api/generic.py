@@ -36,7 +36,7 @@ def generic_add_account():
 
 
 def generic_get_track_metadata(_, url):
-    request_key = md5(f"{url}".encode()).hexdigest()
+    request_key = md5(f"{url}".encode(), usedforsecurity=False).hexdigest()
     cache_dir = os.path.join(config.get("_cache_dir"), "reqcache")
     os.makedirs(cache_dir, exist_ok=True)
     req_cache_file = os.path.join(cache_dir, request_key + ".json")

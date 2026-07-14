@@ -1,7 +1,17 @@
+import copy
 import json
+import logging
 import os
 import shutil
 import uuid
+
+
+logger = logging.getLogger(__name__)
+
+
+def _expanded_path(value: str) -> str:
+    """Return an absolute path after expanding user and environment markers."""
+    return os.path.abspath(os.path.expandvars(os.path.expanduser(value)))
 
 
 def config_dir():
@@ -10,17 +20,18 @@ def config_dir():
 
     :return: The configuration directory path as a string.
     """
-    if os.path.exists(os.environ.get("ONTHESPOTDIR", "")):
-        return os.environ["ONTHESPOTDIR"]
-    elif os.name == "nt" and os.path.exists(os.environ.get("APPDATA", "")):
+    override = os.environ.get("ONTHESPOTDIR", "").strip()
+    if override:
+        return _expanded_path(override)
+    if os.name == "nt" and os.environ.get("APPDATA"):
         base_dir = os.environ["APPDATA"]
-    elif os.name == "nt" and os.path.exists(os.environ.get("LOCALAPPDATA", "")):
+    elif os.name == "nt" and os.environ.get("LOCALAPPDATA"):
         base_dir = os.environ["LOCALAPPDATA"]
-    elif os.path.exists(os.environ.get("XDG_CONFIG_HOME", "")):
+    elif os.environ.get("XDG_CONFIG_HOME"):
         base_dir = os.environ["XDG_CONFIG_HOME"]
     else:
         base_dir = os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base_dir, "onthespot")
+    return _expanded_path(os.path.join(base_dir, "onthespot"))
 
 
 def cache_dir():
@@ -29,13 +40,70 @@ def cache_dir():
 
     :return: The cache directory path as a string.
     """
-    if os.name == "nt" and os.path.exists(os.environ.get("TEMP", "")):
-        base_dir = os.environ["TEMP"]
-    elif os.path.exists(os.environ.get("XDG_CACHE_HOME", "")):
-        base_dir = os.environ["XDG_CACHE_HOME"]
+    override = os.environ.get("ONTHESPOTCACHEDIR", "").strip()
+    if override:
+        return _expanded_path(override)
+    # Cache-backed state includes Spotify sessions, statistics, playlist
+    # automation state, and uploaded YouTube cookies. Keep it beside the main
+    # configuration so Docker/Unraid's config volume persists it.
+    return os.path.join(config_dir(), "cache")
+
+
+def _legacy_config_root() -> str | None:
+    """Return the accidental Windows config root used by older FastAPI builds."""
+    if os.name != "nt" or os.environ.get("ONTHESPOTDIR"):
+        return None
+    return os.path.dirname(_expanded_path("/root/.config/onthespot/otsconfig.json"))
+
+
+def _legacy_cache_roots() -> list[str]:
+    """Return cache locations used before persistent app-data storage."""
+    roots: list[str] = []
+    if os.name == "nt" and os.environ.get("TEMP"):
+        roots.append(_expanded_path(os.path.join(os.environ["TEMP"], "onthespot")))
+    elif os.environ.get("XDG_CACHE_HOME"):
+        roots.append(_expanded_path(os.path.join(os.environ["XDG_CACHE_HOME"], "onthespot")))
     else:
-        base_dir = os.path.join(os.path.expanduser("~"), ".cache")
-    return os.path.join(base_dir, "onthespot")
+        roots.append(_expanded_path(os.path.join(os.path.expanduser("~"), ".cache", "onthespot")))
+    return roots
+
+
+def _copy_newer_tree(source: str, destination: str) -> None:
+    """Copy missing or newer files without deleting destination state."""
+    if not os.path.isdir(source) or os.path.abspath(source) == os.path.abspath(destination):
+        return
+    for root, _, files in os.walk(source):
+        relative = os.path.relpath(root, source)
+        target_root = destination if relative == "." else os.path.join(destination, relative)
+        os.makedirs(target_root, exist_ok=True)
+        for filename in files:
+            source_file = os.path.join(root, filename)
+            target_file = os.path.join(target_root, filename)
+            if not os.path.exists(target_file) or os.path.getmtime(source_file) > os.path.getmtime(target_file):
+                shutil.copy2(source_file, target_file)
+
+
+def _migrate_legacy_state(config_root: str) -> None:
+    """Move state from legacy roots while preserving any existing destination."""
+    os.makedirs(config_root, exist_ok=True)
+    destination_config = os.path.join(config_root, "otsconfig.json")
+    legacy_root = _legacy_config_root()
+    if legacy_root:
+        legacy_config = os.path.join(legacy_root, "otsconfig.json")
+        if os.path.isfile(legacy_config) and (
+            not os.path.isfile(destination_config)
+            or os.path.getmtime(legacy_config) > os.path.getmtime(destination_config)
+        ):
+            if os.path.isfile(destination_config):
+                backup = destination_config + ".pre-migration.bak"
+                if not os.path.exists(backup):
+                    shutil.copy2(destination_config, backup)
+            shutil.copy2(legacy_config, destination_config)
+            logger.info("Migrated OnTheSpot configuration from the legacy Windows path")
+        _copy_newer_tree(os.path.join(legacy_root, "cache"), cache_dir())
+
+    for legacy_cache in _legacy_cache_roots():
+        _copy_newer_tree(legacy_cache, cache_dir())
 
 
 class Config:
@@ -55,7 +123,9 @@ class Config:
 
         If any step fails, appropriate fallback mechanisms are used to ensure that the application can still run.
         """
-        self.__cfg_path = "/root/.config/onthespot/otsconfig.json"
+        config_root = config_dir()
+        _migrate_legacy_state(config_root)
+        self.__cfg_path = os.path.join(config_root, "otsconfig.json")
         self.__default_cfg_path = os.path.join(
             os.path.dirname(__file__), "otsconfig_default.json"
         )
@@ -104,6 +174,17 @@ class Config:
         if self.__template_data.get("version"):
             self.__config["version"] = self.__template_data["version"]
 
+        # ``cache_metadata_in_queue`` was the original UI key for the global
+        # API-cache switch.  Preserve an existing user's choice while moving
+        # to the accurately named setting.
+        if "cache_api_calls" not in self.__config:
+            self.__config["cache_api_calls"] = bool(
+                self.__config.get(
+                    "cache_metadata_in_queue",
+                    self.__template_data.get("cache_api_calls", True),
+                )
+            )
+
         # The bundled defaults are written for the Linux/Docker image. When
         # running the API directly on Windows, translate those container paths
         # to the user's normal Music/Videos folders instead of creating a
@@ -150,7 +231,7 @@ class Config:
         self.set(
             "_log_file",
             os.path.join(
-                "/root/.config/onthespot",
+                config_root,
                 "logs",
                 self.session_uuid,
                 "onthespot.log",
@@ -158,14 +239,11 @@ class Config:
         )
         self.set(
             "_cache_dir",
-            os.path.join(
-                "/root/.config/onthespot",
-                "cache",
-            ),
+            cache_dir(),
         )
         try:
             os.makedirs(os.path.dirname(self.get("_log_file")), exist_ok=True)
-            os.makedirs(os.path.dirname(self.get("_cache_dir")), exist_ok=True)
+            os.makedirs(self.get("_cache_dir"), exist_ok=True)
         except (FileNotFoundError, PermissionError):
             fallback_logdir = os.path.abspath(
                 os.path.join(".logs", self.session_uuid, "onthespot.log")
@@ -191,6 +269,55 @@ class Config:
             return self.__template_data[key]
         else:
             return default
+
+    def as_dict(self, *, include_runtime=False, include_secrets=False):
+        """Return a detached configuration snapshot for API responses.
+
+        Historically FastAPI serialised the ``Config`` instance directly.
+        That exposed Python implementation details, runtime filesystem paths,
+        account login payloads, and the Spotify client secret.  Keep the
+        public response flat and useful to the UI while never returning
+        authentication material by default.
+        """
+        snapshot = copy.deepcopy(self.__template_data)
+        snapshot.update(copy.deepcopy(self.__config))
+
+        if not include_runtime:
+            snapshot = {
+                key: value
+                for key, value in snapshot.items()
+                if not str(key).startswith("_")
+            }
+
+        if include_secrets:
+            return snapshot
+
+        accounts = []
+        for account in snapshot.get("accounts", []) or []:
+            if not isinstance(account, dict):
+                continue
+            accounts.append(
+                {
+                    "uuid": str(account.get("uuid") or ""),
+                    "service": str(account.get("service") or ""),
+                    "active": bool(account.get("active", True)),
+                }
+            )
+        snapshot["accounts"] = accounts
+
+        secret_keys = {
+            "spotify_webapi_override_client_secret",
+            "playlist_automation_client_secret",
+            "webui_password",
+        }
+        for key in list(snapshot):
+            if key in secret_keys or any(
+                marker in key.casefold() for marker in ("password", "secret", "token")
+            ):
+                snapshot[f"{key}_configured"] = bool(snapshot.get(key))
+                snapshot[key] = ""
+
+        return snapshot
 
     def set(self, key, value):
         """

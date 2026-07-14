@@ -44,7 +44,7 @@ from .runtimedata import (
     get_rate_limit_delay,
     record_rate_limit,
 )
-from .constants import ItemStatus
+from .constants import HTTP_TIMEOUT, ItemStatus
 
 logger = get_logger("utils")
 
@@ -82,6 +82,9 @@ def _cache_ttl_seconds(url, cache_ttl_seconds):
     they are user-specific and should never be persisted in the shared request
     cache. Public catalogue metadata and search results are safe to reuse.
     """
+    if not bool(config.get("cache_api_calls", True)):
+        return 0
+
     if cache_ttl_seconds is not None:
         return max(0, int(cache_ttl_seconds))
 
@@ -110,7 +113,9 @@ def _cache_ttl_seconds(url, cache_ttl_seconds):
 def _cache_path(url, params, text):
     """Return a deterministic cache path including the complete query string."""
     prepared_url = requests.Request("GET", url, params=params).prepare().url
-    cache_key = md5(f"v2|{int(bool(text))}|{prepared_url}".encode()).hexdigest()
+    cache_key = md5(
+        f"v2|{int(bool(text))}|{prepared_url}".encode(), usedforsecurity=False
+    ).hexdigest()
     cache_dir = os.path.join(config.get("_cache_dir"), "reqcache")
     os.makedirs(cache_dir, exist_ok=True)
     return cache_key, os.path.join(cache_dir, f"v2-{cache_key}.json")
@@ -154,13 +159,21 @@ def _write_cached_response(cache_file, payload, ttl_seconds, etag=None):
 
 
 def _response_cache_ttl(response, default_ttl):
-    """Respect no-store and keep provider cache headers from extending our TTL."""
+    """Respect no-store and keep positive provider TTLs from extending ours.
+
+    Spotify marks public catalogue responses ``public, max-age=0`` to force
+    browser revalidation.  OnTheSpot's local cache deliberately keeps those
+    immutable/public results for its configured short TTL so repeated searches
+    do not spend the user's API quota.  ``no-store`` remains authoritative.
+    """
     cache_control = str(response.headers.get("Cache-Control") or "").casefold()
     if "no-store" in cache_control:
         return 0
     max_age_match = re.search(r"max-age\s*=\s*(\d+)", cache_control)
     if max_age_match:
-        return min(default_ttl, int(max_age_match.group(1)))
+        provider_ttl = int(max_age_match.group(1))
+        if provider_ttl > 0:
+            return min(default_ttl, provider_ttl)
     return default_ttl
 
 
@@ -276,7 +289,12 @@ def make_call(
                 if cooldown > 0:
                     logger.info("Waiting %.1fs for shared API cooldown on %s", cooldown, urlparse(url).netloc)
                     time.sleep(cooldown)
-                response = session.get(url, headers=request_headers, params=params, timeout=30)
+                response = session.get(
+                    url,
+                    headers=request_headers,
+                    params=params,
+                    timeout=HTTP_TIMEOUT,
+                )
         except requests.exceptions.Timeout:
             time.sleep(min((2**attempt) * base_delay, max_delay))
             logger.warning(
@@ -383,8 +401,16 @@ def requeue_item(item: dict) -> None:
             del download_queue[local_id]
             download_queue[local_id] = item
             download_queue[local_id]["available"] = True
+            download_queue[local_id]["_active_download"] = False
+            raw_progress = item.get("progress", item.get("item_progress", 0))
+            try:
+                current_progress = int(float(raw_progress or 0))
+            except (TypeError, ValueError):
+                current_progress = 0
             progress_hook(
-                download_queue[local_id], item["item_progress"], item["item_status"]
+                download_queue[local_id],
+                current_progress,
+                item["item_status"],
             )
         except KeyError:
             # Item was cleared from the queue while we were processing it.
@@ -397,6 +423,7 @@ def retry_single_item(item: dict) -> None:
     with download_queue_lock:
         try:
             item["available"] = True
+            item.pop("_manual_cancelled", None)
             item["item_status"] = ItemStatus.WAITING
             item["error"] = ""
             item["_stats_recorded"] = False
@@ -718,7 +745,6 @@ def convert_video_format(item, output_path, output_format, video_files, item_met
         if current_type != "chapter":
             format_map += ["-map", f"{map_index}:{current_type[:1]}"]
             if file.get("language"):
-                language = file.get("language")
                 format_map += [
                     f"-metadata:s:{current_type[:1]}:{i}",
                     f"title={file.get('language')}",
@@ -730,19 +756,19 @@ def convert_video_format(item, output_path, output_format, video_files, item_met
 
         i += 1
 
-    format_map += [f"-metadata", f"title={item_metadata.get('title')}"]
+    format_map += ["-metadata", f"title={item_metadata.get('title')}"]
     # format_map += [f'-metadata', f'genre={item_metadata.get("genre")}']
-    format_map += [f"-metadata", f"copyright={item_metadata.get('copyright')}"]
-    format_map += [f"-metadata", f"description={item_metadata.get('description')}"]
+    format_map += ["-metadata", f"copyright={item_metadata.get('copyright')}"]
+    format_map += ["-metadata", f"description={item_metadata.get('description')}"]
     # format_map += [f'-metadata', f'year={item_metadata.get("release_year")}']
     # TV Show Specific Tags
     if item["item_type"] == "episode":
-        format_map += [f"-metadata", f"show={item_metadata.get('show_name')}"]
+        format_map += ["-metadata", f"show={item_metadata.get('show_name')}"]
         format_map += [
-            f"-metadata",
+            "-metadata",
             f"episode_id={item_metadata.get('episode_number')}",
         ]
-        format_map += [f"-metadata", f"tvsn={item_metadata.get('season_number')}"]
+        format_map += ["-metadata", f"tvsn={item_metadata.get('season_number')}"]
 
     command += format_map
 
@@ -1064,7 +1090,9 @@ def set_music_thumbnail(filename, metadata):
 
     logger.info("Fetching item thumbnail")
     try:
-        img = Image.open(BytesIO(requests.get(metadata["image_url"]).content))
+        response = requests.get(metadata["image_url"], timeout=HTTP_TIMEOUT)
+        response.raise_for_status()
+        img = Image.open(BytesIO(response.content))
     except Exception as e:
         logger.error(f"Failed to download image: {e}")
         return

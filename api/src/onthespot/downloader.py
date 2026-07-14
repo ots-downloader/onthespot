@@ -21,7 +21,6 @@ DownloadWorker
 import os
 import threading
 import time
-import json as _json
 
 
 from .accounts import get_account_token
@@ -67,7 +66,7 @@ from .utils import (
     retry_single_item,
     jittered_delay,
 )
-from .resources.exceptions import TrackUnavailableError
+from .resources.exceptions import DownloadCancelled, TrackUnavailableError
 
 
 logger = get_logger("downloader")
@@ -116,6 +115,12 @@ class RetryWorker:
                             ItemStatus.UNAVAILABLE,
                         }
                         if item["item_status"] not in retryable_statuses:
+                            continue
+                        # A user cancellation must stay cancelled until the
+                        # user explicitly retries it.  Without this marker the
+                        # retry worker treats every cancellation as a transient
+                        # failure and starts it again shortly afterwards.
+                        if item.get("_manual_cancelled"):
                             continue
                         item["available"] = True
                         item["item_status"] = ItemStatus.WAITING
@@ -179,6 +184,26 @@ class DownloadWorker:
         requeue_item(item)
         return False
 
+    @staticmethod
+    def _raise_if_cancelled(item) -> None:
+        """Stop processing as soon as a user cancellation is observed."""
+        if item.get("item_status") == ItemStatus.CANCELLED:
+            raise DownloadCancelled("Download cancelled by user.")
+
+    @classmethod
+    def _mark_cancelled(cls, item, error: str = "Download cancelled by user.") -> None:
+        """Finalize cancellation and notify the UI without retrying the item."""
+        item["_active_download"] = False
+        item["_pause_requested"] = False
+        item["item_status"] = ItemStatus.CANCELLED
+        item["error"] = error
+        raw_progress = item.get("progress", item.get("item_progress", 0))
+        try:
+            current_progress = int(float(raw_progress or 0))
+        except (TypeError, ValueError):
+            current_progress = 0
+        progress_hook(item, current_progress, ItemStatus.CANCELLED)
+
     def run(self) -> None:
         """Process download queue items until stopped."""
         while self.is_running:
@@ -228,6 +253,7 @@ class DownloadWorker:
                 self._apply_download_profile(item)
                 item["_active_download"] = True
                 wait_for_download_resume(item)
+                self._raise_if_cancelled(item)
                 item["item_status"] = ItemStatus.DOWNLOADING
                 progress_hook(item, 1, item["item_status"])
 
@@ -244,6 +270,8 @@ class DownloadWorker:
                     progress_hook(item, 0, item["item_status"])
                     requeue_item(item)
                     continue
+
+                self._raise_if_cancelled(item)
                 
                 # ---- Fetch metadata -------------------------------------------
                 try:
@@ -265,6 +293,8 @@ class DownloadWorker:
                         progress_hook(progress_item, 25)
                     except Exception as e:
                         logger.error("error emitting progress metadata %s", str(e), exc_info=True)
+                except DownloadCancelled:
+                    raise
                 except (Exception, KeyError) as exc:
                     error_msg = (
                         f"Failed to fetch metadata for '{item_id}', Error: {exc}"
@@ -337,6 +367,8 @@ class DownloadWorker:
                     self._retry_or_fail(item, str(exc))
                     continue
 
+                self._raise_if_cancelled(item)
+
                 # ---- Post-processing (convert, tag, thumbnail, lyrics, ecc) ------------------------------------------
                 if service != "generic":
                     progress_hook(item, 50)
@@ -362,6 +394,8 @@ class DownloadWorker:
                             file_path,
                             video_files,
                         )
+
+                self._raise_if_cancelled(item)
 
                 if service != "generic" and item_type in ("track", "podcast_episode"):
                     verification = verify_file(item.get("file_path", ""))
@@ -397,6 +431,11 @@ class DownloadWorker:
                 time.sleep(delay)
                 
 
+            except DownloadCancelled as exc:
+                if item is not None:
+                    logger.info("Download cancelled: %s", item.get("name", item.get("local_id", "unknown")))
+                    self._mark_cancelled(item, str(exc))
+                continue
             except Exception as exc:
                 logger.error(
                     "Unknown Exception: %s",

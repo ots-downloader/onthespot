@@ -50,6 +50,45 @@ SORTER_VERSION_PREFERENCES = {
     "Global: Oldest Version",
     "Global: Newest Version",
 }
+PLAYLIST_CALLBACK_PATH = "/playlist-automation/callback"
+LOCAL_PLAYLIST_CALLBACK = f"http://127.0.0.1:6767{PLAYLIST_CALLBACK_PATH}"
+
+
+def normalize_playlist_redirect_uri(value: str) -> str:
+    """Validate a Spotify OAuth callback and normalize localhost to loopback.
+
+    Spotify permits plain HTTP only for literal loopback IP addresses. Browsers
+    and local development tools commonly expose the app as ``localhost``, so
+    convert that host to ``127.0.0.1`` while preserving the selected port.
+    """
+    candidate = value.strip()
+    parsed = urlsplit(candidate)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise PlaylistAutomationError("The Spotify redirect URI has an invalid port") from exc
+
+    if parsed.scheme == "http" and parsed.hostname == "localhost":
+        netloc = "127.0.0.1" + (f":{port}" if port is not None else "")
+        parsed = parsed._replace(netloc=netloc)
+        candidate = urlunsplit(parsed)
+
+    loopback = parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "::1"}
+    valid = (
+        (parsed.scheme == "https" or loopback)
+        and bool(parsed.netloc)
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.path == PLAYLIST_CALLBACK_PATH
+        and not parsed.query
+        and not parsed.fragment
+    )
+    if not valid:
+        raise PlaylistAutomationError(
+            "Use an HTTPS URL ending in /playlist-automation/callback. "
+            "HTTP is only allowed for 127.0.0.1 local development."
+        )
+    return candidate
 
 
 class PlaylistAutomationError(RuntimeError):
@@ -114,7 +153,7 @@ class PlaylistAutomation:
 
     def redirect_uri(self) -> str:
         configured = str(config.get("playlist_automation_redirect_uri") or "").strip()
-        return configured or "http://127.0.0.1:6767/playlist-automation/callback"
+        return configured or LOCAL_PLAYLIST_CALLBACK
 
     def application_url(self) -> str:
         """Return the public UI origin associated with the OAuth callback."""
@@ -146,11 +185,7 @@ class PlaylistAutomation:
         elif not self._client_id() or not self._client_secret():
             raise PlaylistAutomationError("Configure Spotify Client ID and Client Secret in Settings → API config first")
         if redirect_uri.strip():
-            candidate = redirect_uri.strip()
-            parsed = urlsplit(candidate)
-            loopback = parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "::1"}
-            if not ((parsed.scheme == "https" or loopback) and parsed.netloc and parsed.path == "/playlist-automation/callback"):
-                raise PlaylistAutomationError("Use an HTTPS public URL ending in /playlist-automation/callback. HTTP is only allowed for 127.0.0.1 local development.")
+            candidate = normalize_playlist_redirect_uri(redirect_uri)
             config.set("playlist_automation_redirect_uri", candidate)
         config.save()
         return self.status()

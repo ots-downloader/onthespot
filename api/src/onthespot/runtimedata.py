@@ -98,8 +98,11 @@ download_queue: dict = {}
 # does not require restarting the server or losing the queue.
 download_paused = Event()
 
-# Notification queue for EventSource updates.
-websocket_queue: asyncio.Queue = asyncio.Queue()
+# EventSource subscribers.  A single shared ``asyncio.Queue`` caused multiple
+# browser tabs to consume each other's events and was unsafe when worker
+# threads published into the queue.  Each connection now owns a bounded queue
+# on its own event loop.
+_websocket_subscribers: dict[str, tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = {}
 
 # LOCK HELPERS
 parsing_lock = Lock()
@@ -118,11 +121,55 @@ rate_limit_state = {
 }
 
 
+def subscribe_websocket(user_id: str) -> tuple[str, asyncio.Queue]:
+    """Register one SSE connection and return its private event queue."""
+    subscription_id = f"{user_id}:{uuid.uuid4().hex}"
+    event_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    with websocket_queue_lock:
+        _websocket_subscribers[subscription_id] = (
+            asyncio.get_running_loop(),
+            event_queue,
+        )
+    return subscription_id, event_queue
+
+
+def unsubscribe_websocket(subscription_id: str) -> None:
+    """Remove an SSE connection without affecting any other subscriber."""
+    with websocket_queue_lock:
+        _websocket_subscribers.pop(subscription_id, None)
+
+
+def _enqueue_websocket_event(event_queue: asyncio.Queue, data: dict) -> None:
+    """Add an event on the subscriber's loop, dropping only its oldest item."""
+    if event_queue.full():
+        try:
+            event_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+    event_queue.put_nowait(data)
+
+
 # Event callback for EventSource updates
 def websocket_event(etype: str, event=""):
-    if websocket_queue:
-        data = {"type": etype, "event": event}
-        websocket_queue.put_nowait(data)
+    """Publish an event safely to every connected browser."""
+    data = {"type": etype, "event": event}
+    with websocket_queue_lock:
+        subscribers = list(_websocket_subscribers.items())
+
+    stale_subscriptions: list[str] = []
+    for subscription_id, (loop, event_queue) in subscribers:
+        if loop.is_closed():
+            stale_subscriptions.append(subscription_id)
+            continue
+        try:
+            loop.call_soon_threadsafe(_enqueue_websocket_event, event_queue, data)
+        except RuntimeError:
+            stale_subscriptions.append(subscription_id)
+
+    if stale_subscriptions:
+        with websocket_queue_lock:
+            for subscription_id in stale_subscriptions:
+                _websocket_subscribers.pop(subscription_id, None)
 
 def format_bytes(value: float | int | None) -> str:
     if not value or value < 0:
@@ -265,6 +312,11 @@ def progress_hook(
 
 def yt_dlp_progress_hook(item: dict, progress_info: dict) -> None:
     """Hook passed to yt-dlp to forward download progress to the GUI."""
+    # yt-dlp can emit callbacks without a percentage while probing formats or
+    # waiting for a fragment. Check cancellation before returning from those
+    # callbacks so a cancelled item cannot continue silently.
+    if item.get("item_status") == ItemStatus.CANCELLED:
+        raise DownloadCancelled("Download cancelled by user.")
     current = item.get("progress", 0)
     percent_text = progress_info.get("_percent_str", "")
     match = re.search(r"(\d+\.\d+)%", percent_text)

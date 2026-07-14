@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Users, Plus, Trash2, Loader2, Server, RefreshCw, CircleCheck, AlertTriangle, Music2, Waves, Cloud, Disc3, CirclePlay, Heart, Headphones, Film, Download, Globe2, Wifi } from 'lucide-react';
 import { AccountItem } from '../types';
-import { createSpotifyCompanionPairing, getTargetBackendUrl } from '../lib/api';
-import type { AccountHealth } from '../lib/api';
+import { createSpotifyCompanionPairing, fetchYouTubeAuthenticationStatus, getTargetBackendUrl } from '../lib/api';
+import type { AccountHealth, YouTubeAuthenticationStatus } from '../lib/api';
 
 interface AccountsManagerProps {
   accounts: AccountItem[];
@@ -13,6 +13,7 @@ interface AccountsManagerProps {
   health: AccountHealth | null;
   onReconnect: () => Promise<boolean>;
   onConfigureYouTubeAuthentication: (authentication: { mode: "none" | "browser" | "cookie_file"; browser?: string; cookie_file?: string }) => Promise<boolean>;
+  onUploadYouTubeCookies: (file: File) => Promise<YouTubeAuthenticationStatus | null>;
   youtubeAuthenticationMode: "none" | "browser" | "cookie_file";
   youtubeBrowser?: string;
   youtubeCookieFile?: string;
@@ -28,6 +29,7 @@ type ServicePresentation = {
 
 type CredentialMode = 'none' | 'device' | 'token' | 'email-password' | 'youtube';
 type SpotifyAccessMode = 'local' | 'remote';
+type YouTubeSetupMode = 'upload' | 'browser' | 'cookie_file';
 
 const SERVICE_OPTIONS = [
   { value: 'applemusic', label: 'Apple Music', mode: 'token', tokenLabel: 'Media User Token', requirement: 'Paste a valid Apple Music media-user token.', tokenRequired: true },
@@ -67,6 +69,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   health,
   onReconnect,
   onConfigureYouTubeAuthentication,
+  onUploadYouTubeCookies,
   youtubeAuthenticationMode,
   youtubeBrowser: configuredYoutubeBrowser,
   youtubeCookieFile: configuredYoutubeCookieFile,
@@ -79,9 +82,12 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   const [reconnecting, setReconnecting] = useState(false);
   const [formError, setFormError] = useState('');
   const [signInStarted, setSignInStarted] = useState('');
-  const [youtubeAuthMode, setYoutubeAuthMode] = useState<'browser' | 'cookie_file'>('browser');
+  const [youtubeAuthMode, setYoutubeAuthMode] = useState<YouTubeSetupMode>('upload');
   const [youtubeBrowser, setYoutubeBrowser] = useState('edge');
   const [youtubeCookieFile, setYoutubeCookieFile] = useState('');
+  const [youtubeCookieUpload, setYoutubeCookieUpload] = useState<File | null>(null);
+  const [youtubeStatus, setYoutubeStatus] = useState<YouTubeAuthenticationStatus | null>(null);
+  const [youtubeUploadComplete, setYoutubeUploadComplete] = useState(false);
   const [spotifyAccessMode, setSpotifyAccessMode] = useState<SpotifyAccessMode>('local');
   const [companionPairing, setCompanionPairing] = useState<{ pairing_token: string; expires_at: number; expires_in: number; device_name: string } | null>(null);
   const [companionWaiting, setCompanionWaiting] = useState(false);
@@ -93,13 +99,26 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
 
   const openYouTubeSetup = () => {
     setService('youtube');
-    setYoutubeAuthMode(youtubeAuthenticationMode === 'cookie_file' ? 'cookie_file' : 'browser');
+    // Upload is the portable choice for Docker/Unraid and is also the most
+    // useful starting point when replacing an unavailable browser profile.
+    setYoutubeAuthMode('upload');
     setYoutubeBrowser(configuredYoutubeBrowser || 'edge');
     setYoutubeCookieFile(configuredYoutubeCookieFile || '');
+    setYoutubeCookieUpload(null);
+    setYoutubeUploadComplete(false);
     setFormError('');
     setSignInStarted('');
     setShowModal(true);
+    void fetchYouTubeAuthenticationStatus().then(setYoutubeStatus);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchYouTubeAuthenticationStatus().then((status) => {
+      if (!cancelled) setYoutubeStatus(status);
+    });
+    return () => { cancelled = true; };
+  }, [youtubeAuthenticationMode, configuredYoutubeBrowser, configuredYoutubeCookieFile]);
 
   const createCompanionPairing = async () => {
     initialSpotifyCount.current = accounts.filter((account) => account.service.toLowerCase() === 'spotify').length;
@@ -148,6 +167,9 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   const companionCommand = companionPairing ? `.\\.companion-venv\\Scripts\\python.exe companion\\run.py --server-url "${getTargetBackendUrl()}" --pairing-token "${companionPairing.pairing_token}" --cleanup` : '';
   const companionCloneCommand = "cd $HOME\ngit clone --branch fastapi-dev --single-branch https://github.com/JamyPatch44/onthespot.git OnTheSpot-companion\ncd .\\OnTheSpot-companion";
   const companionSetupCommand = "py -m venv .companion-venv\n.\\.companion-venv\\Scripts\\python.exe -m pip install -r companion\\requirements.txt";
+  const youtubeExportInstallCommand = '$otsYtDlp = Join-Path $env:TEMP "OnTheSpot-youtube-auth"\npy -m venv $otsYtDlp\n& (Join-Path $otsYtDlp "Scripts\\python.exe") -m pip install --disable-pip-version-check --quiet --upgrade yt-dlp';
+  const youtubeExportCommand = `$otsYtDlp = Join-Path $env:TEMP "OnTheSpot-youtube-auth"\n& (Join-Path $otsYtDlp "Scripts\\python.exe") -m yt_dlp --cookies-from-browser ${youtubeBrowser} --cookies "$HOME\\Downloads\\youtube-cookies.txt"`;
+  const youtubeCleanupCommand = 'Remove-Item -LiteralPath "$HOME\\Downloads\\youtube-cookies.txt" -Force -ErrorAction SilentlyContinue\nRemove-Item -LiteralPath (Join-Path $env:TEMP "OnTheSpot-youtube-auth") -Recurse -Force -ErrorAction SilentlyContinue';
   const copyText = async (value: string, success: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -174,22 +196,39 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       return;
     }
     if (selectedService.mode === 'youtube') {
+      if (youtubeAuthMode === 'upload' && !youtubeCookieUpload) {
+        setFormError('Choose a Netscape-format cookies.txt file exported from YouTube.');
+        return;
+      }
       if (youtubeAuthMode === 'cookie_file' && !youtubeCookieFile.trim()) {
-        setFormError('Enter an absolute path to your Netscape-format cookies file.');
+        setFormError('Enter an absolute path to a Netscape-format cookies file on the OnTheSpot server.');
         return;
       }
       setLoading(true);
-      const configured = await onConfigureYouTubeAuthentication({
-        mode: youtubeAuthMode,
-        browser: youtubeAuthMode === 'browser' ? youtubeBrowser : undefined,
-        cookie_file: youtubeAuthMode === 'cookie_file' ? youtubeCookieFile : undefined,
-      });
-      setLoading(false);
-      if (configured) {
-        setShowModal(false);
-        setYoutubeCookieFile('');
-      } else {
-        setFormError('Could not save the YouTube authentication setup. Check the browser profile or cookies-file path.');
+      try {
+        if (youtubeAuthMode === 'upload' && youtubeCookieUpload) {
+          const status = await onUploadYouTubeCookies(youtubeCookieUpload);
+          if (!status?.ready) throw new Error(status?.error || 'The uploaded YouTube session is not usable.');
+          setYoutubeStatus(status);
+          setYoutubeCookieUpload(null);
+          setYoutubeUploadComplete(true);
+          setSignInStarted('YouTube cookies installed on OnTheSpot. Run the cleanup command below to remove the temporary local files.');
+        } else {
+          const configuredMode = youtubeAuthMode === 'browser' ? 'browser' : 'cookie_file';
+          const configured = await onConfigureYouTubeAuthentication({
+            mode: configuredMode,
+            browser: configuredMode === 'browser' ? youtubeBrowser : undefined,
+            cookie_file: configuredMode === 'cookie_file' ? youtubeCookieFile : undefined,
+          });
+          if (!configured) throw new Error('The selected YouTube session source is not usable.');
+          setYoutubeStatus(await fetchYouTubeAuthenticationStatus());
+          setShowModal(false);
+          setYoutubeCookieFile('');
+        }
+      } catch (error) {
+        setFormError(error instanceof Error ? error.message : 'Could not configure YouTube authentication.');
+      } finally {
+        setLoading(false);
       }
       return;
     }
@@ -262,13 +301,16 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 const connected = acc.active;
                 const isPublicWorker = ['generic', 'bandcamp', 'youtube', 'youtube_music'].includes(acc.service.toLowerCase()) || acc.uuid.startsWith('public_');
                 const isYoutubeWorker = acc.service.toLowerCase() === 'youtube_music';
-                const youtubeSessionConfigured = youtubeAuthenticationMode !== 'none';
+                const youtubeSessionConfigured = Boolean(youtubeStatus?.configured);
+                const youtubeSessionReady = Boolean(youtubeStatus?.ready);
                 const statusLabel = isYoutubeWorker
-                  ? (youtubeSessionConfigured ? 'Session configured' : 'Needs session')
+                  ? (youtubeSessionReady
+                    ? youtubeStatus?.mode === 'browser' ? 'Browser configured' : 'Cookies loaded'
+                    : youtubeSessionConfigured ? 'Session unavailable' : youtubeStatus ? 'Needs cookies' : 'Session unverified')
                   : isPublicWorker
                   ? (connected ? 'Ready (no sign-in)' : 'Disabled')
                   : (connected ? 'Authenticated' : 'Needs sign-in');
-                const statusReady = isYoutubeWorker ? youtubeSessionConfigured : connected;
+                const statusReady = isYoutubeWorker ? youtubeSessionReady : connected;
                 const accountLabel = isPublicWorker
                   ? (acc.service.toLowerCase() === 'generic' ? 'General media worker' : isYoutubeWorker ? 'YouTube catalogue worker' : `${presentation.label} public worker`)
                   : `${presentation.label} account`;
@@ -292,10 +334,11 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     <td className="px-5 py-4 text-[#b3b3b3]">{presentation.accountType}</td>
                     <td className="px-5 py-4 font-medium text-[#e7e7e7]">{presentation.maxBitrate}</td>
                     <td className="px-5 py-4">
-                      <span className={`inline-flex items-center gap-2 text-xs font-semibold ${statusReady ? 'text-[#1ed760]' : 'text-[#f6b94a]'}`}>
+                      <span title={isYoutubeWorker ? youtubeStatus?.error || youtubeStatus?.source : undefined} className={`inline-flex items-center gap-2 text-xs font-semibold ${statusReady ? 'text-[#1ed760]' : 'text-[#f6b94a]'}`}>
                         <span className={`h-2 w-2 rounded-full ${statusReady ? 'bg-[#1ed760]' : 'bg-[#f6b94a]'}`} />
                         {statusLabel}
                       </span>
+                      {isYoutubeWorker && youtubeStatus?.error && <p className="mt-1 max-w-64 text-[11px] leading-snug text-[#a7a7a7]">{youtubeStatus.error}</p>}
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex min-w-52 items-center justify-end gap-2 whitespace-nowrap">
@@ -323,7 +366,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       {/* Standard Material Dialog */}
       {showModal && createPortal(
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:items-center">
-          <div className={`ots-panel relative flex w-full flex-col overflow-hidden bg-[#1c1c1c] p-0 shadow-2xl ${service === 'spotify' && spotifyAccessMode === 'remote' ? 'max-h-[calc(100dvh_-_2rem)] max-w-3xl' : 'max-h-[calc(100dvh_-_2rem)] max-w-md'}`}>
+          <div className={`ots-panel relative flex w-full flex-col overflow-hidden bg-[#1c1c1c] p-0 shadow-2xl ${service === 'spotify' && spotifyAccessMode === 'remote' ? 'max-h-[calc(100dvh_-_2rem)] max-w-3xl' : service === 'youtube' ? 'max-h-[calc(100dvh_-_2rem)] max-w-xl' : 'max-h-[calc(100dvh_-_2rem)] max-w-md'}`}>
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#353535] px-6 py-5 sm:px-8">
               <div className="flex min-w-0 items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#173b25]">
@@ -422,22 +465,80 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
               {selectedService.mode === 'youtube' && (
                 <div className="space-y-3 rounded-lg border border-[#3a3a3a] bg-[#242424] p-4">
                   <p className="text-sm font-medium text-white">YouTube session source</p>
-                  <p className="text-xs leading-relaxed text-[#b3b3b3]">Authentication stays on this computer. OnTheSpot stores only your chosen browser name or local file path, never the cookies themselves.</p>
-                  <select value={youtubeAuthMode} onChange={(event) => setYoutubeAuthMode(event.target.value as 'browser' | 'cookie_file')} className="ots-select w-full">
-                    <option value="browser">Use a local browser session</option>
-                    <option value="cookie_file">Use a local cookies file</option>
+                  <p className="text-xs leading-relaxed text-[#b3b3b3]">YouTube does not support yt-dlp OAuth sign-in. For Docker or Unraid, upload a Netscape-format cookies.txt file so the server can use your session.</p>
+                  <select value={youtubeAuthMode} onChange={(event) => { setYoutubeAuthMode(event.target.value as YouTubeSetupMode); setYoutubeUploadComplete(false); setFormError(''); }} className="ots-select w-full">
+                    <option value="upload">Upload cookies.txt (recommended)</option>
+                    <option value="browser">Read a browser on the OnTheSpot host</option>
+                    <option value="cookie_file">Use a file path on the OnTheSpot host</option>
                   </select>
-                  {youtubeAuthMode === 'browser' ? (
-                    <select value={youtubeBrowser} onChange={(event) => setYoutubeBrowser(event.target.value)} className="ots-select w-full">
-                      <option value="edge">Microsoft Edge</option>
-                      <option value="chrome">Google Chrome</option>
-                      <option value="brave">Brave</option>
-                      <option value="firefox">Firefox</option>
-                      <option value="vivaldi">Vivaldi</option>
-                      <option value="opera">Opera</option>
-                    </select>
+                  {youtubeAuthMode === 'upload' ? (
+                    <div className="space-y-3">
+                      <div className="border-l-4 border-[#f6b94a] bg-[#3b321d] p-3 text-xs leading-relaxed text-[#f6b94a]">
+                        <p className="font-semibold text-white">Create cookies.txt on the computer where you use YouTube</p>
+                        <ol className="mt-2 list-decimal space-y-1 pl-4 text-[#d2d2d2]">
+                          <li>Sign in to YouTube in your normal browser.</li>
+                          <li>Open PowerShell on that computer.</li>
+                          <li>Run the temporary setup command once, then run the export command.</li>
+                          <li>Return here and select <span className="font-semibold text-white">Downloads\youtube-cookies.txt</span>.</li>
+                          <li>After the upload succeeds, run the cleanup command shown below.</li>
+                        </ol>
+                        <label className="mt-3 block font-semibold text-white" htmlFor="youtube-export-browser">Browser containing your YouTube session</label>
+                        <select id="youtube-export-browser" value={youtubeBrowser} onChange={(event) => setYoutubeBrowser(event.target.value)} className="ots-select mt-1 w-full">
+                          <option value="edge">Microsoft Edge</option>
+                          <option value="chrome">Google Chrome</option>
+                          <option value="brave">Brave</option>
+                          <option value="firefox">Firefox</option>
+                          <option value="vivaldi">Vivaldi</option>
+                          <option value="opera">Opera</option>
+                        </select>
+                        <p className="mt-3 font-semibold text-white">1. Create a temporary yt-dlp environment</p>
+                        <code className="mt-1 block overflow-x-auto whitespace-pre-wrap bg-black/30 p-2 text-[11px] text-white">{youtubeExportInstallCommand}</code>
+                        <button type="button" onClick={() => void copyText(youtubeExportInstallCommand, 'Temporary yt-dlp setup command copied.')} className="ots-button ots-button-secondary mt-2 h-8 px-3 text-xs">Copy setup command</button>
+                        <p className="mt-3 font-semibold text-white">2. Export the browser cookies</p>
+                        <code className="mt-1 block overflow-x-auto whitespace-pre-wrap break-all bg-black/30 p-2 text-[11px] text-white">{youtubeExportCommand}</code>
+                        <button type="button" onClick={() => void copyText(youtubeExportCommand, 'YouTube cookie export command copied.')} className="ots-button ots-button-secondary mt-2 h-8 px-3 text-xs">Copy export command</button>
+                        <p className="mt-3 text-[11px] font-semibold">Keep the exported file private. Browser exports can contain cookies for other sites; OnTheSpot removes every row except YouTube and Google when the file is uploaded.</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".txt,text/plain"
+                        onChange={(event) => { setYoutubeCookieUpload(event.target.files?.[0] || null); setYoutubeUploadComplete(false); }}
+                        className="ots-input w-full cursor-pointer file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-semibold file:text-white"
+                      />
+                      <p className="text-[11px] leading-relaxed text-[#a7a7a7]">The filtered file is stored privately in OnTheSpot app data and is never returned to the browser or written to logs. <a href="https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp" target="_blank" rel="noreferrer" className="font-semibold text-white underline underline-offset-2">Official yt-dlp cookie help</a></p>
+                      {youtubeUploadComplete && (
+                        <div className="border-l-4 border-[var(--spotify-green)] bg-[color-mix(in_srgb,var(--spotify-green)_10%,var(--spotify-surface))] p-3 text-xs leading-relaxed text-[var(--spotify-text)]">
+                          <p className="font-semibold text-white">3. Clean up the local helper files</p>
+                          <p className="mt-1 text-[#b3b3b3]">OnTheSpot now has its private filtered copy. Run this once in PowerShell to delete the exported cookie file and the temporary yt-dlp environment from your computer.</p>
+                          <code className="mt-2 block overflow-x-auto whitespace-pre-wrap break-all bg-black/30 p-2 text-[11px] text-white">{youtubeCleanupCommand}</code>
+                          <button type="button" onClick={() => void copyText(youtubeCleanupCommand, 'Cleanup command copied. Run it in PowerShell to remove the local helper files.')} className="ots-button ots-button-secondary mt-2 h-8 px-3 text-xs">Copy cleanup command</button>
+                        </div>
+                      )}
+                    </div>
+                  ) : youtubeAuthMode === 'browser' ? (
+                    <div className="space-y-2">
+                      <select value={youtubeBrowser} onChange={(event) => setYoutubeBrowser(event.target.value)} className="ots-select w-full">
+                        <option value="edge">Microsoft Edge</option>
+                        <option value="chrome">Google Chrome</option>
+                        <option value="brave">Brave</option>
+                        <option value="firefox">Firefox</option>
+                        <option value="vivaldi">Vivaldi</option>
+                        <option value="opera">Opera</option>
+                      </select>
+                      <p className="text-[11px] leading-relaxed text-[#f6b94a]">Only use this when that browser is installed on the same machine as the OnTheSpot process. It cannot read a browser on your desktop from inside Docker.</p>
+                    </div>
                   ) : (
-                    <input type="text" value={youtubeCookieFile} onChange={(event) => setYoutubeCookieFile(event.target.value)} placeholder="C:\\path\\to\\youtube-cookies.txt" className="ots-input w-full" />
+                    <div className="space-y-2">
+                      <input type="text" value={youtubeCookieFile} onChange={(event) => setYoutubeCookieFile(event.target.value)} placeholder="/config/youtube-cookies.txt" className="ots-input w-full" />
+                      <p className="text-[11px] leading-relaxed text-[#a7a7a7]">This must be an absolute path visible inside the OnTheSpot container, not a path on the computer running your browser.</p>
+                    </div>
+                  )}
+                  {youtubeStatus && (
+                    <div className={`border px-3 py-2 text-xs ${youtubeStatus.ready ? 'border-[#1ed760]/35 bg-[#1ed760]/10 text-[#77ef9f]' : 'border-[#f6b94a]/35 bg-[#f6b94a]/10 text-[#f6b94a]'}`}>
+                      <p className="font-semibold">{youtubeStatus.ready ? `Session source configured · ${youtubeStatus.source}` : youtubeStatus.configured ? 'Current session is unavailable' : 'No usable YouTube session configured'}</p>
+                      {youtubeStatus.error && <p className="mt-1 leading-relaxed">{youtubeStatus.error}</p>}
+                      {!youtubeStatus.ready && youtubeAuthMode !== 'upload' && <button type="button" onClick={() => { setYoutubeAuthMode('upload'); setFormError(''); }} className="ots-button ots-button-secondary mt-2 h-8 px-3 text-xs">Show cookies.txt instructions</button>}
+                    </div>
                   )}
                 </div>
               )}
@@ -461,14 +562,18 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading || companionWaiting}
-                  className="ots-button ots-button-primary"
-                >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {loading ? 'Working…' : companionWaiting ? 'Waiting for Spotify…' : selectedService.value === 'spotify' && spotifyAccessMode === 'remote' ? 'Create pairing code' : selectedService.mode === 'device' ? 'Start sign-in' : selectedService.mode === 'youtube' ? 'Save YouTube setup' : 'Add Account'}
-                </button>
+                {selectedService.mode === 'youtube' && youtubeUploadComplete ? (
+                  <button type="button" onClick={() => { setYoutubeUploadComplete(false); setShowModal(false); }} className="ots-button ots-button-primary">Done</button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={loading || companionWaiting}
+                    className="ots-button ots-button-primary"
+                  >
+                    {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {loading ? 'Working…' : companionWaiting ? 'Waiting for Spotify…' : selectedService.value === 'spotify' && spotifyAccessMode === 'remote' ? 'Create pairing code' : selectedService.mode === 'device' ? 'Start sign-in' : selectedService.mode === 'youtube' ? 'Save YouTube setup' : 'Add Account'}
+                  </button>
+                )}
               </div>
             </form>
           </div>

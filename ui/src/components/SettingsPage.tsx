@@ -307,7 +307,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const renderInput = (
     key: string,
     label: string,
-    type: "text" | "number" = "text",
+    type: "text" | "number" | "password" = "text",
     desc?: string,
   ) => (
     <div key={key} className="flex flex-col gap-1.5 py-2 w-full">
@@ -1056,9 +1056,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </h4>
                 <div className="ots-settings-divider">
                   {renderToggle(
-                    "cache_metadata_in_queue",
+                    "cache_api_calls",
                     "Cache API Calls",
-                    "Reduces target client catalog queries by up to 50%",
+                    "Reuses safe public catalogue responses to reduce API usage",
                   )}
                   {renderToggle(
                     "fetch_genre_metadata",
@@ -1115,7 +1115,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     {renderInput(
                       "spotify_webapi_override_client_secret",
                       "Spotify Client Secret",
-                      "text",
+                      "password",
+                      config.spotify_webapi_override_client_secret_configured
+                        ? "A secret is configured. Enter a value only to replace it."
+                        : "Required for Spotify catalogue and playlist-sorting API access.",
                     )}
                   </div>
                 </div>

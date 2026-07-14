@@ -564,7 +564,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                       )}
 
                       {/* Delete / Cancel Button */}
-                      {(config?.download_delete_btn && (item.item_status === "Downloaded" || item.item_status === "Already Exists")) && (
+  {(config?.download_delete_btn && (item.item_status === "Downloaded" || item.item_status === "Already Exists" || item.item_status === "Cancelled")) && (
                         <button
                           onClick={() => onAction(item.local_id, 'delete')}
                           className={`${iconBtnClass} text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 focus:ring-red-500/20`}

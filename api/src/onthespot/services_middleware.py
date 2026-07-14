@@ -253,7 +253,7 @@ def download_via_ytdlp_audio(
             ydl_opts["format"] = "bestaudio[ext=mp3]"
 
     elif service == "tidal":
-        defaultformat = ".flac"
+        default_format = ".flac"
         bitrate = "1411k"
 
         # Get MPD manifest with error handling

@@ -221,7 +221,9 @@ def _read_file(path: str) -> dict[str, Any]:
             break
 
     return {
-        "id": hashlib.sha1(_path_key(path).encode("utf-8")).hexdigest(),
+        "id": hashlib.sha1(
+            _path_key(path).encode("utf-8"), usedforsecurity=False
+        ).hexdigest(),
         "path": _absolute(path),
         "relative_path": relative_paths[0] if relative_paths else os.path.basename(path),
         "filename": os.path.basename(path),

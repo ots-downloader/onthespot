@@ -184,6 +184,7 @@ export interface OTSConfig {
   api_retry_base_delay: number;
   api_retry_max_delay: number;
   api_request_delay: number;
+  cache_api_calls: boolean;
   api_response_cache_ttl_seconds: number;
   spotify_metadata_cache_ttl_seconds: number;
   spotify_search_cache_ttl_seconds: number;
@@ -191,6 +192,7 @@ export interface OTSConfig {
   spotify_connect_port: number;
   spotify_webapi_override_client_id: string;
   spotify_webapi_override_client_secret: string;
+  spotify_webapi_override_client_secret_configured?: boolean;
   cache_metadata_in_queue: boolean;
   fetch_genre_metadata: boolean;
   fetch_extended_album_metadata: boolean;

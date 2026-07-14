@@ -13,7 +13,6 @@ const config = {
 };
 const STORAGE_KEY = "OTS_FASTAPI_URL";
 const DEFAULT_URL = config.api_url;
-console.log("Using backend URL:", DEFAULT_URL);
 
 export function getTargetBackendUrl(): string {
   if (typeof window === "undefined") return DEFAULT_URL;
@@ -90,23 +89,19 @@ export async function searchMedia(
   }
 }
 
-export async function fetchSpotifyCatalog(
+export async function searchCatalog(
   query: string,
-  types: string[] = ["track"],
+  filters?: Record<string, boolean>,
+  services?: string[],
 ): Promise<SearchResultItem[]> {
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      types: types.join(","),
-    });
-    const res = await request(`/catalog/spotify?${params.toString()}`);
-    if (!res.ok) throw new Error("Spotify catalogue search failed");
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    console.error("Spotify catalogue search failed:", err);
-    return [];
-  }
+  const qParam = query ? `?q=${encodeURIComponent(query)}` : "";
+  const res = await request(`/search${qParam}`, {
+    method: "POST",
+    body: JSON.stringify({ ...(filters || {}), ...(services ? { services } : {}) }),
+  });
+  if (!res.ok) throw new Error("Catalogue search failed");
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 }
 
 export async function fetchDownloadQueue(): Promise<DownloadQueueItem[]> {
@@ -144,7 +139,9 @@ export async function fetchDownloadState(): Promise<{
 export async function setDownloadsPaused(paused: boolean): Promise<boolean> {
   try {
     const res = await request(`/queue/downloads/pause?paused=${paused ? "true" : "false"}`, { method: "POST" });
-    return res.ok;
+    if (!res.ok) return false;
+    const body = await res.json().catch(() => null);
+    return body?.success ?? body === true;
   } catch (err) {
     console.error("Set download pause failed:", err);
     return false;
@@ -497,22 +494,6 @@ export async function removeMissingLibraryItems(paths: string[] = []): Promise<n
   }
 }
 
-export async function enqueueDownload(
-  item: SearchResultItem,
-): Promise<{ success: boolean }> {
-  try {
-    const res = await request("/queue/downloads/add", {
-      method: "POST",
-      body: JSON.stringify({ item }),
-    });
-    if (!res.ok) throw new Error("Enqueue failed");
-    return await res.json();
-  } catch (err) {
-    console.error("Enqueue download failed:", err);
-    return { success: false };
-  }
-}
-
 export async function clearQueueItems(
   status: "Downloaded" | "Failed" | "all",
 ): Promise<boolean> {
@@ -550,7 +531,9 @@ export async function performQueueAction(
         method: "POST",
       },
     );
-    return res.ok;
+    if (!res.ok) return false;
+    const body = await res.json().catch(() => null);
+    return body?.success ?? body === true;
   } catch (err) {
     console.error(`Perform queue action (${action}) failed:`, err);
     return false;
@@ -973,16 +956,55 @@ export type YouTubeAuthentication = {
   cookie_file?: string;
 };
 
+export interface YouTubeAuthenticationStatus {
+  mode: "none" | "browser" | "cookie_file";
+  configured: boolean;
+  ready: boolean;
+  source: string;
+  error: string;
+}
+
 export async function configureYouTubeAuthentication(authentication: YouTubeAuthentication): Promise<boolean> {
   try {
     const res = await request("/accounts/youtube-auth", {
       method: "POST",
       body: JSON.stringify(authentication),
     });
-    return res.ok;
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error(payload.detail || "The YouTube authentication setup is not usable");
+    }
+    return true;
   } catch (err) {
     console.error("Configure YouTube authentication failed:", err);
-    return false;
+    throw err;
+  }
+}
+
+export async function fetchYouTubeAuthenticationStatus(): Promise<YouTubeAuthenticationStatus | null> {
+  try {
+    const res = await request("/accounts/youtube-auth/status");
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("Fetch YouTube authentication status failed:", err);
+    return null;
+  }
+}
+
+export async function uploadYouTubeCookies(file: File): Promise<YouTubeAuthenticationStatus | null> {
+  try {
+    const form = new FormData();
+    form.append("cookies", file);
+    const res = await request("/accounts/youtube-auth/upload", { method: "POST", body: form });
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error(payload.detail || "The cookies file could not be uploaded");
+    }
+    return await res.json();
+  } catch (err) {
+    console.error("Upload YouTube cookies failed:", err);
+    throw err;
   }
 }
 

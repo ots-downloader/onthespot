@@ -38,8 +38,12 @@ const cronForSchedule = (frequency: string, time: string) => { const [hours = "0
 const debugTone = (level: DebugLevel) => level === "Error" || level === "Rejected" ? "text-[#ff6b6b]" : level === "Passed" ? "text-[var(--spotify-green)]" : level === "Found" ? "text-[#c88cff]" : level === "Warning" ? "text-[var(--ots-warning)]" : level === "Search" ? "text-[#69a8ff]" : "text-[#b3b3b3]";
 const csvValue = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 const playlistCallbackPath = "/playlist-automation/callback";
-const playlistLocalCallbackFallback = `http://127.0.0.1:6767${playlistCallbackPath}`;
-const browserPlaylistCallbackUri = () => `${window.location.origin}${playlistCallbackPath}`;
+const isLocalPlaylistOrigin = () => ["localhost", "127.0.0.1", "::1", "[::1]"].includes(window.location.hostname);
+const browserPlaylistCallbackUri = () => {
+  const origin = new URL(window.location.origin);
+  if (origin.hostname === "localhost") origin.hostname = "127.0.0.1";
+  return `${origin.origin}${playlistCallbackPath}`;
+};
 
 const Modal: React.FC<{ title: string; wide?: boolean; compact?: boolean; close: () => void; children: React.ReactNode }> = ({ title, wide, compact, close, children }) => (
   <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4">
@@ -134,18 +138,46 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
   const visibleIgnored = useMemo(() => ignored.filter((track) => ignoredPlaylistFilter === "all" || track.source_playlist === ignoredPlaylistFilter).sort((left, right) => { const value = (track: IgnoredTrack) => ignoredSort === "playlist" ? playlists.find((playlist) => playlist.id === track.source_playlist)?.name || track.source_playlist || "" : String(track[ignoredSort] || ""); return value(left).localeCompare(value(right), undefined, { sensitivity: "base" }) * (ignoredSortAscending ? 1 : -1); }), [ignored, ignoredPlaylistFilter, ignoredSort, ignoredSortAscending, playlists]);
 
   const refresh = async () => {
-    if (demo) return;
+    if (demo) return status;
     const next = await fetchPlaylistAutomationStatus();
     setStatus(next);
-    // Do not replace the browser's current secure address with the server-only
-    // local fallback. This keeps a Tailscale Serve or reverse-proxy URL usable.
-    if (next?.redirect_uri && next.redirect_uri !== playlistLocalCallbackFallback) setRedirectUri(next.redirect_uri);
-    if (!next?.authenticated) return;
+    // A local browser must use a literal loopback IP because Spotify rejects
+    // HTTP localhost callbacks. Secure remote installs keep their saved URL.
+    if (!next?.authenticated && isLocalPlaylistOrigin()) {
+      setRedirectUri(browserPlaylistCallbackUri());
+    } else if (next?.redirect_uri) {
+      setRedirectUri(next.redirect_uri);
+    }
+    if (!next?.authenticated) return next;
     const values = await Promise.all([fetchPlaylistAutomationPlaylists(), fetchPlaylistAutomationConfigs(), fetchPlaylistAutomationSchedules(), fetchPlaylistAutomationHistory(), fetchPlaylistAutomationBackups(), fetchIgnoredPlaylistAutomationTracks()]);
     setPlaylists(values[0]); setConfigs(values[1]); setSchedules(values[2]); setHistory(values[3]); setBackups(values[4]); setIgnored(values[5]);
     setSelected((current) => current.filter((id) => values[0].some((playlist) => playlist.id === id)));
+    return next;
   };
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const loadConnection = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const returnedFromSpotify = params.get("playlist-automation") === "connected";
+      const attempts = returnedFromSpotify ? 5 : 1;
+      for (let attempt = 0; attempt < attempts && !cancelled; attempt += 1) {
+        const next = await refresh();
+        if (next?.authenticated) {
+          if (returnedFromSpotify) {
+            params.delete("playlist-automation");
+            const query = params.toString();
+            window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+          }
+          break;
+        }
+        if (returnedFromSpotify && attempt < attempts - 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+      }
+    };
+    void loadConnection();
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => { void fetchExportDirectory().then(setExportFolder); }, []);
   useEffect(() => { void fetchPlaylistBackupDirectory().then(setBackupFolder); }, []);
   useEffect(() => { const stopDragging = () => { setDragSelectMode(null); setDynamicSourceDragMode(null); }; window.addEventListener("pointerup", stopDragging); return () => window.removeEventListener("pointerup", stopDragging); }, []);
@@ -282,7 +314,17 @@ export const PlaylistAutomationPage: React.FC<PlaylistAutomationPageProps> = ({ 
       <div className="mb-6 flex items-start gap-3"><Settings2 className="mt-0.5 h-5 w-5 text-[var(--spotify-green)]" /><div><h2 className="font-bold text-white">Connect Spotify</h2><p className="mt-1 text-sm text-[#b3b3b3]">Playlist sorting automatically reuses the Spotify credentials saved in Settings → API config.</p></div></div>
       {status?.configured ? <div className="mb-5 flex items-start gap-3 border border-[var(--ots-accent-border)] bg-[var(--ots-accent-soft)] p-4 text-sm"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--spotify-green)]" /><div><p className="font-bold text-white">Credentials ready</p><p className="mt-1 text-[#b3b3b3]">Source: {status.credentials_source || "API config"}. No need to enter them again here.</p></div></div> : <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border border-[var(--ots-warning)] bg-[color-mix(in_srgb,var(--ots-warning)_10%,var(--spotify-surface))] p-3 text-sm text-[var(--ots-warning)]"><span>Add a Spotify Client ID and Secret in API config before connecting.</span><button type="button" onClick={onOpenApiConfig} className="ots-button ots-button-secondary border-[var(--ots-warning)] text-[var(--ots-warning)]">Open API config</button></div>}
       <label className="ots-field-label grid gap-1">Redirect URI<input className="ots-input h-10 w-full" value={redirectUri} onChange={(event) => setRedirectUri(event.target.value)} /></label>
-      <p className="mt-2 text-xs leading-5 text-[#777]">This defaults to the address you are using now. Add this exact HTTPS address to your Spotify Developer Dashboard before connecting. For Unraid, open OnTheSpot through your Tailscale Serve URL or HTTPS domain — not its LAN address. <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--spotify-green)] underline-offset-2 hover:text-white hover:underline">Open Spotify Developer Dashboard</a></p>
+      {isLocalPlaylistOrigin() ? (
+        <div className="mt-3 border border-[var(--ots-accent-border)] bg-[var(--ots-accent-soft)] p-3 text-xs leading-5 text-[#b3b3b3]">
+          <p className="font-bold text-white">Callback for this local address</p>
+          <p className="mt-1">This value is generated from the OnTheSpot address currently open in your browser. Spotify does not accept <code>localhost</code>, so local sessions automatically use the allowed loopback address. Add this exact URI to your Spotify app, save it there, then click Connect Spotify:</p>
+          <code className="mt-2 block break-all border border-[var(--ots-border)] bg-[var(--spotify-surface-elevated)] px-3 py-2 text-[var(--spotify-green)]">{browserPlaylistCallbackUri()}</code>
+          {redirectUri !== browserPlaylistCallbackUri() && <button type="button" onClick={() => setRedirectUri(browserPlaylistCallbackUri())} className="ots-button ots-button-secondary mt-2">Use local callback</button>}
+        </div>
+      ) : (
+        <p className="mt-2 text-xs leading-5 text-[#777]">Add this exact HTTPS address to your Spotify Developer Dashboard before connecting. For Docker or Unraid, open OnTheSpot through your private HTTPS address or reverse proxy — not its HTTP LAN address.</p>
+      )}
+      <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--spotify-green)] underline-offset-2 hover:text-white hover:underline"><ExternalLink className="h-3.5 w-3.5" /> Open Spotify Developer Dashboard</a>
       <button type="button" onClick={() => setShowCredentialOverride((current) => !current)} className="mt-4 text-sm font-semibold text-[#b3b3b3] underline-offset-2 hover:text-white hover:underline">{showCredentialOverride ? "Hide separate credentials" : "Use different credentials for playlist sorting"}</button>
       {showCredentialOverride && <div className="mt-3 grid gap-4 border border-[var(--ots-border)] bg-[var(--spotify-surface-elevated)] p-4 md:grid-cols-2"><label className="ots-field-label grid gap-1">Client ID<input className="ots-input h-10 w-full" value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="Spotify Client ID" /></label><label className="ots-field-label grid gap-1">Client Secret<input className="ots-input h-10 w-full" type="password" value={clientSecret} onChange={(event) => setClientSecret(event.target.value)} placeholder="Spotify Client Secret" /></label></div>}
       <div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => void configure()} disabled={busy === "credentials" || busy === "connect"} className={buttonClass}><Save className="h-4 w-4" /> {showCredentialOverride ? "Save separate credentials" : "Save redirect URI"}</button>{status?.configured && <button type="button" onClick={() => void connectSpotify()} disabled={busy === "credentials" || busy === "connect"} className="ots-button ots-button-primary"><LogIn className="h-4 w-4" /> Connect Spotify</button>}<button type="button" onClick={openDemo} className={buttonClass}><Eye className="h-4 w-4" /> Preview demo</button></div>{message && <p className="mt-4 text-sm text-[#b3b3b3]">{message}</p>}

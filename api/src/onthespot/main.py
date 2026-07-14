@@ -7,6 +7,7 @@ import json
 import uuid
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,7 @@ from .api.qobuz import qobuz_add_account
 from .api.soundcloud import soundcloud_add_account
 from .api.crunchyroll import crunchyroll_add_account
 from .api.spotify import (
+    MirrorSpotifyPlayback,
     add_spotify_zeroconf_login,
     spotify_connect_status,
     spotify_get_search_results,
@@ -44,6 +46,7 @@ from .api.spotify import (
     stop_spotify_connect_service,
 )
 from .api.tidal import tidal_add_account_pt1, tidal_add_account_pt2
+from .api.registry import SERVICE_SEARCH_FUNCTIONS
 
 from .accounts import FillAccountPool, get_account_token
 from .parsingworker import ParsingWorker
@@ -57,7 +60,9 @@ from .runtimedata import (
     download_paused,
     pending_lock,
     parsing,
-    websocket_queue,
+    parsing_lock,
+    subscribe_websocket,
+    unsubscribe_websocket,
     account_pool,
     notification_hook,
     progress_hook,
@@ -84,6 +89,13 @@ from .statistics import clear_history, export_history, get_statistics, import_hi
 from .updater import check_for_updates, install_update, start_update_checker, stop_update_checker
 from .playlist_automation import PlaylistAutomationError, playlist_automation
 from .export_locations import default_export_directory, playlist_backup_directory, set_default_export_directory, set_playlist_backup_directory, write_export_file
+from .youtube_auth import (
+    managed_youtube_cookie_path,
+    store_youtube_cookie_file,
+    validate_youtube_browser,
+    validate_youtube_cookie_file,
+    youtube_auth_status,
+)
 
 
 log_level = int(os.environ.get("LOG_LEVEL", 20))
@@ -96,7 +108,7 @@ logger = get_logger("gui")
 # but start/stop them on lifespan events
 parsing_worker = ParsingWorker()
 downloadworker = DownloadWorker()
-# spotifymirrorworker = MirrorSpotifyPlayback()
+spotifymirrorworker = MirrorSpotifyPlayback()
 retryworker = RetryWorker()
 fillaccountpool = FillAccountPool()
 _spotify_companion_pairings: dict[str, float] = {}
@@ -180,6 +192,174 @@ def search(search_term, search_filters: dict | None = None) -> None:
     return results
 
 
+_SEARCH_FILTER_TYPES = {
+    "tracks": ("track",),
+    "albums": ("album",),
+    "playlists": ("playlist",),
+    "artists": ("artist",),
+    "podcasts": ("show", "episode"),
+    "movies": ("movie", "show", "episode"),
+}
+
+# Search categories are user-facing concepts, while each provider accepts a
+# different set of API types.  Keep the mapping provider-specific so enabling
+# Movies cannot send Spotify an unsupported ``movie`` type (which causes the
+# whole Spotify search request to fail), and so audio providers are not asked
+# for Crunchyroll video results.
+_SEARCH_SERVICE_FILTER_KEYS = {
+    "apple_music": {"tracks", "albums", "playlists", "artists"},
+    "bandcamp": {"tracks", "albums", "artists"},
+    "crunchyroll": {"movies"},
+    "deezer": {"tracks", "albums", "playlists", "artists"},
+    "qobuz": {"tracks", "albums", "playlists", "artists"},
+    "soundcloud": {"tracks", "albums", "playlists", "artists"},
+    "spotify": {"tracks", "albums", "playlists", "artists", "podcasts"},
+    "tidal": {"tracks", "albums", "playlists", "artists"},
+    "youtube_music": {"tracks"},
+}
+
+
+def search_service_catalogs(
+    search_term: str,
+    search_filters: dict[str, Any] | None = None,
+    selected_services: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Search every currently authenticated worker service.
+
+    Provider search functions are blocking and independent, so they run in a
+    small bounded thread pool.  A failing provider is isolated from the other
+    workers and simply contributes no results.
+    """
+    query = search_term.strip()
+    if not query:
+        return []
+
+    filters = search_filters or {}
+    if selected_services is None and isinstance(filters.get("services"), list):
+        selected_services = [str(value) for value in filters["services"]]
+    allowed_services = (
+        {
+            service
+            for service in selected_services
+            if service in SERVICE_SEARCH_FUNCTIONS
+        }
+        if selected_services is not None
+        else None
+    )
+    if allowed_services == set():
+        return []
+    selected_filter_keys = {
+        key for key in _SEARCH_FILTER_TYPES if filters.get(key, True)
+    }
+    if not selected_filter_keys:
+        return []
+
+    services = list(
+        dict.fromkeys(
+            str(account.get("service", ""))
+            for account in account_pool
+            if account.get("service") in SERVICE_SEARCH_FUNCTIONS
+            and (allowed_services is None or account.get("service") in allowed_services)
+        )
+    )
+    jobs: list[tuple[str, Any, Any]] = []
+    for service in services:
+        try:
+            token = get_account_token(service)
+        except (IndexError, KeyError, TypeError) as exc:
+            logger.warning("Unable to obtain a %s search token: %s", service, exc)
+            continue
+        if token is False:
+            continue
+        jobs.append((service, token, SERVICE_SEARCH_FUNCTIONS[service]))
+
+    def run_provider(
+        job: tuple[str, Any, Any],
+    ) -> tuple[str, list[dict[str, Any]], set[str]]:
+        service, token, search_function = job
+        service_filter_keys = selected_filter_keys.intersection(
+            _SEARCH_SERVICE_FILTER_KEYS.get(service, selected_filter_keys)
+        )
+        if not service_filter_keys:
+            return service, [], set()
+
+        provider_types: list[str] = []
+        accepted_result_types: set[str] = set()
+        for key in service_filter_keys:
+            for item_type in _SEARCH_FILTER_TYPES[key]:
+                if item_type not in provider_types:
+                    provider_types.append(item_type)
+                accepted_result_types.add(item_type)
+        if "podcasts" in service_filter_keys:
+            accepted_result_types.update({"podcast", "podcast_episode"})
+
+        try:
+            raw = search_function(token, query, provider_types)
+            return (
+                service,
+                raw if isinstance(raw, list) else [],
+                accepted_result_types,
+            )
+        except Exception as exc:  # A provider outage must not blank every service.
+            logger.warning("%s catalogue search failed: %s", service, exc)
+            return service, [], accepted_result_types
+
+    if not jobs:
+        return []
+    worker_count = min(4, len(jobs))
+    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="ots-search") as executor:
+        provider_results = list(executor.map(run_provider, jobs))
+
+    # Keep each provider's own relevance ordering, but interleave provider
+    # batches below.  Appending an entire provider at once made a healthy
+    # multi-service search look broken: SoundCloud could occupy the first 40
+    # cards while equally valid Spotify results were hidden several screens
+    # below it.
+    provider_batches: list[list[dict[str, Any]]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for service, items, accepted_result_types in provider_results:
+        batch: list[dict[str, Any]] = []
+        for item in items:
+            item_type = str(item.get("item_type") or "track")
+            if item_type not in accepted_result_types:
+                continue
+            item_id = str(item.get("item_id") or item.get("id") or "").strip()
+            item_url = str(item.get("item_url") or item.get("url") or "").strip()
+            if not item_id or not item_url:
+                continue
+            identity = (service, item_type, item_id)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            batch.append(
+                {
+                    "id": f"{service}:{item_type}:{item_id}",
+                    "item_id": item_id,
+                    "item_service": str(item.get("item_service") or service),
+                    "item_type": item_type,
+                    "name": str(item.get("item_name") or item.get("name") or "Untitled"),
+                    "artist": str(item.get("item_by") or item.get("artist") or ""),
+                    "album": str(item.get("item_album") or item.get("album") or ""),
+                    "thumbnail": str(
+                        item.get("item_thumbnail_url") or item.get("thumbnail") or ""
+                    ),
+                    "url": item_url,
+                    "item_url": item_url,
+                }
+            )
+
+        if batch:
+            provider_batches.append(batch)
+
+    results: list[dict[str, Any]] = []
+    longest_batch = max((len(batch) for batch in provider_batches), default=0)
+    for item_index in range(longest_batch):
+        for batch in provider_batches:
+            if item_index < len(batch):
+                results.append(batch[item_index])
+    return results
+
+
 def relogin():
     """
     Reloads the account pool to refresh accounts.
@@ -212,6 +392,8 @@ async def lifespan(app: FastAPI):
     downloadworker.start()
     if config.get("enable_retry_worker"):
         retryworker.start()
+    if config.get("mirror_spotify_playback"):
+        spotifymirrorworker.start()
     fillaccountpool.start()
     # Keep OnTheSpot visible in Spotify's Connect device picker even when an
     # account was already configured before this process started.
@@ -229,6 +411,7 @@ async def lifespan(app: FastAPI):
 
     parsing_worker.stop()
     downloadworker.stop()
+    spotifymirrorworker.stop()
     fillaccountpool.stop()
     stop_spotify_connect_service()
     stop_update_checker()
@@ -236,13 +419,22 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutdown")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="OnTheSpot API",
+    version=str(config.get("version") or "2.0.0"),
+    lifespan=lifespan,
+)
 
-# Define allowed origins
-origins = [
-    "http://localhost:3000",
-    "https://example.com",
-]
+# Production requests are same-origin because FastAPI serves the UI. Vite's
+# local development origins remain enabled, and operators can add explicit
+# cross-origin frontends with a comma-separated ONTHESPOT_CORS_ORIGINS value.
+cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+cors_origins.extend(
+    origin.strip()
+    for origin in os.environ.get("ONTHESPOT_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+)
+cors_origins = list(dict.fromkeys(cors_origins))
 
 # Register correct MIME types for frontend files
 mimetypes.add_type("application/javascript", ".js")
@@ -250,8 +442,8 @@ mimetypes.add_type("application/wasm", ".wasm")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -637,6 +829,12 @@ async def query_url(q: str | None = None, filters: dict | None = None):
     return result
 
 
+@app.post("/search")
+async def search_catalog(q: str, filters: dict[str, Any] | None = None):
+    """Search all configured worker catalogues without enqueueing anything."""
+    return await run_in_threadpool(search_service_catalogs, q, filters)
+
+
 @app.get("/catalog/spotify")
 async def search_spotify_catalog(q: str, types: str = "track"):
     """Search the Spotify public catalogue for the browse view."""
@@ -683,20 +881,42 @@ async def search_spotify_catalog(q: str, types: str = "track"):
     ]
 
 
-## @app.post("/spotify/mirror")
-## async def mirror_spotify(state: bool = False):
-##     """
-##     Endpoint to control Spotify mirroring.
-##
-##     :param state: Boolean indicating whether to start or stop mirroring.
-##     """
-##     if state:
-##         spotifymirrorworker.start()
-##     else:
-##         spotifymirrorworker.stop()
+@app.post("/spotify/mirror")
+async def mirror_spotify(state: bool = False):
+    """Enable or disable automatic downloads of the currently playing Spotify track."""
+    config.set("mirror_spotify_playback", state)
+    config.save()
+    worker_action = spotifymirrorworker.start if state else spotifymirrorworker.stop
+    await asyncio.to_thread(worker_action)
+    return {"enabled": state}
 
 
 ## QUEUES ENDPOINTS
+def _public_queue_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Return stable, serializable queue fields without worker internals."""
+    fields = (
+        "local_id",
+        "item_service",
+        "service",
+        "item_type",
+        "item_name",
+        "name",
+        "item_by",
+        "artist",
+        "item_status",
+        "progress",
+        "item_progress",
+        "queue_position",
+        "priority",
+        "playlist_name",
+    )
+    snapshot = {key: item.get(key) for key in fields if key in item}
+    if "item_status" in snapshot:
+        status = snapshot["item_status"]
+        snapshot["item_status"] = str(getattr(status, "value", status))
+    return snapshot
+
+
 @app.get("/queue/downloads")
 async def query_download_queue():
     """
@@ -812,11 +1032,16 @@ async def batch_download_queue_action(batch: QueueBatch):
                     item["item_status"] = ItemStatus.WAITING
             elif action == "cancel":
                 item["_pause_requested"] = False
+                item["_manual_cancelled"] = True
+                item["available"] = False
                 item["item_status"] = ItemStatus.CANCELLED
                 item["error"] = "Cancelled by the user."
             elif action == "delete":
                 if item.get("_active_download"):
                     item["_pause_requested"] = False
+                    item["_manual_cancelled"] = True
+                    item["_discarded"] = True
+                    item["available"] = False
                     item["item_status"] = ItemStatus.CANCELLED
                     item["error"] = "Deleted by the user."
                 else:
@@ -930,6 +1155,9 @@ async def queue_action(lid: str, action: str):
     """
 
     retry_item = None
+    changed_item = None
+    notification = None
+    result_status = None
     with download_queue_lock:
         for key, item in download_queue.items():
             if item["local_id"] == lid:
@@ -939,25 +1167,49 @@ async def queue_action(lid: str, action: str):
                         retry_item = item
                     case "cancel":
                         item["_pause_requested"] = False
+                        item["_manual_cancelled"] = True
+                        item["available"] = False
                         item["item_status"] = ItemStatus.CANCELLED
                         item["error"] = "Cancelled by the user."
-                        notification_hook("Download cancelled", item.get("name", "The current track"))
-                        return True
+                        changed_item = item
+                        notification = ("Download cancelled", item.get("name", "The current track"))
+                        result_status = ItemStatus.CANCELLED
                     case "delete":
                         if item.get("_active_download"):
                             item["_pause_requested"] = False
+                            item["_manual_cancelled"] = True
+                            item["_discarded"] = True
+                            item["available"] = False
                             item["item_status"] = ItemStatus.CANCELLED
                             item["error"] = "Deleted by the user."
+                            changed_item = item
+                            notification = ("Download removed", item.get("name", "The current track"))
+                            result_status = ItemStatus.CANCELLED
                         else:
                             item["_discarded"] = True
                             download_queue.pop(key)
-                        return True
+                            result_status = ItemStatus.DELETED
                     case _:
-                        return False
+                        return {"success": False, "error": "Unknown queue action."}
+                break
+    if changed_item is not None:
+        raw_progress = changed_item.get("progress", changed_item.get("item_progress", 0))
+        try:
+            current_progress = int(float(raw_progress or 0))
+        except (TypeError, ValueError):
+            current_progress = 0
+        # Publish the terminal state immediately. The worker will observe the
+        # same state and stop at its next cancellation checkpoint.
+        progress_hook(changed_item, current_progress, ItemStatus.CANCELLED)
+        if notification is not None:
+            notification_hook(*notification)
+        return {"success": True, "action": action, "status": result_status}
     if retry_item is not None:
         retry_single_item(retry_item)
-        return True
-    return False
+        return {"success": True, "action": action, "status": ItemStatus.WAITING}
+    if result_status == ItemStatus.DELETED:
+        return {"success": True, "action": action, "status": result_status}
+    return {"success": False, "error": "Queue item not found."}
 
 
 @app.get("/queue/downloads/retryfailed")
@@ -974,10 +1226,15 @@ async def retry_failed_items():
         found_items = [
             item
             for item in download_queue.values()
-            if item.get("available", True) and item.get("item_status") in retryable_statuses
+            if (
+                item.get("item_status") in retryable_statuses
+                and (item.get("available", True) or item.get("_manual_cancelled"))
+                and not item.get("_discarded")
+            )
         ]
         for item in found_items:
             item["available"] = True
+            item.pop("_manual_cancelled", None)
             item["item_status"] = ItemStatus.WAITING
             item["error"] = ""
             item["_stats_recorded"] = False
@@ -1014,9 +1271,11 @@ async def query_pending_queue():
     """
     Endpoint to get the current pending queue.
 
-    :return: Dictionary of items in the pending queue.
+    :return: Public snapshot of items waiting to enter the download queue.
     """
-    return pending
+    with pending_lock:
+        items = [_public_queue_item(item) for item in list(pending._queue)]
+    return {"items": items, "count": len(items)}
 
 
 @app.get("/queue/parsing")
@@ -1024,9 +1283,11 @@ async def query_parsing_queue():
     """
     Endpoint to get the current parsing queue.
 
-    :return: Dictionary of items in the parsing queue.
+    :return: Public snapshot of items currently being parsed.
     """
-    return parsing
+    with parsing_lock:
+        items = [_public_queue_item(item) for item in parsing.values()]
+    return {"items": items, "count": len(items)}
 
 
 ## CONFIG ENDPOINTS
@@ -1037,7 +1298,7 @@ async def get_config():
 
     :return: Current configuration settings.
     """
-    return config
+    return config.as_dict()
 
 
 @app.post("/config/set")
@@ -1057,7 +1318,11 @@ async def set_config(nkey, nvalue):
                 nvalue = True
             case _:
                 pass
-    return config.set(nkey, nvalue)
+    result = config.set(nkey, nvalue)
+    if nkey == "mirror_spotify_playback":
+        worker_action = spotifymirrorworker.start if nvalue else spotifymirrorworker.stop
+        await asyncio.to_thread(worker_action)
+    return result
 
 
 @app.post("/config/save")
@@ -1125,24 +1390,14 @@ async def reset_config():
 
     :return: Result of resetting the configuration.
     """
-    return config.reset()
+    config.reset()
+    return config.as_dict()
 
 
 def _exportable_config() -> dict:
-    raw = getattr(config, "_Config__config", {})
-    exported = dict(raw) if isinstance(raw, dict) else {}
-    exported["spotify_webapi_override_client_secret"] = "<redacted>"
-    safe_accounts = []
-    for account in exported.get("accounts", []) or []:
-        if isinstance(account, dict):
-            safe_accounts.append(
-                {
-                    "uuid": account.get("uuid", ""),
-                    "service": account.get("service", ""),
-                    "active": bool(account.get("active", True)),
-                }
-            )
-    exported["accounts"] = safe_accounts
+    exported = config.as_dict()
+    if exported.get("spotify_webapi_override_client_secret_configured"):
+        exported["spotify_webapi_override_client_secret"] = "<redacted>"
     return exported
 
 
@@ -1529,6 +1784,34 @@ async def updates_install():
 
 
 # ACCOUNTS ENDPOINTS
+@app.get("/accounts/youtube-auth/status")
+async def get_youtube_auth_status():
+    """Report whether the selected YouTube session source is usable."""
+    return await run_in_threadpool(youtube_auth_status)
+
+
+@app.post("/accounts/youtube-auth/upload")
+async def upload_youtube_auth(cookies: UploadFile = File(...)):
+    """Store an uploaded Netscape cookies.txt file in private app data."""
+    contents = await cookies.read((5 * 1024 * 1024) + 1)
+    try:
+        destination = await run_in_threadpool(store_youtube_cookie_file, contents)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not store the cookies file: {exc}") from exc
+
+    config.set("youtube_auth_mode", "cookie_file")
+    config.set("youtube_cookies_browser", "")
+    config.set("youtube_cookies_file", str(destination))
+    config.save()
+    notification_hook(
+        "YouTube cookies saved",
+        "The uploaded YouTube cookies file is available to downloads.",
+    )
+    return await run_in_threadpool(youtube_auth_status)
+
+
 @app.post("/accounts/youtube-auth")
 async def configure_youtube_auth(authentication: YouTubeAuthentication):
     """Save explicit local-only yt-dlp authentication settings for YouTube."""
@@ -1541,11 +1824,24 @@ async def configure_youtube_auth(authentication: YouTubeAuthentication):
     cookie_file = (authentication.cookie_file or "").strip()
     if mode == "browser" and browser not in allowed_browsers:
         raise HTTPException(status_code=400, detail="Choose a supported browser profile")
+    if mode == "browser":
+        try:
+            await run_in_threadpool(validate_youtube_browser, browser)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if mode == "cookie_file":
         path = Path(cookie_file).expanduser()
-        if not path.is_absolute() or not path.is_file():
-            raise HTTPException(status_code=400, detail="Choose an existing absolute cookies-file path")
+        try:
+            await run_in_threadpool(validate_youtube_cookie_file, path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         cookie_file = str(path)
+    if mode == "none":
+        managed_cookie_file = managed_youtube_cookie_path()
+        try:
+            managed_cookie_file.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove managed YouTube cookies file: %s", managed_cookie_file)
 
     config.set("youtube_auth_mode", mode)
     config.set("youtube_cookies_browser", browser if mode == "browser" else "")
@@ -1553,7 +1849,7 @@ async def configure_youtube_auth(authentication: YouTubeAuthentication):
     config.save()
     status = "disabled" if mode == "none" else "configured"
     notification_hook("YouTube authentication updated", f"YouTube session authentication is {status}.")
-    return {"success": True, "mode": mode, "browser": browser if mode == "browser" else "", "cookie_file": cookie_file if mode == "cookie_file" else ""}
+    return {"success": True, **(await run_in_threadpool(youtube_auth_status))}
 
 
 @app.post("/accounts/add")
@@ -1791,8 +2087,8 @@ async def get_logs():
     data = []
     with open(log_path, "r") as f:
         lines = f.readlines()
-    for l in lines:
-        main = re.findall(r"(\[*.+\])( -> *.+)", l)
+    for line in lines:
+        main = re.findall(r"(\[*.+\])( -> *.+)", line)
         try:
             message = main[0][1]
         except IndexError:
@@ -1802,7 +2098,7 @@ async def get_logs():
                     "id": uuid.uuid4(),
                     "timestamp": "",
                     "level": "ERROR",
-                    "message": l,
+                    "message": line,
                 }
             )
             continue
@@ -1843,34 +2139,42 @@ async def download_logs():
 
 
 # SSE Methods and endpoint
+_SSE_CONNECTION_LIFETIME_SECONDS = 5
+_SSE_KEEPALIVE_SECONDS = 1
+
+
 async def event_generator(user_id: str, request: Request):
     """Listens for items in the user's queue and pushes them to the frontend."""
-    # 1. Create a queue for this specific user connection
-
+    subscription_id, event_queue = subscribe_websocket(user_id)
+    # EventSource reconnects automatically.  Bounding a connection's lifetime
+    # prevents an idle stream from holding graceful shutdown open forever.
+    connection_deadline = (
+        asyncio.get_running_loop().time() + _SSE_CONNECTION_LIFETIME_SECONDS
+    )
     try:
-        while True:
-            # 2. If the client disconnects, stop the generator
+        yield "retry: 1000\n\n"
+        while asyncio.get_running_loop().time() < connection_deadline:
             if await request.is_disconnected():
                 break
-
-            # 3. Wait indefinitely for an event to be put in the queue
-            # This does NOT use CPU. It just sleeps until data arrives.
-            data = await websocket_queue.get()
-
-            # 4. Push the data to the Vite frontend!
+            try:
+                data = await asyncio.wait_for(
+                    event_queue.get(), timeout=_SSE_KEEPALIVE_SECONDS
+                )
+            except TimeoutError:
+                yield ": keepalive\n\n"
+                continue
             yield f"data: {json.dumps(data, skipkeys=True)}\n\n"
-
     finally:
-        # Cleanup when user closes the browser tab
-        while not websocket_queue.empty():
-            websocket_queue.get_nowait()
+        unsubscribe_websocket(subscription_id)
 
 
 @app.get("/api/sse/{user_id}")
 async def sse_endpoint(user_id: str, request: Request):
     """The Vite frontend connects here exactly ONCE."""
     return StreamingResponse(
-        event_generator(user_id, request), media_type="text/event-stream"
+        event_generator(user_id, request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -1883,4 +2187,8 @@ if _ui_dist.is_dir():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host=os.environ.get("ONTHESPOT_HOST", "127.0.0.1"),
+        port=int(os.environ.get("ONTHESPOT_PORT", "8000")),
+    )

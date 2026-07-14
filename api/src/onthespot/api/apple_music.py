@@ -1,14 +1,13 @@
 import base64
 import json
 import m3u8
-from pathlib import Path
 import requests
 import re
 from uuid import uuid4
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from pywidevine import PSSH, Cdm, Device
 from pywidevine.license_protocol_pb2 import WidevinePsshData
-from ..constants import WVN_KEY
+from ..constants import HTTP_TIMEOUT, WVN_KEY
 from ..otsconfig import config
 from ..runtimedata import account_pool, get_logger
 from ..utils import conv_list_format, make_call, get_primary_composer
@@ -108,13 +107,15 @@ def apple_music_login_user(account):
         )
 
         # Retrieve developer token from the web player assets.
-        home_page_response = session.get(WEB_BASE_URL)
+        home_page_response = session.get(WEB_BASE_URL, timeout=HTTP_TIMEOUT)
         home_page_response.raise_for_status()
         asset_paths = _extract_web_player_assets(home_page_response.text)
 
         token = None
         for asset_path in asset_paths:
-            index_js_response = session.get(f"{WEB_BASE_URL}/{asset_path}")
+            index_js_response = session.get(
+                f"{WEB_BASE_URL}/{asset_path}", timeout=HTTP_TIMEOUT
+            )
             index_js_response.raise_for_status()
             try:
                 token = _extract_developer_token(index_js_response.text)
@@ -130,7 +131,9 @@ def apple_music_login_user(account):
         session.headers.update({"authorization": f"Bearer {token}"})
         session.params = {"l": "en-US"}
 
-        account_data_response = session.get(f"{BASE_URL}/me/account?meta=subscription")
+        account_data_response = session.get(
+            f"{BASE_URL}/me/account?meta=subscription", timeout=HTTP_TIMEOUT
+        )
         account_data_response.raise_for_status()
         account_data = account_data_response.json()
         session.cookies.update(
@@ -539,7 +542,9 @@ def apple_music_get_webplayback_info(session, item_id):
     json = {}
     json["salableAdamId"] = item_id  # Corrected variable name from track_id to item_id
     webplayback_info = session.post(
-        "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback", json=json
+        "https://play.itunes.apple.com/WebObjects/MZPlay.woa/wa/webPlayback",
+        json=json,
+        timeout=HTTP_TIMEOUT,
     ).json()
     return webplayback_info.get("songList")[0]
 
@@ -570,7 +575,9 @@ def apple_music_get_decryption_key(session, stream_url, item_id):
         json["isLibrary"] = False
         json["user-initiated"] = True
 
-        license_data = session.post(WVN_LICENSE_URL, json=json).json()
+        license_data = session.post(
+            WVN_LICENSE_URL, json=json, timeout=HTTP_TIMEOUT
+        ).json()
 
         wvn_license = license_data.get("license")
 

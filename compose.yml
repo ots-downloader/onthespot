@@ -5,15 +5,15 @@ services:
       context: .
       dockerfile: Dockerfile
     pull_policy: build
-    # Spotify Connect uses mDNS plus the pairing port configured by OnTheSpot. Bridge
-    # networking hides both from devices on the LAN, so the Unraid deployment
-    # must share the host network for the OnTheSpot worker to appear in Spotify.
-    network_mode: host
-    # For multi-NIC hosts, set this to the LAN address that Spotify clients use.
-    # environment:
-    #   ONTHESPOT_SPOTIFY_CONNECT_INTERFACE: 192.168.1.10
+    # One FastAPI process serves both the API and compiled React application.
+    ports:
+      - "${ONTHESPOT_WEB_PORT:-6767}:6767"
+    environment:
+      ONTHESPOTDIR: /root/.config/onthespot
+      ONTHESPOTCACHEDIR: /root/.config/onthespot/cache
     volumes:
-      - ./otsdata/Music:/root/Music/OnTheSpot
-      - ./otsdata/Videos:/root/Videos/OnTheSpot
-      - ./otsdata/Config:/root/.config/onthespot
+      - "${ONTHESPOT_MUSIC_DIR:-./otsdata/Music}:/root/Music/OnTheSpot"
+      - "${ONTHESPOT_VIDEO_DIR:-./otsdata/Videos}:/root/Videos/OnTheSpot"
+      - "${ONTHESPOT_CONFIG_DIR:-./otsdata/Config}:/root/.config/onthespot"
     restart: unless-stopped
+    stop_grace_period: 20s

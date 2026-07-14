@@ -1643,8 +1643,8 @@ button:focus-visible {
   height: 2.5rem !important;
 }
 
-/* Browse Catalogue tabs use the same compact filter treatment as the queue:
-   a quiet grouped surface with one clear themed active button. */
+/* Shared filter tabs use a quiet grouped surface with one clear themed active
+   button across Search, the queue, and the local library. */
 .ots-browse-tabs {
   display: flex;
   width: fit-content;

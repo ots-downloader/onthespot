@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, AlertCircle, X, DownloadCloud } from 'lucide-react';
 import { NotificationBannerItem } from '../types';
 
@@ -10,13 +10,32 @@ interface NotificationBannerProps {
 
 const NotificationItem: React.FC<{ notif: NotificationBannerItem; onDismiss: (id: string) => void }> = ({ notif, onDismiss }) => {
   const [isExiting, setIsExiting] = useState(false);
+  const isExitingRef = useRef(false);
+  const onDismissRef = useRef(onDismiss);
+  const removalTimerRef = useRef<number | null>(null);
 
-  const handleDismiss = () => {
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  const handleDismiss = useCallback(() => {
+    if (isExitingRef.current) return;
+    isExitingRef.current = true;
     setIsExiting(true);
-    setTimeout(() => {
-      onDismiss(notif.id);
+    removalTimerRef.current = window.setTimeout(() => {
+      onDismissRef.current(notif.id);
     }, 300); // Matches transition duration
-  };
+  }, [notif.id]);
+
+  useEffect(() => {
+    const autoDismissTimer = window.setTimeout(handleDismiss, 5000);
+    return () => {
+      window.clearTimeout(autoDismissTimer);
+      if (removalTimerRef.current !== null) {
+        window.clearTimeout(removalTimerRef.current);
+      }
+    };
+  }, [handleDismiss]);
 
   const isSuccess = notif.status === 'Completed';
   const isFail = notif.status === 'Failed' || notif.status === 'Cancelled';

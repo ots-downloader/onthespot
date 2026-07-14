@@ -17,15 +17,15 @@ import {
 } from "lucide-react";
 import { translate, type TranslationKey } from "../lib/i18n";
 
-export type NavTab = "dashboard" | "browse" | "playlist-automation" | "library" | "queue" | "statistics" | "settings" | "accounts" | "diagnostics" | "logs";
-type WorkspaceTab = "dashboard" | "browse" | "library" | "playlist-automation" | "queue" | "statistics";
+export type NavTab = "dashboard" | "playlist-automation" | "library" | "queue" | "statistics" | "settings" | "accounts" | "diagnostics" | "logs";
+type WorkspaceTab = "dashboard" | "library" | "playlist-automation" | "queue" | "statistics";
 type ManageTab = "accounts" | "diagnostics" | "logs" | "settings";
 type ManageItem = ManageTab | "notifications";
 
-const WORKSPACE_TABS: WorkspaceTab[] = ["dashboard", "browse", "library", "playlist-automation", "queue", "statistics"];
+const WORKSPACE_TABS: WorkspaceTab[] = ["dashboard", "library", "playlist-automation", "queue", "statistics"];
 const MANAGE_TABS: ManageItem[] = ["accounts", "diagnostics", "notifications", "logs", "settings"];
 const NAV_DETAILS: Record<WorkspaceTab | ManageTab, { label: string; labelKey: TranslationKey; icon: React.ElementType; nested?: boolean }> = {
-  dashboard: { label: "Search & discover", labelKey: "search_discover", icon: Search }, browse: { label: "Browse catalogue", labelKey: "browse_catalogue", icon: Library, nested: true }, library: { label: "Local library", labelKey: "local_library", icon: Library, nested: true }, "playlist-automation": { label: "Playlist sorting", labelKey: "playlist_sorting", icon: ListMusic, nested: true }, queue: { label: "Download queue", labelKey: "download_queue", icon: Download }, statistics: { label: "Download statistics", labelKey: "download_statistics", icon: BarChart3, nested: true }, accounts: { label: "Accounts", labelKey: "accounts", icon: Users }, diagnostics: { label: "Diagnostics", labelKey: "diagnostics", icon: Activity }, logs: { label: "Server logs", labelKey: "server_logs", icon: Terminal }, settings: { label: "Settings", labelKey: "settings", icon: Settings },
+  dashboard: { label: "Search & discover", labelKey: "search_discover", icon: Search }, library: { label: "Local library", labelKey: "local_library", icon: Library, nested: true }, "playlist-automation": { label: "Playlist sorting", labelKey: "playlist_sorting", icon: ListMusic, nested: true }, queue: { label: "Download queue", labelKey: "download_queue", icon: Download }, statistics: { label: "Download statistics", labelKey: "download_statistics", icon: BarChart3, nested: true }, accounts: { label: "Accounts", labelKey: "accounts", icon: Users }, diagnostics: { label: "Diagnostics", labelKey: "diagnostics", icon: Activity }, logs: { label: "Server logs", labelKey: "server_logs", icon: Terminal }, settings: { label: "Settings", labelKey: "settings", icon: Settings },
 };
 
 const readNavOrder = <T extends string>(key: string, fallback: T[]): T[] => {
