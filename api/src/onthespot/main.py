@@ -22,8 +22,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-# dev env flag for protobufs
-# os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+# librespot currently ships protobuf files generated for the compatibility
+# runtime. Keep source launches aligned with Docker, which sets this variable
+# in its runtime environment, so local Windows starts do not fail on import.
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 
 
 from .api.generic import generic_add_account

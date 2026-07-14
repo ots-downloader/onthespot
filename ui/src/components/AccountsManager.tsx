@@ -232,12 +232,12 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
         </button>
       </div>
 
-      <div className={`ots-health-banner flex flex-col justify-between gap-4 border p-4 sm:flex-row sm:items-center ${health?.spotify.connected ? 'ots-health-banner--connected' : 'ots-health-banner--warning'}`}>
+      <div className={`ots-health-banner flex flex-col justify-between gap-4 border p-4 sm:flex-row sm:items-center ${health?.healthy ? 'ots-health-banner--connected' : 'ots-health-banner--warning'}`}>
         <div className="flex items-start gap-3">
-          {health?.spotify.connected ? <CircleCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#1ed760]" /> : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#f6b94a]" />}
-          <div><p className="text-sm font-bold text-white">Spotify API: {health?.spotify.status || 'Checking…'}</p><p className="mt-1 text-xs text-[#b3b3b3]">{health ? `${health.authenticated_accounts} authenticated workers · ${health.missing_services.length ? `Missing: ${health.missing_services.join(', ')}` : 'All configured services available'}` : 'Checking account pool health…'}</p></div>
+          {health?.healthy ? <CircleCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#1ed760]" /> : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#f6b94a]" />}
+          <div><p className="text-sm font-bold text-white">Worker pool: {health ? (health.healthy ? 'Ready' : 'Needs attention') : 'Checking…'}</p><p className="mt-1 text-xs text-[#b3b3b3]">{health ? `${health.authenticated_accounts} active workers · ${health.missing_services.length ? `Missing: ${health.missing_services.join(', ')}` : 'All configured services available'}` : 'Checking account pool health…'}</p></div>
         </div>
-        <button type="button" onClick={async () => { setReconnecting(true); await onReconnect(); setReconnecting(false); }} disabled={reconnecting} className="ots-button ots-button-secondary h-10"><RefreshCw className={`h-4 w-4 ${reconnecting ? 'animate-spin' : ''}`} /> Reconnect accounts</button>
+        <button type="button" onClick={async () => { setReconnecting(true); await onReconnect(); setReconnecting(false); }} disabled={reconnecting} className="ots-button ots-button-secondary h-10"><RefreshCw className={`h-4 w-4 ${reconnecting ? 'animate-spin' : ''}`} /> Reconnect workers</button>
       </div>
 
       <div className="ots-panel overflow-hidden">
@@ -320,8 +320,8 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
 
       {/* Standard Material Dialog */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className={`ots-panel relative w-full overflow-hidden bg-[#1c1c1c] p-6 shadow-2xl sm:p-8 ${service === 'spotify' && spotifyAccessMode === 'remote' ? 'max-w-2xl' : 'max-w-md'}`}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
+          <div className={`ots-panel relative my-4 max-h-[calc(100vh-2rem)] w-full overflow-y-auto overscroll-contain bg-[#1c1c1c] p-6 shadow-2xl sm:p-8 ${service === 'spotify' && spotifyAccessMode === 'remote' ? 'max-w-2xl' : 'max-w-md'}`}>
             <div className="flex items-center gap-3 mb-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#173b25]">
                 <Server className="h-5 w-5 text-[#1ed760]" />
@@ -381,7 +381,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 <div className="space-y-3 border border-[#3a3a3a] bg-[#242424] p-4">
                   <div>
                     <p className="text-sm font-semibold text-white">Where is Spotify running?</p>
-                    <p className="mt-1 text-xs leading-relaxed text-[#b3b3b3]">Choose local if OnTheSpot and Spotify share a network. Choose remote if OnTheSpot is in Docker/Unraid and you access it through Tailscale.</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#b3b3b3]">Choose local if OnTheSpot and Spotify share a network. Choose remote if the server is elsewhere and you can reach it through a private network, VPN, or secure HTTPS address.</p>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <button type="button" aria-pressed={spotifyAccessMode === 'local'} onClick={() => { setSpotifyAccessMode('local'); setCompanionPairing(null); setCompanionWaiting(false); setSignInStarted(''); }} className={spotifyAccessMode === 'local' ? 'border border-[#1ed760] bg-[#173b25] p-3 text-left' : 'border border-[#3a3a3a] p-3 text-left hover:border-[#666]'}>
@@ -390,12 +390,12 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     </button>
                     <button type="button" aria-pressed={spotifyAccessMode === 'remote'} onClick={() => { setSpotifyAccessMode('remote'); setSignInStarted(''); }} className={spotifyAccessMode === 'remote' ? 'border border-[#f6b94a] bg-[#3b321d] p-3 text-left' : 'border border-[#3a3a3a] p-3 text-left hover:border-[#666]'}>
                       <span className="flex items-center gap-2 font-semibold text-white"><Globe2 className="h-4 w-4 text-[#f6b94a]" /> Remote access</span>
-                      <span className="mt-1 block text-xs text-[#b3b3b3]">Use the local companion with Tailscale.</span>
+                      <span className="mt-1 block text-xs text-[#b3b3b3]">Use the local companion over a private network or secure HTTPS connection.</span>
                     </button>
                   </div>
                   {spotifyAccessMode === 'remote' && <div className="border-l-4 border-[#f6b94a] bg-[#3b321d] p-3 text-xs leading-relaxed text-[#f6b94a]">
                     <p className="font-semibold text-white">Run this on the computer where Spotify is open—not Unraid.</p>
-                    <p className="mt-1">Spotify and that computer must be on the same LAN. Tailscale sends the completed login back to this OnTheSpot server.</p>
+                    <p className="mt-1">Spotify and the companion computer must be on the same LAN for Spotify Connect discovery. The companion then sends the completed login to this OnTheSpot server over the address you opened here. Tailscale is one option; a VPN or secure HTTPS reverse proxy can work too.</p>
                     <ol className="mt-2 list-decimal space-y-1 pl-4 text-[#b3b3b3]"><li>Download or clone this repository on the Spotify computer.</li><li>Open PowerShell in the repository folder.</li><li>Run the setup commands below once.</li><li>Create a pairing code, run the generated command, then select OnTheSpot Companion in Spotify.</li></ol>
                     <p className="mt-3 text-[11px] text-[#b3b3b3]">This is a one-time helper. The generated command includes automatic cleanup: after successful pairing it exits and removes the <span className="font-semibold text-white">OnTheSpot-companion</span> folder, including its virtual environment. The account stays saved on this server.</p>
                     <p className="mt-3 font-semibold text-white">If you need to download it:</p>
@@ -404,7 +404,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     <p className="mt-3 font-semibold text-white">One-time Windows setup:</p>
                     <code className="mt-1 block overflow-x-auto bg-black/30 p-2 text-[11px] text-white">py -m venv .companion-venv<br />.{"\\"}.companion-venv{"\\"}Scripts{"\\"}python.exe -m pip install -r companion{"\\"}requirements.txt</code>
                     <p className="mt-2 text-[11px]">Run these setup commands first. Do not paste them together with the pairing command.</p>
-                    <p className="mt-2 text-[11px] font-semibold text-[#f6b94a]">Important: create the pairing code on this same OnTheSpot address. A code created at localhost will not work with your Tailscale/Unraid URL, and each code expires after ten minutes.</p>
+                    <p className="mt-2 text-[11px] font-semibold text-[#f6b94a]">Important: create the pairing code on this same OnTheSpot address. Do not switch between localhost, a LAN address, or a remote URL; the address must be reachable from the Spotify computer and should use HTTPS or a private VPN. Each code expires after ten minutes.</p>
                     {companionPairing && <><p className="mt-3 font-semibold text-white">Final step: copy this into PowerShell</p><p className="mt-1 text-[11px]">The browser cannot run PowerShell automatically. Click the button, switch to the PowerShell window from step 2, and paste the command there.</p><code className="mt-2 block overflow-x-auto whitespace-pre-wrap break-all border border-[#f6b94a]/50 bg-black/30 p-2 text-[11px] text-white">{companionCommand}</code><div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void copyText(companionCommand, 'PowerShell command copied. Paste it into the companion PowerShell window.')} className="ots-button ots-button-secondary h-8 px-3 text-xs">Copy command for PowerShell</button><span>Expires in {Math.max(0, Math.ceil((companionPairing.expires_at * 1000 - Date.now()) / 60000))} minutes.</span></div>{companionWaiting && <p className="mt-2 text-[11px] font-semibold text-[#1ed760]">Waiting for the companion to finish. This window will close automatically when the Spotify account appears.</p>}</>}
                   </div>}
                 </div>
