@@ -4,7 +4,7 @@
 
 ---
 
-## Option 1: Run with Docker Compose (Recommended for Beginners)
+## Option 1: Run with Docker Compose (Recommended)
 
 This is the easiest way to get started — no need to install Node.js or Python manually!
 
@@ -30,7 +30,7 @@ This is the easiest way to get started — no need to install Node.js or Python 
    ```
    **Change Download Variables** (optional) 
    By default the app saves data into the root folder where the docker compose lives.
-   You can change the folder mapped to thi changing the values in the compose file.
+   You can change the folders mapped by changing the values in the compose file.
    ```
    volumes:
       - YOURFOLDERPATH:/root/Music/OnTheSpot
@@ -49,14 +49,14 @@ This is the easiest way to get started — no need to install Node.js or Python 
    - Backend AP DocsI: `http://yourip:6767/docs`
 
 7. **Stop when done** (optional)
-   you won't loose data, only the download queue list.
+   you won't loose data, only the download queue history.
    ```bash
    docker compose down
    ```
 
 ---
 
-## Option 2: Run from Source Code
+## Option 2: Run from Source Code (Not Recommended)
 
 If you prefer to run the app directly on your machine, follow these steps.
 
