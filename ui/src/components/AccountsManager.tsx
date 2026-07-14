@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Users, Plus, Trash2, Loader2, Server, RefreshCw, CircleCheck, AlertTriangle, Music2, Waves, Cloud, Disc3, CirclePlay, Heart, Headphones, Film, Download, Globe2, Wifi } from 'lucide-react';
 import { AccountItem } from '../types';
 import { createSpotifyCompanionPairing, getTargetBackendUrl } from '../lib/api';
@@ -146,6 +147,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
 
   const companionCommand = companionPairing ? `.\\.companion-venv\\Scripts\\python.exe companion\\run.py --server-url "${getTargetBackendUrl()}" --pairing-token "${companionPairing.pairing_token}" --cleanup` : '';
   const companionCloneCommand = "cd $HOME\ngit clone --branch fastapi-dev --single-branch https://github.com/JamyPatch44/onthespot.git OnTheSpot-companion\ncd .\\OnTheSpot-companion";
+  const companionSetupCommand = "py -m venv .companion-venv\n.\\.companion-venv\\Scripts\\python.exe -m pip install -r companion\\requirements.txt";
   const copyText = async (value: string, success: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -319,23 +321,27 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       </div>
 
       {/* Standard Material Dialog */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
-          <div className={`ots-panel relative my-4 max-h-[calc(100vh-2rem)] w-full overflow-y-auto overscroll-contain bg-[#1c1c1c] p-6 shadow-2xl sm:p-8 ${service === 'spotify' && spotifyAccessMode === 'remote' ? 'max-w-2xl' : 'max-w-md'}`}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#173b25]">
-                <Server className="h-5 w-5 text-[#1ed760]" />
+      {showModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:items-center">
+          <div className={`ots-panel relative flex w-full flex-col overflow-hidden bg-[#1c1c1c] p-0 shadow-2xl ${service === 'spotify' && spotifyAccessMode === 'remote' ? 'max-h-[calc(100dvh_-_2rem)] max-w-3xl' : 'max-h-[calc(100dvh_-_2rem)] max-w-md'}`}>
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#353535] px-6 py-5 sm:px-8">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#173b25]">
+                  <Server className="h-5 w-5 text-[#1ed760]" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-xl font-medium text-white">Add Worker Account</h3>
+                  <p className="mt-2 text-sm text-[#8f8f8f]">Authenticate Spotify Librespot, Tidal OAuth, Apple Music, SoundCloud, or other supported services.</p>
+                </div>
               </div>
-              <h3 className="text-xl font-medium text-gray-900 dark:text-neutral-100">
-                Add Worker Account
-              </h3>
+              <button type="button" onClick={() => { setCompanionWaiting(false); setCompanionPairing(null); setShowModal(false); }} className="ots-icon-button shrink-0" aria-label="Close add account dialog" title="Close">
+                <span aria-hidden="true" className="text-xl leading-none">×</span>
+              </button>
             </div>
-            
-            <p className="text-sm text-gray-500 dark:text-neutral-400 mb-6">
-              Authenticate Spotify Librespot, Tidal OAuth, Apple Music, SoundCloud, or other supported services.
-            </p>
 
-            <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleAddSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 sm:px-8">
+                <div className="flex flex-col gap-4">
               <div>
                 <label className="text-xs font-medium text-gray-700 dark:text-neutral-300 mb-1.5 block">Platform Service</label>
                 <select
@@ -400,12 +406,13 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     <p className="mt-3 text-[11px] text-[#b3b3b3]">This is a one-time helper. The generated command includes automatic cleanup: after successful pairing it exits and removes the <span className="font-semibold text-white">OnTheSpot-companion</span> folder, including its virtual environment. The account stays saved on this server.</p>
                     <p className="mt-3 font-semibold text-white">If you need to download it:</p>
                     <code className="mt-1 block overflow-x-auto whitespace-pre-wrap bg-black/30 p-2 text-[11px] text-white">{companionCloneCommand}</code>
-                    <button type="button" onClick={() => void copyText(companionCloneCommand, 'Repository setup command copied.')} className="ots-button ots-button-secondary mt-2 h-8 px-3 text-xs">Copy download commands</button>
+                    <button type="button" onClick={() => void copyText(`${companionCloneCommand}\n`, 'Download commands copied. Paste them into PowerShell as one block.')} className="ots-button ots-button-secondary mt-2 h-8 px-3 text-xs">Copy download commands</button>
                     <p className="mt-3 font-semibold text-white">One-time Windows setup:</p>
-                    <code className="mt-1 block overflow-x-auto bg-black/30 p-2 text-[11px] text-white">py -m venv .companion-venv<br />.{"\\"}.companion-venv{"\\"}Scripts{"\\"}python.exe -m pip install -r companion{"\\"}requirements.txt</code>
+                    <code className="mt-1 block overflow-x-auto whitespace-pre-wrap bg-black/30 p-2 text-[11px] text-white">{companionSetupCommand}</code>
+                    <button type="button" onClick={() => void copyText(`${companionSetupCommand}\n`, 'Setup commands copied. Paste them into PowerShell as one block.')} className="ots-button ots-button-secondary mt-2 h-8 px-3 text-xs">Copy setup commands</button>
                     <p className="mt-2 text-[11px]">Run these setup commands first. Do not paste them together with the pairing command.</p>
                     <p className="mt-2 text-[11px] font-semibold text-[#f6b94a]">Important: create the pairing code on this same OnTheSpot address. Do not switch between localhost, a LAN address, or a remote URL; the address must be reachable from the Spotify computer and should use HTTPS or a private VPN. Each code expires after ten minutes.</p>
-                    {companionPairing && <><p className="mt-3 font-semibold text-white">Final step: copy this into PowerShell</p><p className="mt-1 text-[11px]">The browser cannot run PowerShell automatically. Click the button, switch to the PowerShell window from step 2, and paste the command there.</p><code className="mt-2 block overflow-x-auto whitespace-pre-wrap break-all border border-[#f6b94a]/50 bg-black/30 p-2 text-[11px] text-white">{companionCommand}</code><div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void copyText(companionCommand, 'PowerShell command copied. Paste it into the companion PowerShell window.')} className="ots-button ots-button-secondary h-8 px-3 text-xs">Copy command for PowerShell</button><span>Expires in {Math.max(0, Math.ceil((companionPairing.expires_at * 1000 - Date.now()) / 60000))} minutes.</span></div>{companionWaiting && <p className="mt-2 text-[11px] font-semibold text-[#1ed760]">Waiting for the companion to finish. This window will close automatically when the Spotify account appears.</p>}</>}
+                    {companionPairing && <><p className="mt-3 font-semibold text-white">Final step: copy this into PowerShell</p><p className="mt-1 text-[11px]">The browser cannot run PowerShell automatically. Click the button, switch to the PowerShell window from step 2, and paste the command there.</p><code className="mt-2 block overflow-x-auto whitespace-pre-wrap break-all border border-[#f6b94a]/50 bg-black/30 p-2 text-[11px] text-white">{companionCommand}</code><div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={() => void copyText(`${companionCommand}\n`, 'PowerShell command copied. Paste it into the companion PowerShell window.')} className="ots-button ots-button-secondary h-8 px-3 text-xs">Copy command for PowerShell</button><span>Expires in {Math.max(0, Math.ceil((companionPairing.expires_at * 1000 - Date.now()) / 60000))} minutes.</span></div>{companionWaiting && <p className="mt-2 text-[11px] font-semibold text-[var(--spotify-green)]">Waiting for the companion to finish. This window will close automatically when the Spotify account appears.</p>}</>}
                   </div>}
                 </div>
               )}
@@ -435,9 +442,18 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 </div>
               )}
               {formError && <p className="text-sm font-medium text-red-400">{formError}</p>}
-              {signInStarted && <p className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-300">{signInStarted}</p>}
+              {signInStarted && <p
+                className="rounded-lg border px-4 py-3 text-sm"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--spotify-green) 38%, transparent)',
+                  backgroundColor: 'color-mix(in srgb, var(--spotify-green) 12%, var(--spotify-surface))',
+                  color: 'var(--spotify-green-bright)',
+                }}
+              >{signInStarted}</p>}
+                </div>
+              </div>
 
-              <div className="flex items-center justify-end gap-2 mt-6 pt-6 border-t border-gray-100 dark:border-neutral-800">
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#353535] bg-[#1c1c1c] px-6 py-4 sm:px-8">
                 <button
                   type="button"
                   onClick={() => { setCompanionWaiting(false); setCompanionPairing(null); setShowModal(false); }}
@@ -456,7 +472,8 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.querySelector<HTMLElement>('#root > [class*="theme-"]') ?? document.body,
       )}
     </div>
   );
