@@ -123,6 +123,7 @@ class PlaylistAutomation:
 
     def status(self) -> dict[str, Any]:
         with self._lock:
+            self._restore_token()
             token = self._token
             authenticated = bool(token.get("access_token") and float(token.get("expires_at", 0)) > time.time())
             return {
