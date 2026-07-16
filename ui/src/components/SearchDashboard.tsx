@@ -95,6 +95,15 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
     );
   }, [availableServices]);
 
+  const getPending = async () => {
+    const pending = await fetchPendingQueue();
+    setResults(pending);
+  };
+
+  useEffect(() => {
+    getPending();
+  }, []);
+
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -133,6 +142,8 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
         ? selected.filter((value) => value !== service)
         : [...selected, service];
     });
+  const cancelDownload = (item: SearchResultItem) => {
+    performPendingAction(item?.local_id, "cancel");
   };
 
   const toggleAllServices = () => {
@@ -177,6 +188,8 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
       default: return <Music className="h-3.5 w-3.5" />;
     }
   };
+
+  const showThumbnails = config?.show_search_thumbnails ?? true;
 
   return (
     <div className="spotify-scrollbar spotify-fade-up ots-page flex flex-col gap-8 overflow-x-hidden">

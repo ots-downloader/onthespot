@@ -12,7 +12,6 @@ item to the ``parsing`` queue.
 episodes) ready for the download workers to pick up.
 """
 
-
 from .accounts import get_account_token
 
 from .api.deezer import deezer_parse_url
@@ -29,7 +28,7 @@ from .resources.regexes import (
     TIDAL_URL_REGEX,
     YOUTUBE_URL_REGEX,
     YOUTUBE_MUSIC_URL_REGEX,
-    CRUNCHYROLL_URL_REGEX
+    CRUNCHYROLL_URL_REGEX,
 )
 
 from .runtimedata import (
@@ -41,7 +40,6 @@ from .runtimedata import (
 
 
 logger = get_logger("parse_item")
-
 
 
 # ---------------------------------------------------------------------------
@@ -255,9 +253,7 @@ def parse_url(url: str) -> bool | None:
         return False
 
 
-def get_search_results(
-    search_term: str
-):
+def get_search_results(search_term: str):
     """Checks the search term and delegates to the appropriate search function.
 
     Parameters

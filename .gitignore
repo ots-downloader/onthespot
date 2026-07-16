@@ -9,6 +9,7 @@ __pycache__/
 #local dev folders
 otsdata/
 .kilocode
+.kilo
 
 # Distribution / packaging
 ffbin_*/

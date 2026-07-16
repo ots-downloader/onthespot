@@ -1115,6 +1115,31 @@ async def verify_download_queue(request: QueueVerify):
     }
 
 
+@app.get("/queue/pending")
+async def get_pending_queue():
+    return pending.get_items()
+
+
+@app.post("/queue/pending/action")
+async def pending_action(lid: str, action: str):
+    """
+    Endpoint to perform actions on a specific item in the pending queue.
+
+    :param lid: Local ID of the item.
+    :param action: Action to perform (e.g., retry, cancel, delete).
+    :return: Boolean indicating success or failure of the action.
+    """
+
+    for item in pending.get_items():
+        if item["local_id"] == lid:
+            match action:
+                case "cancel":
+                    pending.remove(item)
+                    return True
+                case _:
+                    return False
+
+
 @app.get("/queue/downloads/clear")
 async def remove_queue_items(status: str = "Completed"):
     """

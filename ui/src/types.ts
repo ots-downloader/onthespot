@@ -296,18 +296,27 @@ export interface AccountItem {
 }
 
 export interface SearchResultItem {
-  id: string;
+  local_id: string;
   item_service: string;
-  item_type: 'track' | 'album' | 'playlist' | 'artist' | 'podcast' | 'episode' | 'movie' | 'show';
+  item_type:
+    | "track"
+    | "album"
+    | "playlist"
+    | "artist"
+    | "podcast"
+    | "episode"
+    | "movie"
+    | "show";
   name: string;
   artist: string;
   album?: string;
+  playlist_name?: string;
   duration?: string;
   release_year?: number;
   thumbnail?: string;
   url: string;
-  item_url?: string;
   item_id?: string;
+  url?: string;
   explicit?: boolean;
   bitrate?: string;
   item_count?: number;
@@ -350,7 +359,7 @@ export interface DownloadQueueItem {
 export interface LogEntry {
   id: string;
   timestamp: string;
-  level: 'INFO' | 'WARNING' | 'ERROR' | 'GUI';
+  level: "INFO" | "WARNING" | "ERROR" | "GUI";
   message: string;
 }
 
@@ -363,7 +372,6 @@ export interface NotificationBannerItem {
   timestamp?: Date;
   url?: string;
 }
-
 
 export interface NotificationContent {
   id: string;
