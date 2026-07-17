@@ -19,14 +19,14 @@ class DeploymentContractTests(unittest.TestCase):
         dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
         self.assertIn("FROM node:22-alpine AS ui-builder", dockerfile)
-        self.assertIn("RUN npm ci", dockerfile)
+        self.assertIn("RUN npm install --no-audit --no-fund", dockerfile)
         self.assertIn("RUN npm run build", dockerfile)
-        self.assertIn("uv sync --frozen", dockerfile)
+        self.assertIn("uv sync --no-install-project --no-dev", dockerfile)
         self.assertIn("COPY --from=ui-builder /ui/dist /app/ui/dist", dockerfile)
         self.assertIn("ONTHESPOT_WEBUI_DIST=/app/ui/dist", dockerfile)
         self.assertIn("HEALTHCHECK", dockerfile)
         self.assertIn(
-            'CMD ["uvicorn", "onthespot.main:app", "--app-dir", "/app/app", '
+            'CMD ["/app/.venv/bin/python", "-m", "uvicorn", "onthespot.main:app", "--app-dir", "/app/app", '
             '"--host", "0.0.0.0", "--port", "6767"]',
             dockerfile,
         )

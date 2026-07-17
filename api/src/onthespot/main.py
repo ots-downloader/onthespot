@@ -987,16 +987,15 @@ async def reorder_download_queue(order: QueueOrder):
                 download_queue[local_id]["queue_position"] = position
                 download_queue[local_id]["priority"] = len(requested) - position
 
-    # asyncio.Queue exposes its deque internally; the queue is only touched
-    # while holding the same lock used by the parsing worker.
+    # Use the thread-safe queue adapter rather than reaching into queue
+    # implementation internals. The adapter performs its own atomic swap.
     with pending_lock:
-        pending_items = list(pending._queue)
+        pending_items = pending.get_items()
         pending_by_id = {str(item.get("local_id")): item for item in pending_items}
         ordered_pending = [pending_by_id[local_id] for local_id in requested if local_id in pending_by_id]
         ordered_ids = {str(item.get("local_id")) for item in ordered_pending}
         ordered_pending.extend(item for item in pending_items if str(item.get("local_id")) not in ordered_ids)
-        pending._queue.clear()
-        pending._queue.extend(ordered_pending)
+        pending.replace_items(ordered_pending)
     return {"success": True, "order": requested}
 
 
@@ -1113,11 +1112,6 @@ async def verify_download_queue(request: QueueVerify):
         "retried": len(corrupt) if request.retry else 0,
         "items": [{"local_id": item.get("local_id"), "error": item.get("error", "")} for item in corrupt],
     }
-
-
-@app.get("/queue/pending")
-async def get_pending_queue():
-    return pending.get_items()
 
 
 @app.post("/queue/pending/action")
@@ -1299,7 +1293,7 @@ async def query_pending_queue():
     :return: Public snapshot of items waiting to enter the download queue.
     """
     with pending_lock:
-        items = [_public_queue_item(item) for item in list(pending._queue)]
+        items = [_public_queue_item(item) for item in pending.get_items()]
     return {"items": items, "count": len(items)}
 
 

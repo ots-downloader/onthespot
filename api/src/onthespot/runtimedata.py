@@ -111,6 +111,16 @@ class ThreadSafeDeque:
         queue = self.__len__()
         return False if queue > 0 else True
 
+    def qsize(self) -> int:
+        """Return the number of queued items using the adapter's lock."""
+        return len(self)
+
+    def replace_items(self, items: list) -> None:
+        """Replace the queue contents atomically while preserving item order."""
+        with self._lock:
+            self._deque.clear()
+            self._deque.extend(items)
+
     def __len__(self):
         with self._lock:
             return len(self._deque)

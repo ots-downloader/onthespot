@@ -296,27 +296,18 @@ export interface AccountItem {
 }
 
 export interface SearchResultItem {
-  local_id: string;
+  id: string;
   item_service: string;
-  item_type:
-    | "track"
-    | "album"
-    | "playlist"
-    | "artist"
-    | "podcast"
-    | "episode"
-    | "movie"
-    | "show";
+  item_type: 'track' | 'album' | 'playlist' | 'artist' | 'podcast' | 'episode' | 'movie' | 'show';
   name: string;
   artist: string;
   album?: string;
-  playlist_name?: string;
   duration?: string;
   release_year?: number;
   thumbnail?: string;
   url: string;
+  item_url?: string;
   item_id?: string;
-  url?: string;
   explicit?: boolean;
   bitrate?: string;
   item_count?: number;

@@ -95,15 +95,6 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
     );
   }, [availableServices]);
 
-  const getPending = async () => {
-    const pending = await fetchPendingQueue();
-    setResults(pending);
-  };
-
-  useEffect(() => {
-    getPending();
-  }, []);
-
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -142,8 +133,6 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
         ? selected.filter((value) => value !== service)
         : [...selected, service];
     });
-  const cancelDownload = (item: SearchResultItem) => {
-    performPendingAction(item?.local_id, "cancel");
   };
 
   const toggleAllServices = () => {
