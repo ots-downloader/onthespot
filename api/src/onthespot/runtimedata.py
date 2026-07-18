@@ -9,6 +9,8 @@ here.  Modules import only the symbols they need so it's easy to trace every
 access back to this file.
 """
 
+from asyncio.log import logger
+
 import linecache
 import logging
 from collections import deque
@@ -149,7 +151,7 @@ download_paused = Event()
 # browser tabs to consume each other's events and was unsafe when worker
 # threads published into the queue.  Each connection now owns a bounded queue
 # on its own event loop.
-_websocket_subscribers: dict[str, tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = {}
+_websocket_subscribers: dict[str, asyncio.Queue] = {}
 
 # LOCK HELPERS
 parsing_lock = Lock()
@@ -170,13 +172,16 @@ rate_limit_state = {
 
 def subscribe_websocket(user_id: str) -> tuple[str, asyncio.Queue]:
     """Register one SSE connection and return its private event queue."""
-    subscription_id = f"{user_id}:{uuid.uuid4().hex}"
-    event_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    subscription_id = user_id
+
     with websocket_queue_lock:
-        _websocket_subscribers[subscription_id] = (
-            asyncio.get_running_loop(),
-            event_queue,
-        )
+        try:
+            exists = _websocket_subscribers[subscription_id]
+            event_queue = exists
+        except (KeyError, IndexError):
+            logger.info("No queue for userid %s , creating new one", user_id)
+            event_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+            _websocket_subscribers[subscription_id] = event_queue
     return subscription_id, event_queue
 
 
@@ -204,19 +209,19 @@ def websocket_event(etype: str, event=""):
         subscribers = list(_websocket_subscribers.items())
 
     stale_subscriptions: list[str] = []
-    for subscription_id, (loop, event_queue) in subscribers:
-        if loop.is_closed():
-            stale_subscriptions.append(subscription_id)
-            continue
+    for subscription_id, event_queue in subscribers:
         try:
-            loop.call_soon_threadsafe(_enqueue_websocket_event, event_queue, data)
-        except RuntimeError:
+            event_queue.put_nowait(data)
+        except asyncio.QueueShutDown:
             stale_subscriptions.append(subscription_id)
+        except asyncio.QueueFull:
+            logger.error("Queue Full for %s", subscription_id)
 
     if stale_subscriptions:
         with websocket_queue_lock:
             for subscription_id in stale_subscriptions:
                 _websocket_subscribers.pop(subscription_id, None)
+
 
 def format_bytes(value: float | int | None) -> str:
     if not value or value < 0:
@@ -286,7 +291,10 @@ def record_rate_limit(host: str, retry_after: int | float, delay: int | float) -
     """Record the latest API rate-limit window for the diagnostics UI."""
     now = time.time()
     with rate_limit_lock:
-        was_active_for_host = float(rate_limit_state.get("until", 0) or 0) > now and str(rate_limit_state.get("host") or "") == host
+        was_active_for_host = (
+            float(rate_limit_state.get("until", 0) or 0) > now
+            and str(rate_limit_state.get("host") or "") == host
+        )
         rate_limit_state.update(
             {
                 "active": True,
@@ -337,7 +345,10 @@ def progress_hook(
     total_bytes: int | float | None = None,
     speed_bps: int | float | None = None,
 ):
-    if status == ItemStatus.DOWNLOADING or item.get("item_status") == ItemStatus.DOWNLOADING:
+    if (
+        status == ItemStatus.DOWNLOADING
+        or item.get("item_status") == ItemStatus.DOWNLOADING
+    ):
         wait_for_download_resume(item)
     update_download_telemetry(item, downloaded_bytes, total_bytes, speed_bps)
     item["progress"] = progress
@@ -369,7 +380,9 @@ def yt_dlp_progress_hook(item: dict, progress_info: dict) -> None:
     percent_text = progress_info.get("_percent_str", "")
     match = re.search(r"(\d+\.\d+)%", percent_text)
     downloaded = progress_info.get("downloaded_bytes")
-    total = progress_info.get("total_bytes") or progress_info.get("total_bytes_estimate")
+    total = progress_info.get("total_bytes") or progress_info.get(
+        "total_bytes_estimate"
+    )
     speed = progress_info.get("speed")
     if not match:
         update_download_telemetry(item, downloaded, total, speed)
