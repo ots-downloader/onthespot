@@ -1,29 +1,19 @@
 services:
-  ots-api:
-    container_name: ots-api
+  onthespot:
+    container_name: onthespot
     build:
-      context: ./api
+      context: .
+      dockerfile: Dockerfile
     pull_policy: build
+    # One FastAPI process serves both the API and compiled React application.
     ports:
-      - "6767:6767"
+      - "${ONTHESPOT_WEB_PORT:-6767}:6767"
+    environment:
+      ONTHESPOTDIR: /root/.config/onthespot
+      ONTHESPOTCACHEDIR: /root/.config/onthespot/cache
     volumes:
-      - ./otsdata/Music:/root/Music/OnTheSpot
-      - ./otsdata/Videos:/root/Videos/OnTheSpot
-      - ./otsdata/Config:/root/.config/onthespot
+      - "${ONTHESPOT_MUSIC_DIR:-./otsdata/Music}:/root/Music/OnTheSpot"
+      - "${ONTHESPOT_VIDEO_DIR:-./otsdata/Videos}:/root/Videos/OnTheSpot"
+      - "${ONTHESPOT_CONFIG_DIR:-./otsdata/Config}:/root/.config/onthespot"
     restart: unless-stopped
-  ots-ui:
-    container_name: ots-ui
-    build:
-      context: ./ui
-      args:
-        - API_URL=http://localhost:6767
-    pull_policy: build
-    volumes:
-      - node_modules:/app/node_modules
-    ports:
-      - "6768:4173"
-    depends_on:
-      - ots-api
-    restart: unless-stopped
-volumes:
-  node_modules:
+    stop_grace_period: 20s

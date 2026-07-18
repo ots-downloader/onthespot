@@ -47,6 +47,7 @@ class AccountPoolLoader:
 
     def run(self) -> None:
         """Iterate saved accounts, log each one in, and emit progress."""
+        login_succeeded = False
         for account in config.get("accounts"):
             service = account["service"]
             if not account["active"]:
@@ -57,7 +58,7 @@ class AccountPoolLoader:
                 logger.warning("No login function registered for service %s", service)
                 continue
 
-            login_succeeded = login_fn(account)
+            login_succeeded = bool(login_fn(account)) or login_succeeded
         if login_succeeded:
             logger.info("Logins Completed")
 
@@ -93,7 +94,11 @@ def get_account_token(service: str, rotate: bool = False):
         logger.error("No token function registered for service %s", service)
         return False
 
-    current_index = config.get("active_account_number")
+    if not account_pool:
+        logger.warning("No authenticated account is available for service %s", service)
+        return False
+
+    current_index = int(config.get("active_account_number", 0) or 0) % len(account_pool)
 
     # Fast path: current account matches and we don't want to rotate.
     if account_pool[current_index]["service"] == service and not rotate:

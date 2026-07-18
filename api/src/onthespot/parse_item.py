@@ -26,6 +26,7 @@ from .resources.regexes import (
     SOUNDCLOUD_URL_REGEX,
     SPOTIFY_URL_REGEX,
     TIDAL_URL_REGEX,
+    YOUTUBE_URL_REGEX,
     YOUTUBE_MUSIC_URL_REGEX,
     CRUNCHYROLL_URL_REGEX,
 )
@@ -80,6 +81,7 @@ class UrlMatcher:
             or self._try_spotify_static(url)
             or self._try_spotify(url)
             or self._try_tidal(url)
+            or self._try_youtube(url)
             or self._try_youtube_music(url)
             or self._try_crunchyroll(url)
         )
@@ -175,6 +177,12 @@ class UrlMatcher:
         if match.group("playlist_id"):
             return ("youtube_music", "playlist", match.group("playlist_id"))
         return None
+
+    def _try_youtube(self, url):
+        match = YOUTUBE_URL_REGEX.search(url)
+        if not match:
+            return None
+        return ("youtube_music", "track", match.group("video_id"))
 
     def _try_crunchyroll(self, url):
         match = CRUNCHYROLL_URL_REGEX.search(url)

@@ -1,13 +1,18 @@
 import base64
+import concurrent.futures
+import inspect
 import json
 import os
 import re
+import socket
 import threading
+import textwrap
 import time
 import traceback
 import uuid
 
 import requests
+import librespot.zeroconf as librespot_zeroconf
 from librespot.core import Session
 from librespot.zeroconf import ZeroconfServer
 from ..otsconfig import config, cache_dir
@@ -34,6 +39,297 @@ _oauth_token_lock = threading.Lock()
 
 _session_reinit_lock = threading.Lock()
 _SESSION_REINIT_TIMEOUT = 30
+
+# Spotify Connect discovery is a long-lived service.  The old sign-in flow
+# created this listener only while adding an account and then closed it once
+# credentials had been captured, which meant an existing installation could
+# never appear in Spotify's device picker after a restart.
+_spotify_connect_server = None
+_spotify_connect_lock = threading.RLock()
+_SPOTIFY_CONNECT_LOGIN_FILENAME = "spotify_connect_login.json"
+
+
+def _patch_librespot_zeroconf_runner() -> bool:
+    """Repair shutdown support in the bundled librespot HTTP runner.
+
+    The current librespot-python ``HttpRunner.close`` implementation is an
+    empty method.  Its listening socket and non-daemon thread therefore keep
+    the Python process alive after Uvicorn has completed shutdown.  Keep this
+    compatibility patch narrowly version-gated so a future upstream lifecycle
+    implementation takes precedence automatically.
+    """
+    runner_type = ZeroconfServer.HttpRunner
+    if getattr(runner_type, "_onthespot_lifecycle_patch", False):
+        return True
+
+    try:
+        close_source = textwrap.dedent(inspect.getsource(runner_type.close)).strip()
+    except (OSError, TypeError):
+        close_source = ""
+    if not close_source.endswith("pass"):
+        return False
+
+    original_init = runner_type.__init__
+
+    def patched_init(self, zeroconf_server, port):
+        original_init(self, zeroconf_server, port)
+        # Upstream currently stores these on the class, which would make
+        # shutting down one service poison every later reconnect.  Give each
+        # discovery server its own state and request pool instead.
+        self._HttpRunner__should_stop = False
+        self._HttpRunner__worker = concurrent.futures.ThreadPoolExecutor(
+            thread_name_prefix="spotify-connect-request"
+        )
+
+    def patched_run(self):
+        self._onthespot_runner_thread = threading.current_thread()
+        try:
+            while not self._HttpRunner__should_stop:
+                try:
+                    client_socket, _address = self._HttpRunner__socket.accept()
+                except OSError:
+                    if self._HttpRunner__should_stop:
+                        break
+                    raise
+
+                def handle_client(sock=client_socket):
+                    try:
+                        self._HttpRunner__handle(sock)
+                    except OSError:
+                        if not self._HttpRunner__should_stop:
+                            logger.debug(
+                                "Spotify Connect request ended unexpectedly",
+                                exc_info=True,
+                            )
+                    finally:
+                        try:
+                            sock.close()
+                        except OSError:
+                            pass
+
+                try:
+                    self._HttpRunner__worker.submit(handle_client)
+                except RuntimeError:
+                    # The pool can only reject work while shutdown is racing an
+                    # accepted connection.  Close that connection explicitly.
+                    client_socket.close()
+                    if not self._HttpRunner__should_stop:
+                        raise
+        finally:
+            self._onthespot_runner_thread = None
+
+    def patched_close(self):
+        if self._HttpRunner__should_stop:
+            return
+        self._HttpRunner__should_stop = True
+        try:
+            self._HttpRunner__socket.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            self._HttpRunner__socket.close()
+        except OSError:
+            pass
+        self._HttpRunner__worker.shutdown(wait=True, cancel_futures=True)
+        runner_thread = getattr(self, "_onthespot_runner_thread", None)
+        if runner_thread is not None and runner_thread is not threading.current_thread():
+            runner_thread.join(timeout=2)
+            if runner_thread.is_alive():
+                logger.warning("Spotify Connect listener did not stop within two seconds")
+
+    runner_type.__init__ = patched_init
+    runner_type.run = patched_run
+    runner_type.close = patched_close
+    runner_type._onthespot_lifecycle_patch = True
+    logger.info("Applied Spotify Connect shutdown compatibility patch")
+    return True
+
+
+def _spotify_connect_port() -> int:
+    try:
+        return int(
+            os.environ.get(
+                "ONTHESPOT_SPOTIFY_CONNECT_PORT",
+                str(config.get("spotify_connect_port", 6768) or 0),
+            )
+            or 0
+        )
+    except (TypeError, ValueError):
+        return 0
+
+
+def _spotify_connect_interface() -> str | None:
+    """Choose the host interface Spotify clients can actually reach.
+
+    Hostnames on machines with VPN, Hyper-V, or Tailscale adapters often
+    resolve to the wrong address.  Spotify Connect needs the LAN address in
+    the mDNS record.  An explicit environment value wins; otherwise the
+    default-route address is selected without sending any traffic.
+    """
+    configured = str(os.environ.get("ONTHESPOT_SPOTIFY_CONNECT_INTERFACE", "") or "").strip()
+    if configured:
+        return configured
+
+    # Prefer a normal home/LAN address when one is available.  This avoids
+    # advertising a Hyper-V, VPN, or Tailscale address on Windows while still
+    # leaving ONTHESPOT_SPOTIFY_CONNECT_INTERFACE available for multi-NIC
+    # servers.
+    try:
+        candidates = socket.gethostbyname_ex(socket.gethostname())[2]
+        lan_candidates = [
+            address
+            for address in candidates
+            if address.startswith("192.168.") and not address.startswith("192.168.56.")
+        ]
+        if lan_candidates:
+            return lan_candidates[0]
+    except OSError:
+        pass
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("8.8.8.8", 80))
+        return probe.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        probe.close()
+
+
+def _spotify_connect_login_path() -> str:
+    sessions_dir = os.path.join(cache_dir(), "sessions")
+    os.makedirs(sessions_dir, exist_ok=True)
+    return os.path.join(sessions_dir, _SPOTIFY_CONNECT_LOGIN_FILENAME)
+
+
+def start_spotify_connect_service():
+    """Start the persistent Spotify Connect discovery/login service.
+
+    Spotify's device picker discovers OnTheSpot through mDNS, so this must run
+    for the lifetime of the API process.  It deliberately does not replace
+    the account-pool sessions used for downloading; it only provides the local
+    Connect pairing endpoint and can be reused when a new account is added.
+    """
+    global _spotify_connect_server
+
+    with _spotify_connect_lock:
+        if _spotify_connect_server is not None:
+            return _spotify_connect_server
+
+        _patch_librespot_zeroconf_runner()
+        client_id = "65b708073fc0480ea92a077233ca87bd"
+        ZeroconfServer._ZeroconfServer__default_get_info_fields["clientID"] = client_id
+        builder = ZeroconfServer.Builder()
+        builder.device_name = "OnTheSpot"
+        port = _spotify_connect_port()
+        if port > 0:
+            builder.set_listen_port(port)
+        builder.conf.stored_credentials_file = _spotify_connect_login_path()
+
+        interface = _spotify_connect_interface()
+        original_zeroconf = librespot_zeroconf.zeroconf.Zeroconf
+        original_hostname = ZeroconfServer.get_useful_hostname
+
+        # librespot-python currently constructs Zeroconf without an interface
+        # argument and advertises the system hostname.  Scope these two small
+        # overrides to creation so VPN/virtual adapters cannot make mDNS
+        # registration time out or publish an unreachable address.
+        if interface:
+            librespot_zeroconf.zeroconf.Zeroconf = lambda *args, **kwargs: original_zeroconf(
+                *args, interfaces=[interface], **kwargs
+            )
+            ZeroconfServer.get_useful_hostname = lambda self: interface
+
+        try:
+            _spotify_connect_server = builder.create()
+        except Exception:
+            logger.exception(
+                "Could not start Spotify Connect discovery service on port %s",
+                port or "auto",
+            )
+            _spotify_connect_server = None
+            return None
+        finally:
+            librespot_zeroconf.zeroconf.Zeroconf = original_zeroconf
+            ZeroconfServer.get_useful_hostname = original_hostname
+
+        logger.info(
+            "Spotify Connect discovery service started as OnTheSpot%s%s",
+            f" on port {port}" if port > 0 else "",
+            f" on {interface}" if interface else "",
+        )
+        return _spotify_connect_server
+
+
+def stop_spotify_connect_service() -> None:
+    """Stop the persistent Spotify Connect service during API shutdown."""
+    global _spotify_connect_server
+
+    with _spotify_connect_lock:
+        server = _spotify_connect_server
+        _spotify_connect_server = None
+        if server is None:
+            return
+        try:
+            server.close_session()
+        except Exception:
+            logger.debug("Spotify Connect session was already closed", exc_info=True)
+        try:
+            server.close()
+        except Exception:
+            logger.debug("Spotify Connect discovery service close failed", exc_info=True)
+
+
+def spotify_connect_status() -> dict:
+    """Return safe discovery-service status for diagnostics/UI health checks."""
+    with _spotify_connect_lock:
+        return {
+            "running": _spotify_connect_server is not None,
+            "device_name": "OnTheSpot",
+            "port": _spotify_connect_port(),
+        }
+
+
+def add_spotify_zeroconf_login(zeroconf_login: dict, account_uuid: str | None = None) -> bool:
+    """Persist a Spotify Connect login received locally or from a companion.
+
+    The companion only forwards the same three fields produced by librespot's
+    ZeroConf login file.  Keep the validation and duplicate handling in one
+    place so local and remote sign-in create identical account records.
+    """
+    if not isinstance(zeroconf_login, dict):
+        return False
+    username = str(zeroconf_login.get("username") or "").strip()
+    credentials = zeroconf_login.get("credentials")
+    credential_type = str(zeroconf_login.get("type") or "").strip()
+    if not username or not isinstance(credentials, str) or not credentials or not credential_type:
+        return False
+    if any(
+        isinstance(account, dict)
+        and account.get("service") == "spotify"
+        and account.get("login", {}).get("username") == username
+        for account in (config.get("accounts", []) or [])
+    ):
+        logger.info("Spotify account already exists")
+        return False
+
+    cfg_copy = list(config.get("accounts", []) or [])
+    cfg_copy.append(
+        {
+            "uuid": account_uuid or str(uuid.uuid4()),
+            "service": "spotify",
+            "active": True,
+            "login": {
+                "username": username,
+                "credentials": credentials,
+                "type": credential_type,
+            },
+        }
+    )
+    config.set("accounts", cfg_copy)
+    config.save()
+    logger.info("New Spotify account added to config for %s", username[:4] + "****")
+    return True
 
 
 def spotify_get_oauth_token():
@@ -134,39 +430,49 @@ def spotify_playlist_call(token, url):
 
 
 class MirrorSpotifyPlayback:
-    # declare here to avoid Circular Import
-
     def __init__(self):
-        super().__init__()
-        self.thread = None
+        self.thread: threading.Thread | None = None
         self.is_running = False
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
 
     def start(self):
-        if self.thread is None:
+        with self._lock:
+            if self.thread is not None and self.thread.is_alive():
+                logger.debug("SpotifyMirrorPlayback is already running.")
+                return
             logger.info("Starting SpotifyMirrorPlayback")
+            self._stop_event.clear()
             self.is_running = True
-            self.thread = threading.Thread(target=self.run)
+            self.thread = threading.Thread(
+                target=self.run,
+                name="spotify-playback-mirror",
+                daemon=True,
+            )
             self.thread.start()
-        else:
-            logger.warning("SpotifyMirrorPlayback is already running.")
 
-    def stop(self):
-        if self.thread is not None:
+    def stop(self, timeout: float = 15.0):
+        with self._lock:
+            thread = self.thread
+            if thread is None:
+                self.is_running = False
+                return
             logger.info("Stopping SpotifyMirrorPlayback")
             self.is_running = False
-            self.thread.join()
-            self.thread = None
-        else:
-            logger.warning("SpotifyMirrorPlayback is not running.")
+            self._stop_event.set()
+        thread.join(timeout=timeout)
+        with self._lock:
+            if thread.is_alive():
+                logger.warning("SpotifyMirrorPlayback did not stop within %.1f seconds", timeout)
+            elif self.thread is thread:
+                self.thread = None
 
     def run(self):
-
         get_account_token = spotify_get_token
-        while self.is_running:
-            time.sleep(5)
+        while not self._stop_event.wait(5):
             try:
                 token = get_account_token("spotify").tokens()
-            except (AttributeError, IndexError):
+            except (AttributeError, IndexError, KeyError, TypeError):
                 # Account pool hasn't been filled yet
                 continue
             url = f"{BASE_URL}/me/player/currently-playing"
@@ -178,20 +484,24 @@ class MirrorSpotifyPlayback:
                     },
                     timeout=10,
                 )
-            except Exception:
+            except requests.RequestException:
                 logger.info("Session Expired, reinitializing...")
                 parsing_index = config.get("active_account_number")
-                spotify_re_init_session(account_pool[parsing_index])
-                token = account_pool[parsing_index]["login"]["session"]
+                try:
+                    spotify_re_init_session(account_pool[parsing_index])
+                except (IndexError, KeyError, TypeError):
+                    logger.debug("No Spotify account is available to refresh mirroring")
                 continue
             if resp.status_code == 200:
-                data = resp.json()
-                if data["currently_playing_type"] == "track":
-                    item_id = data["item"]["id"]
-                    if (
-                        item_id not in pending.get_items()
-                        and item_id not in download_queue
-                    ):
+                try:
+                    data = resp.json()
+                    item = data.get("item") or {}
+                except (ValueError, TypeError):
+                    logger.debug("Spotify returned an invalid playback response")
+                    continue
+                if data.get("currently_playing_type") == "track" and item.get("id"):
+                    item_id = item["id"]
+                    if item_id not in pending and item_id not in download_queue:
                         parent_category = "track"
                         playlist_name = ""
                         playlist_by = ""
@@ -242,23 +552,27 @@ class MirrorSpotifyPlayback:
                     continue
             else:
                 continue
+        self.is_running = False
 
 
 def spotify_new_session():
     os.makedirs(os.path.join(cache_dir(), "sessions"), exist_ok=True)
 
     uuid_uniq = str(uuid.uuid4())
-    session_json_path = os.path.join(
-        os.path.join(cache_dir(), "sessions"), f"ots_login_{uuid_uniq}.json"
-    )
+    session_json_path = _spotify_connect_login_path()
+    zs = start_spotify_connect_service()
+    if zs is None:
+        return False
 
-    CLIENT_ID: str = "65b708073fc0480ea92a077233ca87bd"
-    ZeroconfServer._ZeroconfServer__default_get_info_fields["clientID"] = CLIENT_ID
-    zs_builder = ZeroconfServer.Builder()
-    zs_builder.device_name = "OnTheSpot"
-    zs_builder.conf.stored_credentials_file = session_json_path
-    zs = zs_builder.create()
-    logger.info("Zeroconf login service started")
+    # A previous device selection may have left a valid Connect session on the
+    # discovery service.  Clear it so this sign-in attempt waits for a new
+    # account rather than treating the old selection as fresh credentials.
+    if zs.has_valid_session():
+        zs.close_session()
+    try:
+        os.remove(session_json_path)
+    except FileNotFoundError:
+        pass
 
     while True:
         time.sleep(1)
@@ -268,9 +582,6 @@ def spotify_new_session():
                 zs._ZeroconfServer__session,
                 zs._ZeroconfServer__session.username(),
             )
-            if zs._ZeroconfServer__session.username() in config.get("accounts"):
-                logger.info("Account already exists")
-                return False
             try:
                 with open(session_json_path, "r", encoding="utf-8") as file:
                     zeroconf_login = json.load(file)
@@ -294,23 +605,11 @@ def spotify_new_session():
                     "Unknown Error: %s\nTraceback: %s", str(e), traceback.format_exc()
                 )
                 return False
-            cfg_copy = config.get("accounts").copy()
-            new_user = {
-                "uuid": uuid_uniq,
-                "service": "spotify",
-                "active": True,
-                "login": {
-                    "username": zeroconf_login["username"],
-                    "credentials": zeroconf_login["credentials"],
-                    "type": zeroconf_login["type"],
-                },
-            }
-            zs.close()
-            cfg_copy.append(new_user)
-            config.set("accounts", cfg_copy)
-            config.save()
-            logger.info("New account added to config.")
-            return True
+            # Keep the discovery service alive after pairing.  Closing the
+            # whole server here was the reason Spotify stopped showing
+            # OnTheSpot after the first login.
+            zs.close_session()
+            return add_spotify_zeroconf_login(zeroconf_login, account_uuid=uuid_uniq)
 
 
 def spotify_login_user(account):
@@ -742,19 +1041,12 @@ def spotify_get_search_results(
     # Changed params[] expression below - it does not need transform!
     params["type"] = ",".join(content_types)
 
-    rejected_albums = 0
-    rejected_artists = 0
-    rejected_tracks = 0
-    rejected_playlists = 0
-    # set article (prefix) removed from items for filters ensuring the last character is a space.
-    prefix = search_prefix.strip().lower() + " "
-
     # Route through make_call so search shares the central 429/Retry-After/backoff
     # and per-host serialisation. It raises on exhausted retries and returns None
     # on a permanent error; treat both as "no results" rather than crashing.
     try:
         data = make_call(
-            f"{BASE_URL}/search", params=params, headers=headers, skip_cache=True
+            f"{BASE_URL}/search", params=params, headers=headers
         )
     except requests.exceptions.RequestException as e:
         logger.error("Spotify search failed for '%s': %s", search_term, str(e))

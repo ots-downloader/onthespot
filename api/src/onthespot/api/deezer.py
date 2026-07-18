@@ -7,6 +7,7 @@ import uuid
 from binascii import a2b_hex, b2a_hex
 from Cryptodome.Cipher import AES, Blowfish
 from Cryptodome.Hash import MD5
+from ..constants import HTTP_TIMEOUT
 from ..otsconfig import config
 from ..runtimedata import get_logger, account_pool
 from ..utils import conv_list_format, make_call
@@ -145,7 +146,7 @@ def deezer_get_track_metadata(_, item_id):
 def get_song_info_from_deezer_website(token, track_id):
     url = f"https://www.deezer.com/us/track/{track_id}"
     session = token["session"]
-    resp = session.get(url)
+    resp = session.get(url, timeout=HTTP_TIMEOUT)
     if resp.status_code == 404:
         logger.info(f"Received 404 while fetching MD5_ORIGIN, {url}")
     if "MD5_ORIGIN" not in resp.text:
@@ -167,7 +168,7 @@ def md5hex(data):
     """return hex string of md5 of the given string"""
     # type(data): bytes
     # returns: bytes
-    h = MD5.new()
+    h = MD5.new()  # nosec B303 - required by Deezer's media URL protocol.
     h.update(data)
     return b2a_hex(h.digest())
 
@@ -183,14 +184,17 @@ def calcbfkey(songid):
     key = b"g4el58wc0zvf9na1"
     songid_md5 = md5hex(songid.encode())
 
-    xor_op = lambda i: chr(songid_md5[i] ^ songid_md5[i + 16] ^ key[i])
-    decrypt_key = "".join([xor_op(i) for i in range(16)])
+    decrypt_key = "".join(
+        chr(songid_md5[i] ^ songid_md5[i + 16] ^ key[i]) for i in range(16)
+    )
     return decrypt_key
 
 
 def blowfishDecrypt(data, key):
     iv = a2b_hex("0001020304050607")
-    c = Blowfish.new(key.encode(), Blowfish.MODE_CBC, iv)
+    c = Blowfish.new(  # nosec B304 - required by Deezer's media protocol.
+        key.encode(), Blowfish.MODE_CBC, iv
+    )
     return c.decrypt(data)
 
 
@@ -244,14 +248,15 @@ def deezer_login_user(account):
         if uuid == "public_deezer":
             # I have no idea why rentry 403s every scraping trick I've tried
             ia_url = (
-                f"http://archive.org/wayback/available?url=https://rentry.co/firehawk52"
+                "http://archive.org/wayback/available?url=https://rentry.co/firehawk52"
             )
-            response = requests.get(ia_url)
+            response = requests.get(ia_url, timeout=HTTP_TIMEOUT)
             if response.status_code != 200:
                 logger.error(
-                    f"Unable to fetch public deezer account from Internet Archive, status code: {response.raise_for_status()}"
+                    "Unable to fetch public Deezer account from Internet Archive, status code: %s",
+                    response.status_code,
                 )
-                raise Exception
+                response.raise_for_status()
             data = response.json()
 
             # Sometimes returns with info missing
@@ -260,7 +265,7 @@ def deezer_login_user(account):
             except Exception:
                 url = "http://web.archive.org/web/20241206020314/https://rentry.co/firehawk52"
 
-            html_content = requests.get(url).text
+            html_content = requests.get(url, timeout=HTTP_TIMEOUT).text
 
             table_match = re.search(
                 r'<table class="ntable">(.*?)</table>', html_content, re.DOTALL
@@ -292,7 +297,10 @@ def deezer_login_user(account):
         }
 
         user_data = session.post(
-            "http://www.deezer.com/ajax/gw-light.php", params=params, headers=headers
+            "http://www.deezer.com/ajax/gw-light.php",
+            params=params,
+            headers=headers,
+            timeout=HTTP_TIMEOUT,
         ).json()
 
         account_type = "free"
@@ -362,7 +370,9 @@ def deezer_get_search_results(_, search_term, content_types):
     search_results = []
 
     if "track" in content_types:
-        track_search = requests.get(track_url, params=params).json()
+        track_search = requests.get(
+            track_url, params=params, timeout=HTTP_TIMEOUT
+        ).json()
         for track in track_search["data"]:
             search_results.append(
                 {
@@ -377,7 +387,9 @@ def deezer_get_search_results(_, search_term, content_types):
             )
 
     if "album" in content_types:
-        album_search = requests.get(album_url, params=params).json()
+        album_search = requests.get(
+            album_url, params=params, timeout=HTTP_TIMEOUT
+        ).json()
         for album in album_search["data"]:
             search_results.append(
                 {
@@ -392,7 +404,9 @@ def deezer_get_search_results(_, search_term, content_types):
             )
 
     if "artist" in content_types:
-        artist_search = requests.get(artist_url, params=params).json()
+        artist_search = requests.get(
+            artist_url, params=params, timeout=HTTP_TIMEOUT
+        ).json()
         for artist in artist_search["data"]:
             search_results.append(
                 {
@@ -407,7 +421,9 @@ def deezer_get_search_results(_, search_term, content_types):
             )
 
     if "playlist" in content_types:
-        playlist_search = requests.get(playlist_url, params=params).json()
+        playlist_search = requests.get(
+            playlist_url, params=params, timeout=HTTP_TIMEOUT
+        ).json()
         for playlist in playlist_search["data"]:
             search_results.append(
                 {
@@ -429,5 +445,5 @@ def deezer_parse_url(url):
     # Fix Circular Dependency
     from ..parse_item import parse_url
 
-    redirect_url = requests.get(url).url
+    redirect_url = requests.get(url, timeout=HTTP_TIMEOUT).url
     parse_url(redirect_url)

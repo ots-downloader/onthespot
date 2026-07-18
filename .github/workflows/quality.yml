@@ -1,0 +1,118 @@
+name: Quality
+
+on:
+  push:
+    branches:
+      - fastapi-dev
+  pull_request:
+    branches:
+      - fastapi-dev
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.23"
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+
+      - name: Verify dependency lock
+        run: uv lock --check
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --no-install-project --no-dev
+
+      - name: Compile Python sources
+        run: uv run --frozen python -m compileall -q src tests
+
+      - name: Run backend tests
+        run: uv run --frozen python -m unittest discover -s tests -v
+
+      - name: Run Ruff checks
+        run: uvx ruff==0.15.21 check src tests
+
+      - name: Scan source for medium and high security findings
+        if: matrix.os == 'ubuntu-latest'
+        run: uvx bandit==1.9.4 -r src -q -ll
+
+      - name: Audit Python dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: uv run --with pip-audit==2.10.1 pip-audit --local --skip-editable --progress-spinner off
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ui
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npm run lint
+
+      - name: Verify bundled language packs
+        run: npm run locales:verify
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  container:
+    name: Container image
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build the single-process image
+        run: docker build --tag onthespot-ci:${{ github.sha }} .

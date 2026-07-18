@@ -1,10 +1,10 @@
-import json
 import time
 import uuid
 from base64 import b64decode
 
 import requests
 
+from ..constants import HTTP_TIMEOUT
 from ..otsconfig import config
 from ..runtimedata import account_pool, get_logger
 from ..utils import conv_list_format, make_call
@@ -24,7 +24,9 @@ def tidal_add_account_pt1():
     data = {}
     data["client_id"] = CLIENT_ID
     data["scope"] = "r_usr+w_usr+w_sub"
-    response = requests.post(f"{AUTH_URL}/device_authorization", data=data)
+    response = requests.post(
+        f"{AUTH_URL}/device_authorization", data=data, timeout=HTTP_TIMEOUT
+    )
 
     if response.status_code != 200:
         logger.info(f"Device authorization pending: {response.json()}")
@@ -46,7 +48,9 @@ def tidal_add_account_pt2(device_code):
         data["device_code"] = device_code
         data["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
         data["scope"] = "r_usr+w_usr+w_sub"
-        response = requests.post(f"{AUTH_URL}/token", data=data, auth=AUTH)
+        response = requests.post(
+            f"{AUTH_URL}/token", data=data, auth=AUTH, timeout=HTTP_TIMEOUT
+        )
 
         if response.status_code != 200:
             logger.info(f"Token request pending: {response.json()}")
@@ -88,7 +92,9 @@ def tidal_login_user(account):
                 "scope": "r_usr+w_usr+w_sub",
             }
 
-            response = requests.post(f"{AUTH_URL}/token", data=data, auth=AUTH)
+            response = requests.post(
+                f"{AUTH_URL}/token", data=data, auth=AUTH, timeout=HTTP_TIMEOUT
+            )
 
             if response.status_code != 200:
                 logger.info(
@@ -536,7 +542,6 @@ def tidal_get_mix_data(token, mix_id):
     logger.info(f"Get mix data for mix: {mix_id}")
     headers = {}
     headers["Authorization"] = f"Bearer {token['access_token']}"
-    print(mix_id)
     params = {}
     params["mixId"] = mix_id
     params["countryCode"] = token["country_code"]
@@ -544,9 +549,8 @@ def tidal_get_mix_data(token, mix_id):
     params["deviceType"] = "BROWSER"
 
     mix_data = make_call(
-        f"https://api.tidal.com/v1/pages/mix", params=params, headers=headers
+        "https://api.tidal.com/v1/pages/mix", params=params, headers=headers
     )  # , skip_cache=True)
-    print(mix_data)
     playlist_name = mix_data["title"]
     playlist_by = "Tidal"
 

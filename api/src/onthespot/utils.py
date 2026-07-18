@@ -26,6 +26,7 @@ import subprocess
 import threading
 import time
 import itertools
+import string
 from hashlib import md5
 from urllib.parse import urlparse
 from io import BytesIO
@@ -40,8 +41,10 @@ from .runtimedata import (
     progress_hook,
     notification_hook,
     pending,
+    get_rate_limit_delay,
+    record_rate_limit,
 )
-from .constants import ItemStatus
+from .constants import HTTP_TIMEOUT, ItemStatus
 
 logger = get_logger("utils")
 
@@ -72,6 +75,108 @@ def _get_host_lock(url):
         return lock
 
 
+def _cache_ttl_seconds(url, cache_ttl_seconds):
+    """Return a safe disk-cache TTL for a public HTTP response.
+
+    Spotify account, library, and playlist responses are deliberately excluded:
+    they are user-specific and should never be persisted in the shared request
+    cache. Public catalogue metadata and search results are safe to reuse.
+    """
+    if not bool(config.get("cache_api_calls", True)):
+        return 0
+
+    if cache_ttl_seconds is not None:
+        return max(0, int(cache_ttl_seconds))
+
+    parsed = urlparse(url)
+    if parsed.netloc.casefold() == "api.spotify.com":
+        path = parsed.path.rstrip("/")
+        if path == "/v1/search":
+            return max(0, int(config.get("spotify_search_cache_ttl_seconds", 900)))
+        public_catalogue_paths = (
+            "/v1/albums",
+            "/v1/artists",
+            "/v1/audio-features",
+            "/v1/audiobooks",
+            "/v1/episodes",
+            "/v1/markets",
+            "/v1/shows",
+            "/v1/tracks",
+        )
+        if path.startswith(public_catalogue_paths):
+            return max(0, int(config.get("spotify_metadata_cache_ttl_seconds", 604800)))
+        return 0
+
+    return max(0, int(config.get("api_response_cache_ttl_seconds", 86400)))
+
+
+def _cache_path(url, params, text):
+    """Return a deterministic cache path including the complete query string."""
+    prepared_url = requests.Request("GET", url, params=params).prepare().url
+    cache_key = md5(
+        f"v2|{int(bool(text))}|{prepared_url}".encode(), usedforsecurity=False
+    ).hexdigest()
+    cache_dir = os.path.join(config.get("_cache_dir"), "reqcache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return cache_key, os.path.join(cache_dir, f"v2-{cache_key}.json")
+
+
+def _read_cached_response(cache_file, text):
+    """Read a v2 cache envelope, returning ``(entry, value)`` or ``(None, None)``."""
+    if not cache_file or not os.path.isfile(cache_file):
+        return None, None
+    try:
+        with open(cache_file, "r", encoding="utf-8") as cache_handle:
+            entry = json.load(cache_handle)
+        if not isinstance(entry, dict) or entry.get("version") != 2:
+            return None, None
+        payload = entry.get("payload")
+        if not isinstance(payload, str):
+            return None, None
+        if text:
+            return entry, payload
+        return entry, json.loads(payload)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None, None
+
+
+def _write_cached_response(cache_file, payload, ttl_seconds, etag=None):
+    if not cache_file or ttl_seconds <= 0:
+        return
+    now = time.time()
+    entry = {
+        "version": 2,
+        "stored_at": now,
+        "expires_at": now + ttl_seconds,
+        "etag": etag or "",
+        "payload": payload,
+    }
+    try:
+        with open(cache_file, "w", encoding="utf-8") as cache_handle:
+            json.dump(entry, cache_handle, ensure_ascii=False)
+    except OSError as error:
+        logger.warning("Could not cache API response at %s: %s", cache_file, error)
+
+
+def _response_cache_ttl(response, default_ttl):
+    """Respect no-store and keep positive provider TTLs from extending ours.
+
+    Spotify marks public catalogue responses ``public, max-age=0`` to force
+    browser revalidation.  OnTheSpot's local cache deliberately keeps those
+    immutable/public results for its configured short TTL so repeated searches
+    do not spend the user's API quota.  ``no-store`` remains authoritative.
+    """
+    cache_control = str(response.headers.get("Cache-Control") or "").casefold()
+    if "no-store" in cache_control:
+        return 0
+    max_age_match = re.search(r"max-age\s*=\s*(\d+)", cache_control)
+    if max_age_match:
+        provider_ttl = int(max_age_match.group(1))
+        if provider_ttl > 0:
+            return min(default_ttl, provider_ttl)
+    return default_ttl
+
+
 class SSLAdapter(requests.adapters.HTTPAdapter):
     """HTTPAdapter that injects a custom :class:`ssl.SSLContext`."""
 
@@ -92,12 +197,14 @@ def make_call(
     skip_cache=False,
     text=False,
     use_ssl=False,
+    cache_ttl_seconds=None,
 ):
     """Perform a GET request with caching and automatic retry / back-off.
 
-    Responses are cached on disk (keyed by URL MD5) unless *skip_cache* is
-    ``True``.  Rate-limited (429) and server-error (5xx) responses are
-    retried with exponential back-off up to ``api_retry_max_attempts`` times.
+    Public responses are cached on disk using a URL-and-query-aware key unless
+    *skip_cache* is ``True``. Spotify private/account data is never persisted.
+    Rate-limited (429) and server-error (5xx) responses are retried with
+    exponential back-off up to ``api_retry_max_attempts`` times.
 
     Parameters
     ----------
@@ -118,31 +225,37 @@ def make_call(
     use_ssl:
         When ``True`` attach an :class:`SSLAdapter` with certificate
         verification enabled.
+    cache_ttl_seconds:
+        Optional response cache lifetime. ``None`` applies the safe service
+        defaults; ``0`` disables caching for this request.
     """
-    if not skip_cache:
-        request_key = md5(f"{url}".encode()).hexdigest()
-        req_cache_file = os.path.join(
-            config.get("_cache_dir"), "reqcache", request_key + ".json"
-        )
-        os.makedirs(os.path.dirname(req_cache_file), exist_ok=True)
-        if os.path.isfile(req_cache_file):
-            logger.info(
-                f"[CACHE HIT] Retrieved from cache | URL: {url} | MD5: {request_key} | File: {req_cache_file}"
-            )
-            try:
-                with open(req_cache_file, "r", encoding="utf-8") as cf:
-                    if text:
-                        return cf.read()
-                    json_data = json.load(cf)
-                return json_data
-            except json.JSONDecodeError:
-                logger.error(
-                    f"[CACHE ERROR] Invalid JSON data | URL: {url} | MD5: {request_key} | File: {req_cache_file}"
-                )
-                return None
-        logger.info(
-            f"[CACHE MISS] Not found in cache, fetching from API | URL: {url} | MD5: {request_key} | File: {req_cache_file}"
-        )
+    cache_ttl = 0 if skip_cache else _cache_ttl_seconds(url, cache_ttl_seconds)
+    parsed_url = urlparse(url)
+    # A third-party response authenticated with a cookie or bearer token can
+    # belong to one account only. Keep those out of the disk cache unless a
+    # caller deliberately opts in. Spotify has its own public-path allowlist
+    # above, so catalogue results can still be reused safely.
+    if (
+        parsed_url.netloc.casefold() != "api.spotify.com"
+        and cache_ttl_seconds is None
+        and any(key.casefold() in {"authorization", "cookie"} for key in (headers or {}))
+    ):
+        cache_ttl = 0
+    request_key = None
+    req_cache_file = None
+    cached_entry = None
+    cached_value = None
+    if cache_ttl > 0:
+        request_key, req_cache_file = _cache_path(url, params, text)
+        cached_entry, cached_value = _read_cached_response(req_cache_file, text)
+        if cached_entry and float(cached_entry.get("expires_at", 0) or 0) > time.time():
+            logger.debug("[CACHE HIT] %s | %s", url, request_key)
+            return cached_value
+        logger.debug("[CACHE MISS] %s | %s", url, request_key)
+
+    request_headers = dict(headers or {})
+    if cached_entry and cached_entry.get("etag"):
+        request_headers.setdefault("If-None-Match", cached_entry["etag"])
 
     if session is None:
         session = requests.Session()
@@ -160,13 +273,28 @@ def make_call(
     max_delay = config.get("api_retry_max_delay", 60)
 
     for attempt in range(max_retries):
-        # The lock serialises only the request dispatch, so a burst of workers
-        # can't hit the rate limit simultaneously. The backoff sleep below happens
-        # OUTSIDE the lock so a single backing-off call doesn't stall every other
-        # worker (and a long Retry-After can't freeze the whole app).
+        # The lock serialises request dispatch per host. It also keeps a shared
+        # cooldown together with the next request so workers cannot stampede a
+        # provider the moment a Retry-After window ends.
         try:
             with _get_host_lock(url):
-                response = session.get(url, headers=headers, params=params, timeout=30)
+                # Recheck after waiting for this host lock. A concurrent caller
+                # may already have fetched the exact same response.
+                if cache_ttl > 0:
+                    refreshed_entry, refreshed_value = _read_cached_response(req_cache_file, text)
+                    if refreshed_entry and float(refreshed_entry.get("expires_at", 0) or 0) > time.time():
+                        return refreshed_value
+
+                cooldown = get_rate_limit_delay(urlparse(url).netloc)
+                if cooldown > 0:
+                    logger.info("Waiting %.1fs for shared API cooldown on %s", cooldown, urlparse(url).netloc)
+                    time.sleep(cooldown)
+                response = session.get(
+                    url,
+                    headers=request_headers,
+                    params=params,
+                    timeout=HTTP_TIMEOUT,
+                )
         except requests.exceptions.Timeout:
             time.sleep(min((2**attempt) * base_delay, max_delay))
             logger.warning(
@@ -176,6 +304,16 @@ def make_call(
         except requests.exceptions.RequestException as e:
             logger.error(f"Request exception on {url}: {str(e)}")
             return None
+
+        if response.status_code == 304 and cached_entry:
+            response_ttl = _response_cache_ttl(response, cache_ttl)
+            _write_cached_response(
+                req_cache_file,
+                cached_entry["payload"],
+                response_ttl,
+                response.headers.get("ETag") or cached_entry.get("etag"),
+            )
+            return cached_value
 
         # Rate limited - honour Retry-After if present (capped at max_delay), else back off.
         if response.status_code == 429:
@@ -190,6 +328,11 @@ def make_call(
                 logger.warning(
                     f"Rate limited (429) on {url}. No Retry-After header, backing off {delay}s (attempt {attempt + 1}/{max_retries})"
                 )
+            record_rate_limit(
+                urlparse(url).netloc,
+                int(retry_after) if retry_after and retry_after.isdigit() else delay,
+                delay,
+            )
             time.sleep(delay)
             continue
 
@@ -205,9 +348,12 @@ def make_call(
         # Success - cache and return.
         elif response.status_code == 200:
             if text:
-                if not skip_cache:
-                    with open(req_cache_file, "w", encoding="utf-8") as cf:
-                        cf.write(response.text)
+                _write_cached_response(
+                    req_cache_file,
+                    response.text,
+                    _response_cache_ttl(response, cache_ttl),
+                    response.headers.get("ETag"),
+                )
                 return response.text
             # Guard against a 200 with a non-JSON body (e.g. an HTML error/captive
             # portal page) so we return None instead of raising into callers.
@@ -216,9 +362,12 @@ def make_call(
             except json.JSONDecodeError:
                 logger.error(f"Invalid JSON in 200 response from {url}")
                 return None
-            if not skip_cache:
-                with open(req_cache_file, "w", encoding="utf-8") as cf:
-                    cf.write(response.text)
+            _write_cached_response(
+                req_cache_file,
+                response.text,
+                _response_cache_ttl(response, cache_ttl),
+                response.headers.get("ETag"),
+            )
             return data
 
         # Permanent client errors - don't retry.
@@ -252,8 +401,16 @@ def requeue_item(item: dict) -> None:
             del download_queue[local_id]
             download_queue[local_id] = item
             download_queue[local_id]["available"] = True
+            download_queue[local_id]["_active_download"] = False
+            raw_progress = item.get("progress", item.get("item_progress", 0))
+            try:
+                current_progress = int(float(raw_progress or 0))
+            except (TypeError, ValueError):
+                current_progress = 0
             progress_hook(
-                download_queue[local_id], item["item_progress"], item["item_status"]
+                download_queue[local_id],
+                current_progress,
+                item["item_status"],
             )
         except KeyError:
             # Item was cleared from the queue while we were processing it.
@@ -266,8 +423,15 @@ def retry_single_item(item: dict) -> None:
     with download_queue_lock:
         try:
             item["available"] = True
+            item.pop("_manual_cancelled", None)
             item["item_status"] = ItemStatus.WAITING
-            del download_queue[item["local_id"]]
+            item["error"] = ""
+            item["_stats_recorded"] = False
+            item["retry_count"] = int(item.get("retry_count", 0) or 0) + 1
+            if item.get("queue_preloaded"):
+                download_queue[item["local_id"]] = item
+            else:
+                del download_queue[item["local_id"]]
             pending.put_nowait(item)
         except KeyError as e:
             logger.error("Error retrying item %s, error: %s", item, str(e))
@@ -284,20 +448,23 @@ def _version_to_int(version):
 
 
 def is_latest_release():
-    """Return ``True`` if the running version is the latest GitHub release."""
-    url = "https://api.github.com/repos/ots-downloader/onthespot/releases/latest"
-    response = requests.get(url, timeout=10)
-    if response.status_code == 200:
-        current_version = _version_to_int(config.get("version"))
-        latest_version = _version_to_int(response.json()["tag_name"])
-        if latest_version > current_version:
-            notification_hook(
-                "Notification",
-                f"New Version Available: {latest_version}",
-                "https://github.com/ots-downloader/onthespot/releases/latest",
-            )
-            logger.info("Update Available: %s", latest_version)
-            return False
+    """Return ``True`` if the running version is the latest GitHub release.
+
+    This compatibility wrapper is retained for callers from the desktop
+    application.  The structured updater lives in :mod:`onthespot.updater`.
+    """
+    from .updater import check_for_updates
+
+    status = check_for_updates(force=True)
+    if status.get("update_available"):
+        latest = status.get("latest_version")
+        notification_hook(
+            "Update available",
+            f"OnTheSpot {latest} is ready to download.",
+            status.get("release_url", ""),
+        )
+        logger.info("Update Available: %s", latest)
+        return False
     return True
 
 
@@ -346,17 +513,13 @@ def sanitize_data(value):
 
 
 def translate(string):
-    """Translate *string* to the configured app language via Google Translate.
+    """Return metadata unchanged.
 
-    Returns the original string unchanged if the request fails.
+    The web interface uses bundled language packs.  Metadata is deliberately
+    left untouched: translating song and album names would be lossy and would
+    require sending a user's library to a third-party translation service.
     """
-    try:
-        response = requests.get(
-            f"https://translate.googleapis.com/translate_a/single?dj=1&dt=t&dt=sp&dt=ld&dt=bd&client=dict-chrome-ex&sl=auto&tl={config.get('language')}&q={string}"
-        )
-        return response.json()["sentences"][0]["trans"]
-    except (requests.exceptions.RequestException, KeyError, IndexError):
-        return string
+    return string
 
 
 def conv_list_format(items):
@@ -402,6 +565,19 @@ def format_item_path(item, item_metadata):
         path = config.get("movie_path_formatter")
     elif item["item_type"] == "episode":
         path = config.get("show_path_formatter")
+
+    # A stray closing brace in a user-edited formatter otherwise aborts every
+    # item in a playlist before the download starts. Repair the common typo
+    # and let the formatter continue; the saved setting is corrected by the
+    # UI/API separately.
+    try:
+        list(string.Formatter().parse(path))
+    except ValueError as exc:
+        repaired_path = path.replace("}}", "}")
+        if repaired_path == path:
+            raise
+        logger.warning("Repairing malformed path formatter %r: %s", path, exc)
+        path = repaired_path
 
     # Split composer
     composer_full = item_metadata.get("composer", "")
@@ -476,7 +652,7 @@ def run_ffmpeg(command: list) -> None:
         subprocess.check_call(command, shell=False)
 
 
-def convert_audio_format(filename, bitrate, default_format):
+def convert_audio_format(filename, bitrate, default_format, force_bitrate=False):
     """Re-encode or copy *filename* to the target format via ffmpeg.
 
     If the file is already in *default_format* and a custom bitrate is not
@@ -504,7 +680,7 @@ def convert_audio_format(filename, bitrate, default_format):
 
         # Check if media format is service default
 
-        if filetype == default_format and config.get("use_custom_file_bitrate"):
+        if filetype == default_format and (config.get("use_custom_file_bitrate") or force_bitrate):
             command += ["-b:a", bitrate]
         elif filetype == default_format:
             command += ["-c:a", "copy"]
@@ -569,7 +745,6 @@ def convert_video_format(item, output_path, output_format, video_files, item_met
         if current_type != "chapter":
             format_map += ["-map", f"{map_index}:{current_type[:1]}"]
             if file.get("language"):
-                language = file.get("language")
                 format_map += [
                     f"-metadata:s:{current_type[:1]}:{i}",
                     f"title={file.get('language')}",
@@ -581,19 +756,19 @@ def convert_video_format(item, output_path, output_format, video_files, item_met
 
         i += 1
 
-    format_map += [f"-metadata", f"title={item_metadata.get('title')}"]
+    format_map += ["-metadata", f"title={item_metadata.get('title')}"]
     # format_map += [f'-metadata', f'genre={item_metadata.get("genre")}']
-    format_map += [f"-metadata", f"copyright={item_metadata.get('copyright')}"]
-    format_map += [f"-metadata", f"description={item_metadata.get('description')}"]
+    format_map += ["-metadata", f"copyright={item_metadata.get('copyright')}"]
+    format_map += ["-metadata", f"description={item_metadata.get('description')}"]
     # format_map += [f'-metadata', f'year={item_metadata.get("release_year")}']
     # TV Show Specific Tags
     if item["item_type"] == "episode":
-        format_map += [f"-metadata", f"show={item_metadata.get('show_name')}"]
+        format_map += ["-metadata", f"show={item_metadata.get('show_name')}"]
         format_map += [
-            f"-metadata",
+            "-metadata",
             f"episode_id={item_metadata.get('episode_number')}",
         ]
-        format_map += [f"-metadata", f"tvsn={item_metadata.get('season_number')}"]
+        format_map += ["-metadata", f"tvsn={item_metadata.get('season_number')}"]
 
     command += format_map
 
@@ -915,7 +1090,9 @@ def set_music_thumbnail(filename, metadata):
 
     logger.info("Fetching item thumbnail")
     try:
-        img = Image.open(BytesIO(requests.get(metadata["image_url"]).content))
+        response = requests.get(metadata["image_url"], timeout=HTTP_TIMEOUT)
+        response.raise_for_status()
+        img = Image.open(BytesIO(response.content))
     except Exception as e:
         logger.error(f"Failed to download image: {e}")
         return
@@ -1058,7 +1235,7 @@ def add_to_m3u_file(item, item_metadata):
     )
 
     m3u_file += "." + config.get("m3u_format")
-    dl_root = config.get("audio_download_path")
+    dl_root = item.get("profile_download_path") or config.get("audio_download_path")
     m3u_path = os.path.join(dl_root, m3u_file)
 
     os.makedirs(os.path.dirname(m3u_path), exist_ok=True)

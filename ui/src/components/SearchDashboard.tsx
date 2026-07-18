@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Download,
@@ -11,28 +11,44 @@ import {
   Filter,
   Check,
   Loader2,
-  ArrowRight,
-  Trash,
+  Sparkles,
+  Music2,
+  Waves,
+  Cloud,
+  CirclePlay,
+  Heart,
+  Headphones,
 } from "lucide-react";
-import { SearchResultItem, OTSConfig } from "../types";
-import { fetchPendingQueue, performPendingAction } from "../lib/api";
+import { AccountItem, SearchResultItem, OTSConfig } from "../types";
+import {
+  getAvailableCatalogServices,
+  getCatalogServiceLabel,
+} from "../lib/catalogServices";
 
 interface SearchDashboardProps {
-  onSearch: (q: string, filters: Record<string, boolean>) => Promise<boolean>;
-  onDownload: (q: string, filters: Record<string, boolean>) => Promise<boolean>;
+  onSearch: (
+    q: string,
+    filters: Record<string, boolean>,
+    services?: string[],
+  ) => Promise<SearchResultItem[]>;
+  onDownload: (q: string, filters?: Record<string, boolean>) => Promise<boolean>;
   config: OTSConfig | null;
+  accounts: AccountItem[];
+  query: string;
+  onQueryChange: (query: string) => void;
 }
 
 export const SearchDashboard: React.FC<SearchDashboardProps> = ({
   onSearch,
   onDownload,
   config,
+  accounts,
+  query,
+  onQueryChange,
 }) => {
-  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [enqueuedIds, setEnqueuedIds] = useState<Set<string>>(new Set());
-
   const [filters, setFilters] = useState<Record<string, boolean>>({
     tracks: config?.enable_search_tracks ?? true,
     albums: config?.enable_search_albums ?? true,
@@ -41,17 +57,43 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
     podcasts: config?.enable_search_podcasts ?? true,
     movies: true,
   });
-
-  const [prefix, setPrefix] = useState<string>(config?.search_prefix || "the");
-
-  const getPending = async () => {
-    const pending = await fetchPendingQueue();
-    setResults(pending);
-  };
+  const availableServices = useMemo(
+    () => getAvailableCatalogServices(accounts),
+    [accounts],
+  );
+  const [selectedServiceOverride, setSelectedServiceOverride] = useState<string[] | null>(null);
+  const preferredServices = useMemo(
+    () => availableServices.includes("spotify")
+      ? ["spotify"]
+      : availableServices.slice(0, 1),
+    [availableServices],
+  );
+  const selectedServices = useMemo(
+    () => (selectedServiceOverride ?? preferredServices)
+      .filter((service) => availableServices.includes(service)),
+    [availableServices, preferredServices, selectedServiceOverride],
+  );
+  const resultServiceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    results.forEach((item) => {
+      counts.set(item.item_service, (counts.get(item.item_service) ?? 0) + 1);
+    });
+    return Array.from(counts.entries()).sort(([left], [right]) =>
+      getCatalogServiceLabel(left).localeCompare(getCatalogServiceLabel(right)),
+    );
+  }, [results]);
 
   useEffect(() => {
-    getPending();
-  }, []);
+    // Account workers briefly disappear while the backend reconnects. Keep the
+    // user's choices during that transient state, while deriving an empty
+    // effective selection above so Search remains safely disabled.
+    if (availableServices.length === 0) return;
+    setSelectedServiceOverride((current) =>
+      current === null
+        ? null
+        : current.filter((service) => availableServices.includes(service)),
+    );
+  }, [availableServices]);
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,12 +101,13 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
 
     setLoading(true);
     try {
-      const formattedQ = query.startsWith("http")
-        ? query
-        : `${prefix !== "none" ? prefix + " " : ""}${query}`;
-      const data = await onSearch(formattedQ, filters);
-
-      setQuery("");
+      if (/^https?:\/\//i.test(query.trim())) {
+        await onDownload(query.trim(), filters);
+        return;
+      }
+      if (selectedServices.length === 0) return;
+      const data = await onSearch(query.trim(), filters, selectedServices);
+      setResults(data);
     } catch (err) {
       console.error("Search error", err);
     } finally {
@@ -72,236 +115,221 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
     }
   };
 
+  const triggerDownload = (item: SearchResultItem) => {
+    onDownload(item.item_url || item.url);
+    setEnqueuedIds((prev) => new Set(prev).add(item.id));
+  };
+
   const toggleFilter = (key: string) => {
     setFilters((prev) => ({ ...prev, [key]: !prev[key] }));
+    setResults([]);
   };
 
-  const cancelDownload = (item: SearchResultItem) => {
-    performPendingAction(item?.local_id, "cancel");
+  const toggleService = (service: string) => {
+    setResults([]);
+    setSelectedServiceOverride((current) => {
+      const selected = current ?? preferredServices;
+      return selected.includes(service)
+        ? selected.filter((value) => value !== service)
+        : [...selected, service];
+    });
   };
 
-  const getServiceText = (service: string) => {
+  const toggleAllServices = () => {
+    setResults([]);
+    setSelectedServiceOverride(
+      selectedServices.length === availableServices.length
+        ? preferredServices
+        : availableServices,
+    );
+  };
+
+
+  const getServiceBadge = (service: string) => {
+    const base = "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold";
     switch (service.toLowerCase()) {
-      case "spotify":
-        return "Spotify";
-      case "tidal":
-        return "Tidal";
+      case "spotify": return <span title="Downloads from Spotify" className={`${base} border-green-500/30 bg-green-500/10 text-green-300`}><Music2 className="h-3 w-3" />Spotify</span>;
+      case "tidal": return <span title="Downloads from Tidal" className={`${base} border-cyan-500/30 bg-cyan-500/10 text-cyan-300`}><Waves className="h-3 w-3" />Tidal</span>;
       case "apple_music":
-      case "applemusic":
-        return "Apple Music";
-      case "soundcloud":
-        return "SoundCloud";
+      case "applemusic": return <span title="Downloads from Apple Music" className={`${base} border-rose-500/30 bg-rose-500/10 text-rose-300`}><Music2 className="h-3 w-3" />Apple Music</span>;
+      case "soundcloud": return <span title="Downloads from SoundCloud" className={`${base} border-orange-500/30 bg-orange-500/10 text-orange-300`}><Cloud className="h-3 w-3" />SoundCloud</span>;
+      case "bandcamp": return <span title="Downloads from Bandcamp" className={`${base} border-sky-500/30 bg-sky-500/10 text-sky-300`}><Disc className="h-3 w-3" />Bandcamp</span>;
       case "youtube_music":
-      case "youtube":
-        return "YT Music";
-      default:
-        return "Generic";
+      case "youtube": return <span title="Downloads from YouTube Music" className={`${base} border-red-500/30 bg-red-500/10 text-red-300`}><CirclePlay className="h-3 w-3" />YouTube Music</span>;
+      case "crunchyroll": return <span title="Downloads from Crunchyroll" className={`${base} border-orange-500/30 bg-orange-500/10 text-orange-300`}><Tv className="h-3 w-3" />Crunchyroll</span>;
+      case "deezer": return <span title="Downloads from Deezer" className={`${base} border-violet-500/30 bg-violet-500/10 text-violet-300`}><Heart className="h-3 w-3" />Deezer</span>;
+      case "qobuz": return <span title="Downloads from Qobuz" className={`${base} border-sky-500/30 bg-sky-500/10 text-sky-300`}><Headphones className="h-3 w-3" />Qobuz</span>;
+      default: {
+        const label = getCatalogServiceLabel(service);
+        return <span title={`Downloads from ${label}`} className={`${base} border-[#4a4a4a] bg-[#282828] text-[#b3b3b3]`}><Download className="h-3 w-3" />{label}</span>;
+      }
     }
   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case "album":
-        return <Disc className="w-3.5 h-3.5" />;
-      case "playlist":
-        return <Music className="w-3.5 h-3.5" />;
+      case "album": return <Disc className="h-3.5 w-3.5" />;
+      case "playlist": return <Music className="h-3.5 w-3.5" />;
       case "podcast":
-      case "episode":
-        return <Mic className="w-3.5 h-3.5" />;
-      case "movie":
-        return <Film className="w-3.5 h-3.5" />;
-      case "show":
-        return <Tv className="w-3.5 h-3.5" />;
-      default:
-        return <Music className="w-3.5 h-3.5" />;
+      case "episode": return <Mic className="h-3.5 w-3.5" />;
+      case "movie": return <Film className="h-3.5 w-3.5" />;
+      case "show": return <Tv className="h-3.5 w-3.5" />;
+      default: return <Music className="h-3.5 w-3.5" />;
     }
   };
 
   const showThumbnails = config?.show_search_thumbnails ?? true;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-8 font-sans">
-      {/* Search Header Container */}
-      <div className="bg-white dark:bg-[#1a1a1a] rounded-3xl p-6 md:p-10 border border-gray-200 dark:border-neutral-800/60 shadow-sm">
-        <div className="max-w-4xl">
-          <h2 className="text-2xl font-medium text-gray-900 dark:text-neutral-100 mb-2">
-            Search & Download Media
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-neutral-400 mb-6">
-            Paste a link from supported platforms, or search by keywords. Target
-            format: {config?.track_file_format?.toUpperCase() || "FLAC"}.
+    <div className="spotify-scrollbar spotify-fade-up ots-page flex flex-col gap-8 overflow-x-hidden">
+      <section className="ots-hero relative overflow-hidden px-6 py-8 md:px-10 md:py-12">
+        <div className="relative max-w-3xl">
+          <div className="mb-5 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#1ed760]">
+            <Sparkles className="h-4 w-4" /> Your music, your library
+          </div>
+          <h1 className="max-w-2xl text-3xl font-black tracking-tight text-white md:text-5xl">
+            Find something to download
+          </h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-[#b3b3b3] md:text-base">
+            Search across your supported services or paste a direct link. Everything you choose lands in the download queue.
           </p>
 
-          <form onSubmit={handleSearchSubmit} className="flex flex-col gap-4">
-            {/* Search Bar Row */}
-            <div className="flex flex-col md:flex-row gap-3">
-              <div className="relative flex items-center bg-gray-50 dark:bg-neutral-900 border border-gray-300 dark:border-neutral-700 rounded-full flex-1 focus-within:ring-2 focus-within:ring-blue-500/50 transition-shadow overflow-hidden">
-                <Search className="w-5 h-5 text-gray-400 absolute left-4" />
+          <form onSubmit={handleSearchSubmit} className="mt-6">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="ots-input relative flex h-12 min-w-0 flex-1 items-center px-4">
+                <Search className="h-5 w-5 shrink-0 text-[#6f6f6f]" />
                 <input
+                  id="global-search"
                   type="text"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Paste URL or search keywords..."
-                  className="w-full bg-transparent pl-12 pr-4 py-3.5 text-base text-gray-900 dark:text-neutral-100 placeholder-gray-500 outline-none"
+                  onChange={(e) => onQueryChange(e.target.value)}
+                  placeholder="What do you want to download?"
+                  className="w-full bg-transparent px-3 py-0 text-sm text-white outline-none placeholder:text-[#6f6f6f]"
                 />
               </div>
-
               <button
                 type="submit"
-                disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-full font-medium transition-colors flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
+                disabled={loading || (!/^https?:\/\//i.test(query.trim()) && selectedServices.length === 0)}
+                className="ots-button ots-button-primary ots-button-lg shrink-0 px-7 text-sm"
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Parsing...
-                  </>
-                ) : (
-                  <>
-                    Search
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
+                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
+                {loading ? "Searching" : "Search"}
               </button>
             </div>
 
-            {/* Filters */}
-            <div className="flex items-center flex-wrap gap-2 pt-2">
-              <span className="text-xs font-medium text-gray-500 dark:text-neutral-500 flex items-center gap-1 mr-2">
-                <Filter className="w-3.5 h-3.5" /> Filters:
-              </span>
-              {Object.keys(filters).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleFilter(key)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-colors border ${
-                    filters[key]
-                      ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800/50"
-                      : "bg-transparent text-gray-600 border-gray-300 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                  }`}
-                >
-                  {key}
-                </button>
-              ))}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="mr-1 flex items-center gap-1.5 text-xs font-semibold text-[#8f8f8f]"><Filter className="h-3.5 w-3.5" /> Search in</span>
+              <div className="ots-browse-tabs max-w-full">
+                {Object.keys(filters).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={filters[key]}
+                    onClick={() => toggleFilter(key)}
+                    className={`ots-browse-tab ${filters[key] ? "ots-browse-tab-active" : ""}`}
+                  >
+                    {key.charAt(0).toUpperCase() + key.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="mr-1 flex items-center gap-1.5 text-xs font-semibold text-[#8f8f8f]"><Headphones className="h-3.5 w-3.5" /> Search services</span>
+              {availableServices.length > 0 ? (
+                <div className="ots-browse-tabs max-w-full">
+                  <button
+                    type="button"
+                    aria-pressed={selectedServices.length === availableServices.length}
+                    onClick={toggleAllServices}
+                    className={`ots-browse-tab ${selectedServices.length === availableServices.length ? "ots-browse-tab-active" : ""}`}
+                  >
+                    All services
+                  </button>
+                  {availableServices.map((service) => (
+                    <button
+                      key={service}
+                      type="button"
+                      aria-pressed={selectedServices.includes(service)}
+                      onClick={() => toggleService(service)}
+                      className={`ots-browse-tab ${selectedServices.includes(service) ? "ots-browse-tab-active" : ""}`}
+                    >
+                      {getCatalogServiceLabel(service)}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-[var(--ots-warning)]">Add or reconnect a searchable account first.</span>
+              )}
             </div>
           </form>
-        </div>
-      </div>
 
-      {/* Results */}
-      <div>
-        <div className="flex items-center justify-between mb-4 px-1">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">
-            Results
-          </h3>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-5 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1ed760]">Discover</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-white">Search results</h2>
+          </div>
           {results.length > 0 && (
-            <span className="text-xs font-medium bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400 px-2.5 py-1 rounded-full">
-              {results.length} items
-            </span>
+            <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs font-semibold text-[#b3b3b3]">
+              <span>{results.length} items</span>
+              {resultServiceCounts.map(([service, count]) => (
+                <span key={service} className="rounded border border-[var(--ots-border)] bg-[var(--ots-field)] px-2 py-1">
+                  {getCatalogServiceLabel(service)} {count}
+                </span>
+              ))}
+            </div>
           )}
         </div>
 
         {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-gray-500 gap-3">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-            <p className="text-sm font-medium">Fetching media data...</p>
+          <div className="ots-panel flex flex-col items-center justify-center py-20 text-[#b3b3b3]">
+            <Loader2 className="h-8 w-8 animate-spin text-[#1ed760]" />
+            <p className="mt-4 text-sm font-semibold">Fetching media data...</p>
           </div>
         ) : results.length === 0 ? (
-          <div className="bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-neutral-800/60 rounded-2xl p-12 text-center text-gray-500 dark:text-neutral-400 text-sm">
-            Enter a search term or paste a link to see results here.
+          <div className="ots-panel border-dashed px-6 py-16 text-center">
+            <Music className="mx-auto h-10 w-10 text-[#535353]" />
+            <p className="mt-4 text-sm font-semibold text-[#b3b3b3]">Search for an artist, track, album, or playlist to get started.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {results.map((item) => {
+              const isEnqueued = enqueuedIds.has(item.id);
               return (
-                <div
-                  key={item.local_id}
-                  className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-neutral-800/60 hover:shadow-md rounded-2xl p-4 flex flex-col transition-all group"
-                >
-                  {/* Image */}
+                  <article key={item.id} className="ots-card group p-3 transition-colors hover:bg-[#242424]">
+                  <div className="relative aspect-square overflow-hidden rounded-md bg-[#282828] shadow-lg">
+                    <img src={item.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"} alt={item.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" referrerPolicy="no-referrer" />
+                    {item.explicit && <span className="absolute bottom-2 left-2 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-bold text-white">E</span>}
+                    <button onClick={() => triggerDownload(item)} disabled={isEnqueued} className={`absolute bottom-2 right-2 flex h-11 w-11 items-center justify-center rounded-full text-white ots-on-green-text shadow-xl transition-all ${isEnqueued ? "bg-[#147f3e]" : "bg-[#147f3e] opacity-0 translate-y-2 group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105 hover:bg-[#158642]"}`} title={isEnqueued ? "Queued" : "Download"}>
+                      {isEnqueued ? <Check className="h-5 w-5" /> : <Download className="h-5 w-5" />}
+                    </button>
+                  </div>
 
-                  {showThumbnails && (
-                    <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-gray-100 dark:bg-neutral-800 mb-3 border border-gray-200/50 dark:border-neutral-700/50">
-                      <img
-                        src={
-                          item.thumbnail ||
-                          "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80"
-                        }
-                        alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        referrerPolicy="no-referrer"
-                      />
-                      {item.explicit && (
-                        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] font-bold text-white uppercase tracking-wider">
-                          E
-                        </div>
-                      )}
+                  <div className="min-w-0 pt-3">
+                    <h3 className="truncate text-sm font-bold text-white" title={item.name}>{item.name}</h3>
+                    <p className="mt-1 truncate text-xs text-[#b3b3b3]" title={`${item.artist}${item.album ? ` • ${item.album}` : ""}`}>{item.artist}{item.album && ` • ${item.album}`}</p>
+                    <div className="mt-3 flex items-center gap-1.5 truncate text-[10px] font-semibold text-[#8f8f8f]">
+                      {getTypeIcon(item.item_type)} <span className="capitalize">{item.item_type}</span><span>•</span>{getServiceBadge(item.item_service)}
                     </div>
-                  )}
-
-                  {/* Metadata */}
-                  <div className="flex-1 flex flex-col">
-                    <h4 className="font-medium text-gray-900 dark:text-neutral-100 text-sm md:text-base line-clamp-1 mb-0.5">
-                      {item.name}
-                    </h4>
-                    <p className="text-xs text-gray-500 dark:text-neutral-400 line-clamp-1 mb-2">
-                      {item.artist} {item.album && `• ${item.album}`}{" "}
-                      {item.playlist_name && `• ${item.playlist_name}`}
-                    </p>
-
-                    <div className="flex items-center gap-2 text-[10px] font-medium mt-auto mb-4">
-                      <span className="bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-neutral-300 px-2 py-0.5 rounded flex items-center gap-1 capitalize">
-                        {getTypeIcon(item.item_type)}
-                        {item.item_type}
-                      </span>
-                      <span className="text-gray-400 dark:text-neutral-500">
-                        •
-                      </span>
-                      <span className="text-gray-600 dark:text-neutral-400">
-                        {getServiceText(item.item_service)}
-                      </span>
-                      {item.release_year && (
-                        <>
-                          <span className="text-gray-400 dark:text-neutral-500">
-                            •
-                          </span>
-                          <span className="text-gray-500 dark:text-neutral-400">
-                            {item.release_year}
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 pt-3 border-t border-gray-100 dark:border-neutral-800/60">
-                      <button
-                        onClick={() => cancelDownload(item)}
-                        className="flex-1 font-medium py-2 px-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40"
-                      >
-                        <>
-                          <Trash className="w-4 h-4" />
-                          Cancel
-                        </>
+                    <div className="mt-3 flex items-center gap-2 border-t border-[#2e2e2e] pt-3">
+                      <button onClick={() => triggerDownload(item)} disabled={isEnqueued} className={`ots-button ots-button-sm flex-1 ${isEnqueued ? "ots-queued-state" : "ots-button-primary"}`}>
+                        {isEnqueued ? "Queued" : "Download"}
                       </button>
-
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2.5 rounded-xl bg-gray-50 text-gray-600 hover:bg-gray-100 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700 transition-colors"
-                        title="Open Source"
-                      >
-                        <ExternalLink className="w-4 h-4" />
+                      <a href={item.item_url} target="_blank" rel="noopener noreferrer" className="ots-icon-button" title="Open source">
+                        <ExternalLink className="h-4 w-4" />
                       </a>
                     </div>
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };

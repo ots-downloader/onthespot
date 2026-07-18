@@ -2,18 +2,48 @@ from html import unescape
 import json
 import re
 import requests
+from urllib.request import Request, urlopen
+from ..constants import HTTP_TIMEOUT
 from ..otsconfig import config
 from ..runtimedata import get_logger, account_pool
 from ..utils import conv_list_format, make_call
 
 logger = get_logger("api.bandcamp")
 
+_BANDCAMP_SEARCH_URL = (
+    "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
+)
+_BANDCAMP_SEARCH_TYPES = {
+    "track": ("t", "track"),
+    "album": ("a", "album"),
+    "artist": ("b", "artist"),
+}
+
+
+def _bandcamp_artwork_url(result):
+    """Return a public Bandcamp artwork URL from search API image IDs.
+
+    The search endpoint's ``img`` field omits the ``a`` prefix required by
+    album artwork URLs and currently returns the retired ``_23`` artist image
+    size.  Constructing the URL from the accompanying IDs avoids broken image
+    cards while retaining the raw URL as a fallback for future response types.
+    """
+    art_id = result.get("art_id")
+    if art_id not in (None, ""):
+        return f"https://f4.bcbits.com/img/a{str(art_id).zfill(10)}_16.jpg"
+
+    image_id = result.get("img_id")
+    if image_id not in (None, ""):
+        return f"https://f4.bcbits.com/img/{str(image_id).zfill(10)}_10.jpg"
+
+    return result.get("img") or ""
+
 
 def bandcamp_login_user(account):
     logger.info("Logging into Bandcamp account...")
     try:
         # Ping to verify connectivity
-        requests.get("https://bandcamp.com")
+        requests.get("https://bandcamp.com", timeout=HTTP_TIMEOUT)
         if account["uuid"] == "public_bandcamp":
             account_pool.append(
                 {
@@ -54,53 +84,65 @@ def bandcamp_add_account():
 
 
 def bandcamp_get_search_results(_, search_term, content_types):
+    """Search Bandcamp's JSON catalogue endpoint.
+
+    Bandcamp's former HTML search page now returns a JavaScript client
+    challenge to non-browser clients, so scraping ``/search`` produces an
+    empty result set.  The site uses this JSON endpoint for its own catalogue
+    search and returns stable IDs, URLs, artwork, and artist names directly.
+    """
     search_results = []
-    urls = []
-    if "track" in content_types:
-        urls.append(f"https://bandcamp.com/search?q={search_term}&item_type=t")
-    if "album" in content_types:
-        urls.append(f"https://bandcamp.com/search?q={search_term}&item_type=a")
-    if "artist" in content_types:
-        urls.append(f"https://bandcamp.com/search?q={search_term}&item_type=b")
+    max_results = max(1, int(config.get("max_search_results") or 10))
+    for requested_type in content_types:
+        type_details = _BANDCAMP_SEARCH_TYPES.get(requested_type)
+        if type_details is None:
+            continue
+        search_filter, item_type = type_details
+        request = Request(
+            _BANDCAMP_SEARCH_URL,
+            data=json.dumps(
+                {
+                    "search_text": search_term,
+                    "search_filter": search_filter,
+                    "full_page": True,
+                    "fan_id": None,
+                }
+            ).encode("utf-8"),
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0",
+            },
+            method="POST",
+        )
+        # Bandcamp's edge challenge currently rejects Python requests' TLS
+        # client fingerprint while accepting the standard-library client used
+        # here. HTTPError/URLError still bubble up to provider isolation.
+        with urlopen(request, timeout=HTTP_TIMEOUT[-1]) as response:  # noqa: S310
+            payload = json.loads(response.read().decode("utf-8"))
+        results = payload.get("auto", {}).get("results", [])
 
-    result_pattern = r'<li class="searchresult data-search"[^>]*>.*?</li>'
-    artwork_pattern = r'<a class="artcont" href=".*?">\s*<div class="art">\s*<img src="(?P<artwork_url>.*?)"\s*.*?>'
-    item_type_pattern = r'<div class="itemtype">\s*(?P<item_type>.*?)\s*</div>'
-    heading_pattern = (
-        r'<div class="heading">\s*<a href="(?P<url>.*?)".*?>(?P<title>.*?)</a>'
-    )
-
-    for url in urls:
-        data = make_call(url, skip_cache=True, text=True, use_ssl=True)
-
-        results = re.findall(result_pattern, data, re.DOTALL)
-        for result in results:
-            artwork_match = re.search(artwork_pattern, result, re.DOTALL)
-            artwork_url = artwork_match.group("artwork_url") if artwork_match else None
-
-            item_type_match = re.search(item_type_pattern, result, re.DOTALL)
-            item_type = (
-                item_type_match.group("item_type").strip().lower()
-                if item_type_match
-                else None
+        for result in results[:max_results]:
+            if result.get("type") != search_filter:
+                continue
+            item_url = str(
+                result.get("item_url_path") or result.get("item_url_root") or ""
+            ).split("?")[0]
+            item_id = str(result.get("id") or item_url)
+            title = str(result.get("name") or "").strip()
+            if not item_id or not item_url or not title:
+                continue
+            search_results.append(
+                {
+                    "item_id": item_id,
+                    "item_name": title,
+                    "item_by": result.get("band_name") or result.get("location"),
+                    "item_type": item_type,
+                    "item_service": "bandcamp",
+                    "item_url": item_url,
+                    "item_thumbnail_url": _bandcamp_artwork_url(result),
+                }
             )
-
-            heading_match = re.search(heading_pattern, result, re.DOTALL)
-            url = heading_match.group("url") if heading_match else None
-            title = heading_match.group("title").strip() if heading_match else None
-
-            if artwork_url and item_type and url and title:
-                search_results.append(
-                    {
-                        "item_id": url.split("?")[0],
-                        "item_name": title,
-                        "item_by": None,
-                        "item_type": item_type,
-                        "item_service": "bandcamp",
-                        "item_url": url.split("?")[0],  # Clean url
-                        "item_thumbnail_url": artwork_url,
-                    }
-                )
 
     return search_results
 

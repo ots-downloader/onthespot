@@ -23,14 +23,39 @@
    <br>
 </div>
 
-An easy to use music downloader written in Python. OnTheSpot has support for various music services and, unlike similar projects, downloaded files and metadata are sourced directly from the service of your choosing. The app includes a GUI, CLI, and Web UI frontend. To get started download the app [here](https://github.com/ots-downloader/onthespot/releases/latest) or run the command below.
+This branch provides OnTheSpot as a single-process web application: FastAPI
+serves both the API and the compiled React UI on port `6767`. It supports
+multi-service search, download profiles and queue controls, a local library,
+Spotify playlist sorting/automation, account workers, themes, diagnostics, and
+portable Docker/Unraid deployment.
+
+Quick start with Docker Compose:
+
 ```bash
-python3 -m pip install git+https://github.com/ots-downloader/onthespot
+git clone --branch fastapi-dev --single-branch https://github.com/JamyPatch44/onthespot.git
+cd onthespot
+cp .env.example .env
+docker compose up -d --build
 ```
-For more further documentation, please see the following:
+
+Open `http://127.0.0.1:6767`, or the mapped address of the Docker/Unraid host.
+See the installation guide before deploying so media, configuration, account
+sessions, and playlist automation are stored in persistent folders.
+
+Documentation:
 
 1. [**Installation Guide**](docs/INSTALLATION.md)
 2. [**Basic Usage Instructions**](docs/USAGE.md)
+3. [**Release Feature Matrix**](docs/FEATURE_MATRIX.md)
+
+### Remote Spotify Connect companion
+
+If the OnTheSpot web/API service runs remotely (for example in Docker on
+Unraid) while Spotify is running on a desktop or phone LAN, use the bundled
+[Spotify Connect companion](companion/README.md). It keeps Spotify's local
+mDNS discovery on the Spotify user's LAN and sends only a short-lived pairing
+payload to the OnTheSpot server over the server URL. Tailscale can carry that
+API request, but it does not extend Spotify's local discovery broadcasts.
 
 > [!CAUTION]
 > Currently 1 user has reported having their Spotify account locked, the account was returned to them by emailing support. This notice will be updated if any further cases come to our attention.

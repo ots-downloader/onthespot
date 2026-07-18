@@ -12,6 +12,7 @@ class ItemStatus(str, Enum):
 
     WAITING = "Waiting"
     DOWNLOADING = "Downloading"
+    PAUSED = "Paused"
     CONVERTING = "Converting"
     DECRYPTING = "Decrypting"
     GETTING_LYRICS = "Getting Lyrics"
@@ -27,6 +28,12 @@ class ItemStatus(str, Enum):
     CANCELLED = "Cancelled"
     UNAVAILABLE = "Unavailable"
     DELETED = "Deleted"
+
+
+# Shared connect/read bounds for catalogue and authentication HTTP requests.
+# Service downloads that intentionally stream large media use their own longer
+# timeout in services_middleware.py.
+HTTP_TIMEOUT = (10, 30)
 
 
 WVN_KEY = b64decode(
