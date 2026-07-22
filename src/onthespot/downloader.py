@@ -387,9 +387,14 @@ class DownloadWorker(QObject):
                 self._requeue_item(item)
 
             except Exception as exc:
-                logger.error(
-                    f"Unknown Exception: {exc}\nTraceback: {traceback.format_exc()}"
-                )
+                if item is not None and item["item_status"] == ItemStatus.CANCELLED:
+                    logger.info(
+                        f"Download cancelled by user for item '{item.get('item_id')}'"
+                    )
+                else:
+                    logger.error(
+                        f"Unknown Exception: {exc}\nTraceback: {traceback.format_exc()}"
+                    )
                 if item is not None:
                     if item["item_status"] != ItemStatus.CANCELLED:
                         item["item_status"] = ItemStatus.FAILED

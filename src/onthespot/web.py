@@ -425,6 +425,7 @@ def remove_account(uuid):
 def clear_cache():
     shutil.rmtree(os.path.join(cache_dir(), "reqcache"))
     shutil.rmtree(os.path.join(cache_dir(), "logs"))
+    shutil.rmtree(os.path.join(cache_dir(), "imgcache"), ignore_errors=True)
     return jsonify(success=True)
 
 
