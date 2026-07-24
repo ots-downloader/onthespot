@@ -221,6 +221,30 @@ def make_call(
     raise requests.exceptions.RequestException(error_msg)
 
 
+def get_cached_cover_bytes(image_url):
+    """Return raw cover-art bytes for *image_url*, cached on disk (keyed by
+    URL MD5, mirroring ``make_call``'s ``reqcache``) so the same artwork is
+    never re-downloaded for every track of an album/show."""
+    if not image_url:
+        return None
+    cache_path = os.path.join(
+        config.get("_cache_dir"), "imgcache", md5(image_url.encode()).hexdigest()
+    )
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    if os.path.isfile(cache_path):
+        with open(cache_path, "rb") as f:
+            return f.read()
+    try:
+        resp = requests.get(image_url, timeout=15)
+        resp.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to download cover image: {e}")
+        return None
+    with open(cache_path, "wb") as f:
+        f.write(resp.content)
+    return resp.content
+
+
 def format_local_id(item_id):
     """Return a unique local ID for *item_id* that does not clash with any
     existing entry in the download queue or pending dict."""
@@ -847,8 +871,11 @@ def set_music_thumbnail(filename, metadata):
     image_path = os.path.join(dirname, f"cover.{format}")
 
     logger.info("Fetching item thumbnail")
+    raw = get_cached_cover_bytes(metadata["image_url"])
+    if raw is None:
+        return
     try:
-        img = Image.open(BytesIO(requests.get(metadata["image_url"]).content))
+        img = Image.open(BytesIO(raw))
     except Exception as e:
         logger.error(f"Failed to download image: {e}")
         return

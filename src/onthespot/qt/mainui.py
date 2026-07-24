@@ -57,6 +57,7 @@ from ..api.generic import (
     generic_list_extractors,
 )
 from ..api.crunchyroll import crunchyroll_add_account, crunchyroll_get_episode_metadata
+from ..api.registry import get_metadata_function
 from ..downloader import DownloadWorker, RetryWorker
 from ..otsconfig import config, cache_dir
 from ..runtimedata import (
@@ -74,7 +75,7 @@ from ..runtimedata import (
 from .dl_progressbtn import DownloadActionsButtons
 from .settings import load_config, save_config
 from .thumb_listitem import LabelWithThumb
-from ..utils import is_latest_release, open_item, format_bytes
+from ..utils import get_cached_cover_bytes, is_latest_release, open_item, format_bytes
 from ..search import get_search_results
 
 logger = get_logger("gui.main_ui")
@@ -118,7 +119,7 @@ def create_failed_metadata(item, error_msg):
 
 
 class QueueWorker(QObject):
-    add_item_to_download_list = pyqtSignal(dict, dict)
+    add_item_to_download_list = pyqtSignal(dict, dict, bytes)
     error = pyqtSignal(str)
 
     def __init__(self):
@@ -136,13 +137,24 @@ class QueueWorker(QObject):
                     local_id = next(iter(pending))
                     with pending_lock:
                         item = pending.pop(local_id)
-
-                    self.add_item_to_download_list.emit(item, {})
-                    # Padding for 'GLib-ERROR : Creating pipes for GWakeup: Too many open files Trace/breakpoint trap'
-                    # when mass downloading cached responses with download queue thumbnails enabled.
-                    if config.get("show_download_thumbnails"):
-                        time.sleep(0.1)
-
+                    token = get_account_token(item["item_service"])
+                    metadata_fn = get_metadata_function(
+                        item["item_service"], item["item_type"]
+                    )
+                    item_metadata = metadata_fn(token, item["item_id"])
+                    if item_metadata:
+                        cover_bytes = (
+                            get_cached_cover_bytes(item_metadata.get("image_url"))
+                            or b""
+                        )
+                        self.add_item_to_download_list.emit(
+                            item, item_metadata, cover_bytes
+                        )
+                        # Padding for 'GLib-ERROR : Creating pipes for GWakeup: Too many open files Trace/breakpoint trap'
+                        # when mass downloading cached responses with download queue thumbnails enabled.
+                        if config.get("show_download_thumbnails"):
+                            time.sleep(0.1)
+                    continue
                 except Exception as e:
                     error_msg = f"Unknown Exception for {item}: {str(e)}"
                     logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
@@ -170,7 +182,7 @@ class QueueWorker(QObject):
 
                         # Create minimal metadata so item can be added to UI with "Failed" status
                         failed_metadata = create_failed_metadata(item, str(e))
-                        self.add_item_to_download_list.emit(item, failed_metadata)
+                        self.add_item_to_download_list.emit(item, failed_metadata, b"")
                     continue
             else:
                 time.sleep(0.2)
@@ -497,13 +509,7 @@ class MainWindow(QMainWindow):
             lambda: self.settings_scroll_area.verticalScrollBar().setValue(9999)
         )
 
-        self.clear_cache.clicked.connect(
-            lambda: (
-                shutil.rmtree(os.path.join(cache_dir(), "reqcache"))
-                and shutil.rmtree(os.path.join(cache_dir(), "logs"))
-                and self.show_popup_dialog(self.tr("Cache Cleared"))
-            )
-        )
+        self.clear_cache.clicked.connect(self.clear_app_cache)
         self.export_logs.clicked.connect(
             lambda: (
                 shutil.copy(
@@ -804,6 +810,12 @@ class MainWindow(QMainWindow):
         if new_path:
             temp_download_path.append(new_path)
 
+    def clear_app_cache(self):
+        shutil.rmtree(os.path.join(cache_dir(), "reqcache"))
+        shutil.rmtree(os.path.join(cache_dir(), "logs"))
+        shutil.rmtree(os.path.join(cache_dir(), "imgcache"), ignore_errors=True)
+        self.show_popup_dialog(self.tr("Cache Cleared"))
+
     def show_popup_dialog(self, txt, btn_hide=False, download=False):
         if download and config.get("disable_download_popups"):
             return
@@ -878,7 +890,11 @@ class MainWindow(QMainWindow):
             self.tbl_sessions.setCellWidget(rows, 6, remove_btn)
         logger.info("Accounts table was populated !")
 
-    def add_item_to_download_list(self, item, item_metadata):
+    def add_item_to_download_list(self, item, item_metadata, cover_bytes=b""):
+        # Check if this is a failed metadata fetch
+        is_metadata_fetch_failure = not item_metadata.get(
+            "is_playable", True
+        ) and "[FAILED]" in item_metadata.get("title", "")
 
         # Skip rendering QButtons if they are not in use
         copy_btn = None
@@ -944,7 +960,11 @@ class MainWindow(QMainWindow):
             delete_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             delete_btn.hide()
 
-        item_by = "ND"
+        item_by = (
+            item_metadata.get("artists")
+            if item_metadata.get("artists")
+            else item_metadata.get("show_name")
+        )
 
         playlist_name = ""
         playlist_by = ""
@@ -953,9 +973,16 @@ class MainWindow(QMainWindow):
             playlist_name = item.get("playlist_name")
             playlist_by = item.get("playlist_by")
         elif item["parent_category"] in ("album", "show"):
-            item_category = f"{item['parent_category'].title()}"
+            parent_name = (
+                item_metadata.get("album_name")
+                if item_metadata.get("album_name")
+                else item_metadata.get("show_name")
+            )
+            item_category = f"{item['parent_category'].title()}: {parent_name}"
         else:
-            item_category = f"{item['parent_category'].title()}"
+            item_category = (
+                f"{item['parent_category'].title()}: {item_metadata.get('title')}"
+            )
 
         item_service = item["item_service"]
         service_label = QTableWidgetItem(str(item_service).replace("_", " ").title())
@@ -979,12 +1006,19 @@ class MainWindow(QMainWindow):
 
         rows = self.tbl_dl_progress.rowCount()
         self.tbl_dl_progress.insertRow(rows)
-        title = "ND"
+        if item_metadata.get("explicit"):
+            title = config.get("explicit_label") + " " + item_metadata.get("title")
+        else:
+            title = item_metadata.get("title")
 
-        item_label = QLabel(self.tbl_dl_progress)
-        item_label.setText(title)
-        item_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        item_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        if config.get("show_download_thumbnails") and cover_bytes:
+            self.tbl_dl_progress.setRowHeight(rows, config.get("thumbnail_size"))
+            item_label = LabelWithThumb(title, image_bytes=cover_bytes)
+        else:
+            item_label = QLabel(self.tbl_dl_progress)
+            item_label.setText(title)
+            item_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            item_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         item_label.setStyleSheet("background-color: transparent;")
 
         # Add To List
@@ -1027,6 +1061,16 @@ class MainWindow(QMainWindow):
                     },
                 },
             }
+
+            # If this was a metadata fetch failure, immediately set status to Failed
+            if is_metadata_fetch_failure:
+                download_queue[item["local_id"]]["item_status"] = "Failed"
+                status_label.setText(self.tr("Failed"))
+                pbar.setValue(0)
+                cancel_btn.hide()
+                retry_btn.show()
+                if copy_btn:
+                    copy_btn.show()
 
     def update_item_in_download_list(self, item, status, progress):
         self.statistics.setText(
