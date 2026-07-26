@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import threading
 import time
@@ -93,6 +94,36 @@ def is_permanent_failure(exception):
     return False
 
 
+# Metadata lookups are throttled by every service at a different threshold, so a
+# failed lookup is retried a few times before the item is given up on.
+MAX_METADATA_ATTEMPTS = 3
+
+# The status codes are only matched next to wording that identifies them as HTTP
+# statuses. Track ids are base62 and routinely contain digit runs such as "403",
+# so matching a bare number would mistake permanent failures for throttling.
+TRANSIENT_ERROR_PATTERN = re.compile(
+    r"(?:https?\s+)?error\s+4(?:03|29)\b"
+    r"|\b4(?:03|29)\s+(?:client\s+)?error\b"
+    r"|\bforbidden\b"
+    r"|too many requests"
+    r"|rate.?limit"
+    r"|timed out"
+    r"|\btimeout\b",
+    re.IGNORECASE,
+)
+
+
+def is_transient_failure(exception):
+    """Check if exception represents a temporary failure worth retrying.
+
+    Services throttle metadata lookups rather than refusing them outright:
+    Spotify answers with HTTP 429, and yt-dlp surfaces YouTube's throttling as
+    ``HTTP Error 403: Forbidden``. Items rejected this way are still valid and
+    only need to be asked for again later.
+    """
+    return bool(TRANSIENT_ERROR_PATTERN.search(str(exception)))
+
+
 def create_failed_metadata(item, error_msg):
     """Create minimal metadata for items that failed metadata fetch"""
     return {
@@ -130,9 +161,35 @@ class QueueWorker(QObject):
     def start(self):
         self.thread.start()
 
+    def report_failed(self, item, error_str):
+        """Show *item* in the download list as Failed and notify the user.
+
+        Items are removed from ``pending`` before their metadata is fetched, so
+        any path that neither queues an item nor reports it here loses it: it is
+        gone from ``pending``, never reaches ``download_queue``, and never
+        appears in the UI. Every failure therefore ends up in this method.
+        """
+        service = item["item_service"].replace("_", " ").title()
+        item_type = item["item_type"]
+
+        if "404" in error_str or "not found" in error_str.lower():
+            user_msg = f"Track not found: Could not load {item_type} from {service}. The item may have been removed or is unavailable in your region."
+        elif "Max retries" in error_str or "exhausted" in error_str:
+            user_msg = f"Failed to load {item_type} from {service} after multiple retries. The service may be experiencing issues."
+        else:
+            user_msg = f"Failed to load {item_type} from {service}: {error_str}"
+
+        self.error.emit(user_msg)
+
+        # Minimal metadata so the item can be listed with a "Failed" status.
+        failed_metadata = create_failed_metadata(item, error_str)
+        self.add_item_to_download_list.emit(item, failed_metadata, b"")
+
     def run(self):
         while self.is_running:
             if pending:
+                item = None
+                local_id = None
                 try:
                     local_id = next(iter(pending))
                     with pending_lock:
@@ -154,35 +211,59 @@ class QueueWorker(QObject):
                         # when mass downloading cached responses with download queue thumbnails enabled.
                         if config.get("show_download_thumbnails"):
                             time.sleep(0.1)
+                    else:
+                        # A falsy return is a failure too; reporting it keeps the
+                        # item visible instead of dropping it without a trace.
+                        logger.warning(
+                            f"No metadata returned for {item['item_id']}, marking as Failed."
+                        )
+                        self.report_failed(
+                            item, "The service returned no metadata for this item."
+                        )
                     continue
                 except Exception as e:
+                    if item is None:
+                        # Failed before an item was claimed, so there is nothing
+                        # to requeue or report.
+                        logger.error(
+                            f"Queue worker error before claiming an item: {str(e)}\n"
+                            f"Traceback: {traceback.format_exc()}"
+                        )
+                        time.sleep(0.2)
+                        continue
+
                     error_msg = f"Unknown Exception for {item}: {str(e)}"
                     logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
 
-                    # Check if this is a permanent failure (e.g., max retries exhausted)
-                    if is_permanent_failure(e):
+                    # Throttling is temporary — put the item back and try again
+                    # later rather than failing it.
+                    attempts = item.get("metadata_attempts", 0) + 1
+                    if is_transient_failure(e) and not is_permanent_failure(e):
+                        if attempts < MAX_METADATA_ATTEMPTS:
+                            item["metadata_attempts"] = attempts
+                            with pending_lock:
+                                pending[local_id] = item
+                            logger.warning(
+                                f"Transient failure for {item['item_id']} "
+                                f"(attempt {attempts}/{MAX_METADATA_ATTEMPTS}), requeueing."
+                            )
+                            # Re-inserting appends to ``pending``, so other items
+                            # are served first; the pause covers a queue holding
+                            # only this item.
+                            time.sleep(max(1, int(config.get("download_delay") or 1)))
+                            continue
+                        logger.warning(
+                            f"Transient failure for {item['item_id']} persisted after "
+                            f"{MAX_METADATA_ATTEMPTS} attempts, marking as Failed."
+                        )
+                    elif is_permanent_failure(e):
                         logger.warning(
                             f"Permanent failure detected for {item['item_id']}, will not retry. Adding to download list as Failed."
                         )
 
-                        # Create user-friendly error message
-                        error_str = str(e)
-                        service = item["item_service"].replace("_", " ").title()
-                        item_type = item["item_type"]
-
-                        if "404" in error_str or "not found" in error_str.lower():
-                            user_msg = f"Track not found: Could not load {item_type} from {service}. The item may have been removed or is unavailable in your region."
-                        elif "Max retries" in error_str or "exhausted" in error_str:
-                            user_msg = f"Failed to load {item_type} from {service} after multiple retries. The service may be experiencing issues."
-                        else:
-                            user_msg = f"Failed to load {item_type} from {service}: {error_str}"
-
-                        # Emit error to UI
-                        self.error.emit(user_msg)
-
-                        # Create minimal metadata so item can be added to UI with "Failed" status
-                        failed_metadata = create_failed_metadata(item, str(e))
-                        self.add_item_to_download_list.emit(item, failed_metadata, b"")
+                    # Anything still here failed for a reason we cannot classify.
+                    # Report it rather than dropping it.
+                    self.report_failed(item, str(e))
                     continue
             else:
                 time.sleep(0.2)
