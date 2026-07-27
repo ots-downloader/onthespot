@@ -32,7 +32,7 @@ portable Docker/Unraid deployment.
 Quick start with Docker Compose:
 
 ```bash
-git clone --branch fastapi-dev --single-branch https://github.com/JamyPatch44/onthespot.git
+git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
 cd onthespot
 cp .env.example .env
 docker compose up -d --build
@@ -61,10 +61,10 @@ API request, but it does not extend Spotify's local discovery broadcasts.
 > Currently 1 user has reported having their Spotify account locked, the account was returned to them by emailing support. This notice will be updated if any further cases come to our attention.
 
 ## Screenshots
+
 ![Search](assets/images/search.png)
 ![Download Queue](assets/images/download_queue.png)
 ![Settings](assets/images/settings.png)
-
 
 ## Need More Help?
 
@@ -82,18 +82,24 @@ If you encounter bugs, have suggestions, or would like to help translate the app
 OnTheSpot is intended to be used in compliance with DMCA, Section 1201, for educational, private and fair use.
 OnTheSpot contributors are not responsible for any misuse of the program or source code.
 
-
 For further information, please see the following [**disclaimer**](DISCLAIMER.md).
 
 <!-- Issues Badge -->
+
 [issues-shield]: https://img.shields.io/github/issues/ots-downloader/onthespot?style=flat&label=Issues&labelColor=001224&color=1DB954
 [issues-url]: https://github.com/ots-downloader/onthespot/issues
+
 <!-- Stars Badge -->
+
 [stars-shield]: https://img.shields.io/github/stars/ots-downloader/onthespot?style=flat&label=Stars&labelColor=001224&color=1DB954
 [stars-url]: https://github.com/ots-downloader/onthespot/stargazers
+
 <!-- Downloads Badge -->
+
 [downloads-shield]: https://img.shields.io/github/downloads/ots-downloader/onthespot/total.svg?style=flat&label=Downloads&labelColor=001224&color=1DB954
 [downloads-url]: https://github.com/ots-downloader/onthespot/releases/
+
 <!-- License Badge -->
+
 [license-shield]: https://img.shields.io/github/license/justin025/onthespot?style=flat&label=License&labelColor=001224&color=1DB954
 [license-url]: https://github.com/ots-downloader/onthespot/blob/main/LICENSE
