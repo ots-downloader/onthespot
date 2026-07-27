@@ -48,64 +48,6 @@ def cache_dir():
     # configuration so Docker/Unraid's config volume persists it.
     return os.path.join(config_dir(), "cache")
 
-
-def _legacy_config_root() -> str | None:
-    """Return the accidental Windows config root used by older FastAPI builds."""
-    if os.name != "nt" or os.environ.get("ONTHESPOTDIR"):
-        return None
-    return os.path.dirname(_expanded_path("/root/.config/onthespot/otsconfig.json"))
-
-
-def _legacy_cache_roots() -> list[str]:
-    """Return cache locations used before persistent app-data storage."""
-    roots: list[str] = []
-    if os.name == "nt" and os.environ.get("TEMP"):
-        roots.append(_expanded_path(os.path.join(os.environ["TEMP"], "onthespot")))
-    elif os.environ.get("XDG_CACHE_HOME"):
-        roots.append(_expanded_path(os.path.join(os.environ["XDG_CACHE_HOME"], "onthespot")))
-    else:
-        roots.append(_expanded_path(os.path.join(os.path.expanduser("~"), ".cache", "onthespot")))
-    return roots
-
-
-def _copy_newer_tree(source: str, destination: str) -> None:
-    """Copy missing or newer files without deleting destination state."""
-    if not os.path.isdir(source) or os.path.abspath(source) == os.path.abspath(destination):
-        return
-    for root, _, files in os.walk(source):
-        relative = os.path.relpath(root, source)
-        target_root = destination if relative == "." else os.path.join(destination, relative)
-        os.makedirs(target_root, exist_ok=True)
-        for filename in files:
-            source_file = os.path.join(root, filename)
-            target_file = os.path.join(target_root, filename)
-            if not os.path.exists(target_file) or os.path.getmtime(source_file) > os.path.getmtime(target_file):
-                shutil.copy2(source_file, target_file)
-
-
-def _migrate_legacy_state(config_root: str) -> None:
-    """Move state from legacy roots while preserving any existing destination."""
-    os.makedirs(config_root, exist_ok=True)
-    destination_config = os.path.join(config_root, "otsconfig.json")
-    legacy_root = _legacy_config_root()
-    if legacy_root:
-        legacy_config = os.path.join(legacy_root, "otsconfig.json")
-        if os.path.isfile(legacy_config) and (
-            not os.path.isfile(destination_config)
-            or os.path.getmtime(legacy_config) > os.path.getmtime(destination_config)
-        ):
-            if os.path.isfile(destination_config):
-                backup = destination_config + ".pre-migration.bak"
-                if not os.path.exists(backup):
-                    shutil.copy2(destination_config, backup)
-            shutil.copy2(legacy_config, destination_config)
-            logger.info("Migrated OnTheSpot configuration from the legacy Windows path")
-        _copy_newer_tree(os.path.join(legacy_root, "cache"), cache_dir())
-
-    for legacy_cache in _legacy_cache_roots():
-        _copy_newer_tree(legacy_cache, cache_dir())
-
-
 class Config:
     def __init__(self):
         """
@@ -124,7 +66,7 @@ class Config:
         If any step fails, appropriate fallback mechanisms are used to ensure that the application can still run.
         """
         config_root = config_dir()
-        _migrate_legacy_state(config_root)
+        
         self.__cfg_path = os.path.join(config_root, "otsconfig.json")
         self.__default_cfg_path = os.path.join(
             os.path.dirname(__file__), "otsconfig_default.json"
@@ -177,26 +119,26 @@ class Config:
         # ``cache_metadata_in_queue`` was the original UI key for the global
         # API-cache switch.  Preserve an existing user's choice while moving
         # to the accurately named setting.
-        if "cache_api_calls" not in self.__config:
-            self.__config["cache_api_calls"] = bool(
-                self.__config.get(
-                    "cache_metadata_in_queue",
-                    self.__template_data.get("cache_api_calls", True),
-                )
-            )
+        # if "cache_api_calls" not in self.__config:
+        #    self.__config["cache_api_calls"] = bool(
+        #        self.__config.get(
+        #            "cache_metadata_in_queue",
+        #            self.__template_data.get("cache_api_calls", True),
+        #        )
+        #    )
 
         # The bundled defaults are written for the Linux/Docker image. When
         # running the API directly on Windows, translate those container paths
         # to the user's normal Music/Videos folders instead of creating a
         # literal ``C:\\root`` directory.
-        if os.name == "nt":
-            for path_key in ("audio_download_path", "video_download_path"):
-                configured_path = self.__config.get(path_key)
-                normalized_path = str(configured_path or "").replace("\\", "/")
-                if normalized_path.startswith("/root/"):
-                    self.__config[path_key] = os.path.join(
-                        os.path.expanduser("~"), normalized_path.removeprefix("/root/")
-                    )
+        # if os.name == "nt":
+        #     for path_key in ("audio_download_path", "video_download_path"):
+        #         configured_path = self.__config.get(path_key)
+        #         normalized_path = str(configured_path or "").replace("\\", "/")
+        #         if normalized_path.startswith("/root/"):
+        #             self.__config[path_key] = os.path.join(
+        #                 os.path.expanduser("~"), normalized_path.removeprefix("/root/")
+        #             )
 
         # Make Download Dirs
         try:
