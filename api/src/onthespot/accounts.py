@@ -43,12 +43,16 @@ class AccountPoolLoader:
     def stop(self) -> None:
         logger.info("Stopping AccountPool Worker")
         self.is_running = False
-        self.thread.join()
+        self.thread.join(timeout=5)
 
     def run(self) -> None:
         """Iterate saved accounts, log each one in, and emit progress."""
         login_succeeded = False
+        
         for account in config.get("accounts"):
+            if self.is_running is not True:
+                logger.warning("Login Worker Not Running")
+                break
             service = account["service"]
             if not account["active"]:
                 continue

@@ -385,7 +385,7 @@ def relogin():
     """
     Reloads the account pool to refresh accounts.
     """
-    time.sleep(1)
+    
     global fillaccountpool
     previous_worker = fillaccountpool
     if previous_worker is not None and previous_worker.is_running:
@@ -2140,7 +2140,7 @@ async def add_account(service: str, item: AccountData | None = None):
         case _:
             raise NotImplementedError
     if found:
-        relogin()
+        await run_in_threadpool(relogin)
     notification_hook(title="Logging in...")
     return found
 
@@ -2280,7 +2280,7 @@ async def get_account_health():
 
 @app.post("/accounts/reconnect")
 async def reconnect_accounts():
-    relogin()
+    await run_in_threadpool(relogin)
     notification_hook(
         "Reconnecting accounts", "The account pool is refreshing in the background."
     )
