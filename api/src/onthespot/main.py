@@ -1355,6 +1355,7 @@ async def retry_failed_items():
             item["item_status"] = ItemStatus.WAITING
             item["error"] = ""
             item["_stats_recorded"] = False
+            item["queue_preloaded"] = None
             item["retry_count"] = int(item.get("retry_count", 0) or 0) + 1
             download_queue.pop(item["local_id"], None)
 
