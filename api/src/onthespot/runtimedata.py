@@ -24,7 +24,7 @@ import time
 import asyncio
 from functools import wraps
 from logging.handlers import RotatingFileHandler
-from threading import Event, Lock
+from threading import Event, Lock, Thread
 from .otsconfig import config
 from .constants import ItemStatus
 from .resources.exceptions import DownloadCancelled
@@ -85,8 +85,8 @@ sys.excepthook = _handle_uncaught_exception
 
 # Thread Safe Queue Adapter, uses deque with lock
 class ThreadSafeDeque:
-    def __init__(self):
-        self._deque = deque()
+    def __init__(self, maxsize=100):
+        self._deque = deque(maxlen=maxsize)
         self._lock = threading.Lock()
 
     def put_nowait(self, item):
@@ -138,7 +138,7 @@ temp_download_path: list = []
 parsing: dict = {}
 
 #: Items waiting to be moved to the download queue.
-pending = ThreadSafeDeque()
+pending = ThreadSafeDeque(maxsize=1000)
 
 #: Active download queue (local_id → item dict).
 download_queue: dict = {}
@@ -151,7 +151,7 @@ download_paused = Event()
 # browser tabs to consume each other's events and was unsafe when worker
 # threads published into the queue.  Each connection now owns a bounded queue
 # on its own event loop.
-_websocket_subscribers: dict[str, asyncio.Queue] = {}
+_websocket_subscribers: dict[str, ThreadSafeDeque] = {}
 
 # LOCK HELPERS
 parsing_lock = Lock()
@@ -180,7 +180,7 @@ def subscribe_websocket(user_id: str) -> tuple[str, asyncio.Queue]:
             event_queue = exists
         except (KeyError, IndexError):
             logger.info("No queue for userid %s , creating new one", user_id)
-            event_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+            event_queue: ThreadSafeDeque = ThreadSafeDeque(maxsize=100)
             _websocket_subscribers[subscription_id] = event_queue
     return subscription_id, event_queue
 
@@ -191,13 +191,9 @@ def unsubscribe_websocket(subscription_id: str) -> None:
         _websocket_subscribers.pop(subscription_id, None)
 
 
-def _enqueue_websocket_event(event_queue: asyncio.Queue, data: dict) -> None:
+def _enqueue_websocket_event(event_queue: ThreadSafeDeque, data: dict) -> None:
     """Add an event on the subscriber's loop, dropping only its oldest item."""
-    if event_queue.full():
-        try:
-            event_queue.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
+
     event_queue.put_nowait(data)
 
 
@@ -212,10 +208,9 @@ def websocket_event(etype: str, event=""):
     for subscription_id, event_queue in subscribers:
         try:
             event_queue.put_nowait(data)
-        except asyncio.QueueShutDown:
+        except Exception as e:
+            logger.error("Queue Error %s id:%s",e, subscription_id)
             stale_subscriptions.append(subscription_id)
-        except asyncio.QueueFull:
-            logger.error("Queue Full for %s", subscription_id)
 
     if stale_subscriptions:
         with websocket_queue_lock:
