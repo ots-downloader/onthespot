@@ -167,7 +167,7 @@ def _response_cache_ttl(response, default_ttl):
     do not spend the user's API quota.  ``no-store`` remains authoritative.
     """
     cache_control = str(response.headers.get("Cache-Control") or "").casefold()
-    if "no-store" in cache_control:
+    if "no-store" in cache_control or "private" in cache_control:
         return 0
     max_age_match = re.search(r"max-age\s*=\s*(\d+)", cache_control)
     if max_age_match:

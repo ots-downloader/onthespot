@@ -1,3 +1,4 @@
+from ast import Raise
 import os
 import asyncio
 import secrets
@@ -94,9 +95,6 @@ from .utils import format_local_id, open_item, retry_single_item
 from .statistics import clear_history, export_history, get_statistics, import_history
 from .updater import (
     check_for_updates,
-    install_update,
-    start_update_checker,
-    stop_update_checker,
 )
 from .playlist_automation import PlaylistAutomationError, playlist_automation
 from .export_locations import (
@@ -413,30 +411,27 @@ async def lifespan(app: FastAPI):
     downloadworker.start()
     if config.get("enable_retry_worker"):
         retryworker.start()
-    if config.get("mirror_spotify_playback"):
-        spotifymirrorworker.start()
+
     fillaccountpool.start()
     # Keep OnTheSpot visible in Spotify's Connect device picker even when an
     # account was already configured before this process started.
     # Zeroconf registration performs a blocking mDNS operation.  Run it
     # outside the event-loop thread so the API can start cleanly and Spotify
     # Connect can finish advertising the device without EventLoopBlocked.
-    await asyncio.to_thread(start_spotify_connect_service)
-    start_update_checker(
-        lambda title, message, url: notification_hook(title, message, url)
-    )
-    playlist_automation.start_scheduler()
+    # await asyncio.to_thread(start_spotify_connect_service)
+
+
     logger.info("Initializing...")
 
     yield
 
     parsing_worker.stop()
     downloadworker.stop()
-    spotifymirrorworker.stop()
+
     fillaccountpool.stop()
-    stop_spotify_connect_service()
-    stop_update_checker()
-    playlist_automation.stop_scheduler()
+    # stop_spotify_connect_service()
+    
+
     logger.info("Application shutdown")
 
 
@@ -1994,20 +1989,22 @@ async def import_backup(payload: dict):
 async def check_version():
     # Keep this legacy boolean endpoint for the existing diagnostics view.
     status = await run_in_threadpool(check_for_updates)
-    return not bool(status.get("update_available"))
-
+    try:
+        status = not bool(status.get("update_available", False))
+        return status
+    except Exception:
+        return status
 
 @app.get("/updates/check")
 async def updates_check(force: bool = False):
     """Return release metadata and the best asset for this platform."""
-    return await run_in_threadpool(check_for_updates, force)
+    return await run_in_threadpool(check_for_updates)
 
 
 @app.post("/updates/install")
 async def updates_install():
-    """Download and stage an update where the current build supports it."""
-    result = await run_in_threadpool(install_update)
-    return JSONResponse(status_code=200, content=result)
+    raise NotImplementedError
+    
 
 
 # ACCOUNTS ENDPOINTS

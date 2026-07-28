@@ -4,7 +4,7 @@ FROM node:22-alpine AS ui-builder
 
 WORKDIR /ui
 COPY ui/package*.json ./
-RUN npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 COPY ui/ ./
 RUN npm run build
 
@@ -13,7 +13,7 @@ FROM python:3.12-slim AS api-builder
 
 WORKDIR /build
 ENV DEBIAN_FRONTEND=noninteractive
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.33-python3.12-trixie-slim /uv /uvx /bin/
 COPY api/ ./
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/* \
@@ -41,7 +41,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 EXPOSE 6767 6768
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=60s --timeout=5s --start-period=60s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6767/config/get', timeout=3).read()"]
 
 CMD ["/app/.venv/bin/python", "-m", "uvicorn", "onthespot.main:app", "--app-dir", "/app/app", "--host", "0.0.0.0", "--port", "6767"]

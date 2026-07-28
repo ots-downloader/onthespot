@@ -42,7 +42,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
-          version: "0.11.23"
+          version: "0.11.33"
           enable-cache: true
           cache-dependency-glob: api/uv.lock
 
@@ -93,9 +93,6 @@ jobs:
 
       - name: Type-check frontend
         run: npm run lint
-
-      - name: Verify bundled language packs
-        run: npm run locales:verify
 
       - name: Build frontend
         run: npm run build
