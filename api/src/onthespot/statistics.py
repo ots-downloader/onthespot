@@ -110,6 +110,7 @@ def export_history() -> dict[str, Any]:
 
 
 def import_history(value: Any) -> bool:
+    raise NotImplementedError
     if not isinstance(value, dict) or not isinstance(value.get("events", []), list):
         return False
     history = _empty_history()

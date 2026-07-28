@@ -28,7 +28,12 @@ import {
   ThemeMode,
   ThemePreset,
 } from "../types";
-import { DownloadProfile, exportBackup, importBackup, saveBackupFile } from "../lib/api";
+import {
+  DownloadProfile,
+  exportBackup,
+  importBackup,
+  saveBackupFile,
+} from "../lib/api";
 import { translate } from "../lib/i18n";
 import { DownloadProfilesPanel } from "./DownloadProfilesPanel";
 import { UpdatePanel } from "./UpdatePanel";
@@ -87,7 +92,11 @@ const APPLICATION_LANGUAGES = [
   { value: "uk_UA", label: "Українська" },
 ] as const;
 
-const SETTINGS_NAV_ITEMS: Array<{ id: SettingsSection; icon: React.ElementType; label: string }> = [
+const SETTINGS_NAV_ITEMS: Array<{
+  id: SettingsSection;
+  icon: React.ElementType;
+  label: string;
+}> = [
   { id: "search", icon: Search, label: "API config" },
   { id: "audio", icon: Music, label: "Audio Outputs" },
   { id: "backup", icon: Archive, label: "Backup & Restore" },
@@ -100,12 +109,18 @@ const SETTINGS_NAV_ITEMS: Array<{ id: SettingsSection; icon: React.ElementType; 
 
 const readSettingsNavOrder = (): SettingsSection[] => {
   try {
-    const stored = JSON.parse(window.localStorage.getItem("ots-settings-nav-order") || "[]");
+    const stored = JSON.parse(
+      window.localStorage.getItem("ots-settings-nav-order") || "[]",
+    );
     if (Array.isArray(stored)) {
-      const valid = stored.filter((id): id is SettingsSection => SETTINGS_NAV_ITEMS.some((item) => item.id === id));
+      const valid = stored.filter((id): id is SettingsSection =>
+        SETTINGS_NAV_ITEMS.some((item) => item.id === id),
+      );
       if (valid.length === SETTINGS_NAV_ITEMS.length) return valid;
     }
-  } catch { /* Use the default order. */ }
+  } catch {
+    /* Use the default order. */
+  }
   return SETTINGS_NAV_ITEMS.map((item) => item.id);
 };
 
@@ -131,7 +146,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onLoadCustomTheme,
   onDeleteCustomTheme,
 }) => {
-  const [section, setSection] = useState<SettingsSection>(initialSection || "general");
+  const [section, setSection] = useState<SettingsSection>(
+    initialSection || "general",
+  );
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -139,10 +156,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [customThemeName, setCustomThemeName] = useState("");
   const [customThemeMessage, setCustomThemeMessage] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
-  const [formatterTarget, setFormatterTarget] = useState<FormatterKey>("track_path_formatter");
-  const [settingsNavOrder, setSettingsNavOrder] = useState<SettingsSection[]>(readSettingsNavOrder);
+  const [formatterTarget, setFormatterTarget] = useState<FormatterKey>(
+    "track_path_formatter",
+  );
+  const [settingsNavOrder, setSettingsNavOrder] =
+    useState<SettingsSection[]>(readSettingsNavOrder);
   const [editingSettingsNav, setEditingSettingsNav] = useState(false);
-  const [draggedSettingsNav, setDraggedSettingsNav] = useState<SettingsSection | null>(null);
+  const [draggedSettingsNav, setDraggedSettingsNav] =
+    useState<SettingsSection | null>(null);
   const activeCustomPalette = customTheme[themeMode];
 
   useEffect(() => {
@@ -167,13 +188,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   };
 
   const handleApplicationLanguageChange = async (language: string) => {
-    const languageIndex = APPLICATION_LANGUAGES.findIndex((option) => option.value === language);
+    const languageIndex = APPLICATION_LANGUAGES.findIndex(
+      (option) => option.value === language,
+    );
     await onUpdateValue("language", language);
     await onUpdateValue("language_index", Math.max(languageIndex, 0));
   };
 
   const insertFormatterVariable = async (variable: string) => {
-    const input = document.getElementById(`setting-${formatterTarget}`) as HTMLInputElement | null;
+    const input = document.getElementById(
+      `setting-${formatterTarget}`,
+    ) as HTMLInputElement | null;
     const current = String(config[formatterTarget] ?? "");
     const start = input?.selectionStart ?? current.length;
     const end = input?.selectionEnd ?? start;
@@ -181,13 +206,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     const next = `${current.slice(0, start)}${token}${current.slice(end)}`;
     await onUpdateValue(formatterTarget, next);
     window.requestAnimationFrame(() => {
-      const updatedInput = document.getElementById(`setting-${formatterTarget}`) as HTMLInputElement | null;
+      const updatedInput = document.getElementById(
+        `setting-${formatterTarget}`,
+      ) as HTMLInputElement | null;
       updatedInput?.focus();
-      updatedInput?.setSelectionRange(start + token.length, start + token.length);
+      updatedInput?.setSelectionRange(
+        start + token.length,
+        start + token.length,
+      );
     });
   };
 
-  const handleCustomPaletteColorChange = (key: keyof CustomThemePalette, value: string) => {
+  const handleCustomPaletteColorChange = (
+    key: keyof CustomThemePalette,
+    value: string,
+  ) => {
     void onCustomThemeChange({
       ...customTheme,
       mode: themeMode,
@@ -235,11 +268,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       custom: window.localStorage.getItem("ots-custom-theme"),
       saved: window.localStorage.getItem("ots-custom-themes"),
     };
-    const path = await saveBackupFile({ ...data, themes }, config?.export_folder_path || "");
-    setBackupMessage(path ? `Backup saved to ${path}` : "Could not save the backup. Check the default export folder and try again.");
+    const path = await saveBackupFile(
+      { ...data, themes },
+      config?.export_folder_path || "",
+    );
+    setBackupMessage(
+      path
+        ? `Backup saved to ${path}`
+        : "Could not save the backup. Check the default export folder and try again.",
+    );
   };
 
   const triggerImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    window.alert("Not Implemented Yet.");
+    return;
     const file = event.target.files?.[0];
     if (!file) return;
     setImporting(true);
@@ -249,10 +291,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         const themes = data?.themes;
         if (themes && typeof themes === "object") {
           const bundle = themes as Record<string, unknown>;
-          if (typeof bundle.preset === "string") window.localStorage.setItem("ots-theme-preset", bundle.preset);
-          if (typeof bundle.mode === "string") window.localStorage.setItem("ots-theme-mode", bundle.mode);
-          if (typeof bundle.custom === "string") window.localStorage.setItem("ots-custom-theme", bundle.custom);
-          if (typeof bundle.saved === "string") window.localStorage.setItem("ots-custom-themes", bundle.saved);
+          if (typeof bundle.preset === "string")
+            window.localStorage.setItem("ots-theme-preset", bundle.preset);
+          if (typeof bundle.mode === "string")
+            window.localStorage.setItem("ots-theme-mode", bundle.mode);
+          if (typeof bundle.custom === "string")
+            window.localStorage.setItem("ots-custom-theme", bundle.custom);
+          if (typeof bundle.saved === "string")
+            window.localStorage.setItem("ots-custom-themes", bundle.saved);
         }
         window.location.reload();
       }
@@ -319,7 +365,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         type={type}
         value={config[key] ?? ""}
         onFocus={() => {
-          if (key === "track_path_formatter" || key === "playlist_path_formatter") {
+          if (
+            key === "track_path_formatter" ||
+            key === "playlist_path_formatter"
+          ) {
             setFormatterTarget(key);
           }
         }}
@@ -383,8 +432,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       <button
         draggable={editingSettingsNav}
         onDragStart={() => setDraggedSettingsNav(id)}
-        onDragOver={(event) => { if (editingSettingsNav) event.preventDefault(); }}
-        onDrop={(event) => { event.preventDefault(); if (!draggedSettingsNav || draggedSettingsNav === id) return; setSettingsNavOrder((current) => { const next = [...current]; const from = next.indexOf(draggedSettingsNav); const to = next.indexOf(id); next.splice(from, 1); next.splice(to, 0, draggedSettingsNav); window.localStorage.setItem("ots-settings-nav-order", JSON.stringify(next)); return next; }); setDraggedSettingsNav(null); }}
+        onDragOver={(event) => {
+          if (editingSettingsNav) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          if (!draggedSettingsNav || draggedSettingsNav === id) return;
+          setSettingsNavOrder((current) => {
+            const next = [...current];
+            const from = next.indexOf(draggedSettingsNav);
+            const to = next.indexOf(id);
+            next.splice(from, 1);
+            next.splice(to, 0, draggedSettingsNav);
+            window.localStorage.setItem(
+              "ots-settings-nav-order",
+              JSON.stringify(next),
+            );
+            return next;
+          });
+          setDraggedSettingsNav(null);
+        }}
         onDragEnd={() => setDraggedSettingsNav(null)}
         onClick={() => setSection(id)}
         className={`ots-nav-item flex w-full shrink-0 items-center gap-3 text-left text-sm font-bold transition-colors lg:shrink ${editingSettingsNav ? "cursor-grab" : ""} ${
@@ -393,7 +460,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             : "text-[#8f8f8f] hover:bg-[#242424] hover:text-white"
         }`}
       >
-        {editingSettingsNav && <GripVertical className="h-4 w-4 shrink-0 text-[#777]" aria-label="Drag to reorder" />}
+        {editingSettingsNav && (
+          <GripVertical
+            className="h-4 w-4 shrink-0 text-[#777]"
+            aria-label="Drag to reorder"
+          />
+        )}
         <Icon className="w-[18px] h-[18px]" />
         <span>{label}</span>
       </button>
@@ -447,7 +519,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         {/* Navigation Sidebar */}
         <div className="lg:sticky lg:top-8 lg:col-span-1">
           <div className="ots-panel flex flex-row gap-1 overflow-x-auto p-2 shadow-xl shadow-black/10 lg:flex-col">
-            {settingsNavOrder.map((id) => { const item = SETTINGS_NAV_ITEMS.find((candidate) => candidate.id === id)!; return <NavButton key={item.id} {...item} />; })}
+            {settingsNavOrder.map((id) => {
+              const item = SETTINGS_NAV_ITEMS.find(
+                (candidate) => candidate.id === id,
+              )!;
+              return <NavButton key={item.id} {...item} />;
+            })}
           </div>
           <button
             type="button"
@@ -460,7 +537,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             aria-pressed={editingSettingsNav}
           >
             <GripVertical className="h-5 w-5" />
-            <span>{editingSettingsNav ? translate(config.language, "done_editing", "Done editing") : translate(config.language, "edit_sections", "Edit sections")}</span>
+            <span>
+              {editingSettingsNav
+                ? translate(config.language, "done_editing", "Done editing")
+                : translate(config.language, "edit_sections", "Edit sections")}
+            </span>
           </button>
         </div>
 
@@ -556,12 +637,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     htmlFor="application-language"
                     className="text-sm font-medium text-gray-900 dark:text-neutral-100"
                   >
-                    {translate(config.language, "application_language", "Application Language")}
+                    {translate(
+                      config.language,
+                      "application_language",
+                      "Application Language",
+                    )}
                   </label>
                   <select
                     id="application-language"
-                    value={APPLICATION_LANGUAGES.some((option) => option.value === config.language) ? config.language : "en_US"}
-                    onChange={(event) => void handleApplicationLanguageChange(event.target.value)}
+                    value={
+                      APPLICATION_LANGUAGES.some(
+                        (option) => option.value === config.language,
+                      )
+                        ? config.language
+                        : "en_US"
+                    }
+                    onChange={(event) =>
+                      void handleApplicationLanguageChange(event.target.value)
+                    }
                     className="ots-select w-full cursor-pointer appearance-none text-sm"
                   >
                     {APPLICATION_LANGUAGES.map((option) => (
@@ -571,7 +664,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     ))}
                   </select>
                   <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5 leading-relaxed">
-                    Uses the bundled application language pack. Your library metadata and filenames are never sent to a translation service.
+                    Uses the bundled application language pack. Your library
+                    metadata and filenames are never sent to a translation
+                    service.
                   </p>
                 </div>
                 <div className="py-2">
@@ -699,8 +794,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
               <div className="mb-6 border-t border-gray-100 pt-6 dark:border-neutral-800/60">
                 <div className="mb-4">
-                  <h4 className="flex items-center gap-2 text-base font-bold text-gray-900 dark:text-neutral-100">Playlist folder organization</h4>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">Keep playlist downloads together and choose the folder and filename pattern used for tracks from playlists.</p>
+                  <h4 className="flex items-center gap-2 text-base font-bold text-gray-900 dark:text-neutral-100">
+                    Playlist folder organization
+                  </h4>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
+                    Keep playlist downloads together and choose the folder and
+                    filename pattern used for tracks from playlists.
+                  </p>
                 </div>
                 {renderToggle(
                   "use_playlist_path",
@@ -708,33 +808,109 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   "Enable this to use the Playlist Path Formatter below instead of the regular track formatter for playlist downloads.",
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="w-full text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Track template presets</span>
+                  <span className="w-full text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                    Track template presets
+                  </span>
                   {[
-                    ["Artist / Album / Track", "Tracks/{album_artist}/{album}/{track_number} - {name}"],
+                    [
+                      "Artist / Album / Track",
+                      "Tracks/{album_artist}/{album}/{track_number} - {name}",
+                    ],
                     ["Album / Track", "Tracks/{album}/{track_number} - {name}"],
-                  ].map(([label, value]) => <button key={value} type="button" onClick={() => void onUpdateValue("track_path_formatter", value)} className="ots-button ots-button-secondary text-xs">{label}</button>)}
-                  <span className="mt-2 w-full text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Playlist folder presets</span>
+                  ].map(([label, value]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() =>
+                        void onUpdateValue("track_path_formatter", value)
+                      }
+                      className="ots-button ots-button-secondary text-xs"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <span className="mt-2 w-full text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                    Playlist folder presets
+                  </span>
                   {[
-                    ["Playlist / Artist", "Playlists/{playlist_name}/{artist}/{track_number} - {name}"],
-                    ["Playlist / Album", "Playlists/{playlist_name}/{album}/{track_number} - {name}"],
-                  ].map(([label, value]) => <button key={value} type="button" onClick={() => void onUpdateValue("playlist_path_formatter", value)} className="ots-button ots-button-secondary text-xs">{label}</button>)}
+                    [
+                      "Playlist / Artist",
+                      "Playlists/{playlist_name}/{artist}/{track_number} - {name}",
+                    ],
+                    [
+                      "Playlist / Album",
+                      "Playlists/{playlist_name}/{album}/{track_number} - {name}",
+                    ],
+                  ].map(([label, value]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() =>
+                        void onUpdateValue("playlist_path_formatter", value)
+                      }
+                      className="ots-button ots-button-secondary text-xs"
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
                 <div className="mt-4 border-t border-gray-100 pt-4 dark:border-neutral-800/60">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="w-full text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Build a custom formatter</span>
-                    {(["track_path_formatter", "playlist_path_formatter"] as FormatterKey[]).map((key) => (
-                      <button key={key} type="button" onClick={() => { setFormatterTarget(key); document.getElementById(`setting-${key}`)?.focus(); }} className={`ots-button text-xs ${formatterTarget === key ? "ots-button-primary" : "ots-button-secondary"}`}>
-                        {key === "track_path_formatter" ? "Track formatter" : "Playlist formatter"}
+                    <span className="w-full text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                      Build a custom formatter
+                    </span>
+                    {(
+                      [
+                        "track_path_formatter",
+                        "playlist_path_formatter",
+                      ] as FormatterKey[]
+                    ).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setFormatterTarget(key);
+                          document.getElementById(`setting-${key}`)?.focus();
+                        }}
+                        className={`ots-button text-xs ${formatterTarget === key ? "ots-button-primary" : "ots-button-secondary"}`}
+                      >
+                        {key === "track_path_formatter"
+                          ? "Track formatter"
+                          : "Playlist formatter"}
                       </button>
                     ))}
-                    <span className="text-xs text-gray-500 dark:text-neutral-400">Click a variable to insert it into the selected formatter.</span>
+                    <span className="text-xs text-gray-500 dark:text-neutral-400">
+                      Click a variable to insert it into the selected formatter.
+                    </span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {(formatterTarget === "track_path_formatter"
-                      ? ["album_artist", "artist", "album", "year", "track_number", "name"]
-                      : ["playlist_name", "playlist_owner", "playlist_number", "artist", "album", "track_number", "name"]
+                      ? [
+                          "album_artist",
+                          "artist",
+                          "album",
+                          "year",
+                          "track_number",
+                          "name",
+                        ]
+                      : [
+                          "playlist_name",
+                          "playlist_owner",
+                          "playlist_number",
+                          "artist",
+                          "album",
+                          "track_number",
+                          "name",
+                        ]
                     ).map((variable) => (
-                      <button key={variable} type="button" onClick={() => void insertFormatterVariable(variable)} className="ots-button ots-button-secondary text-xs font-mono">&#123;{variable}&#125;</button>
+                      <button
+                        key={variable}
+                        type="button"
+                        onClick={() => void insertFormatterVariable(variable)}
+                        className="ots-button ots-button-secondary text-xs font-mono"
+                      >
+                        &#123;{variable}&#125;
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -1169,12 +1345,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <div className="mb-8 border-b border-gray-200 pb-6 dark:border-neutral-800/60">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <h4 className="text-base font-medium text-gray-900 dark:text-neutral-100">Theme</h4>
+                    <h4 className="text-base font-medium text-gray-900 dark:text-neutral-100">
+                      Theme
+                    </h4>
                     <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">
-                      Choose a colour palette for the whole app. The Light/Dark control changes the mode for every palette, and your selection is saved in this browser.
+                      Choose a colour palette for the whole app. The Light/Dark
+                      control changes the mode for every palette, and your
+                      selection is saved in this browser.
                     </p>
                   </div>
-                  <div className="ots-segmented" role="group" aria-label="Theme mode">
+                  <div
+                    className="ots-segmented"
+                    role="group"
+                    aria-label="Theme mode"
+                  >
                     <button
                       type="button"
                       aria-pressed={themeMode === "dark"}
@@ -1196,9 +1380,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {THEME_PRESETS.map((theme) => {
                     const isSelected = themePreset === theme.id;
-                    const swatches = theme.id === "custom"
-                      ? [activeCustomPalette.background, activeCustomPalette.accent, activeCustomPalette.text] as [string, string, string]
-                      : theme.swatches;
+                    const swatches =
+                      theme.id === "custom"
+                        ? ([
+                            activeCustomPalette.background,
+                            activeCustomPalette.accent,
+                            activeCustomPalette.text,
+                          ] as [string, string, string])
+                        : theme.swatches;
                     const mode = themeMode;
                     return (
                       <button
@@ -1209,16 +1398,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                         className={`ots-theme-option ${isSelected ? "ots-theme-option-active" : ""}`}
                       >
                         <span className="ots-theme-preview" aria-hidden="true">
-                          {swatches.map((swatch) => <span key={swatch} style={{ backgroundColor: swatch }} />)}
+                          {swatches.map((swatch) => (
+                            <span
+                              key={swatch}
+                              style={{ backgroundColor: swatch }}
+                            />
+                          ))}
                         </span>
                         <span className="min-w-0 text-left">
                           <span className="flex items-center gap-2 text-sm font-bold">
                             {theme.label}
                             <span className="ots-theme-mode">{mode}</span>
                           </span>
-                          <span className="mt-1 block text-xs text-gray-500 dark:text-neutral-400">{theme.description}</span>
+                          <span className="mt-1 block text-xs text-gray-500 dark:text-neutral-400">
+                            {theme.description}
+                          </span>
                         </span>
-                        <span className={`ots-theme-check ${isSelected ? "ots-theme-check-visible" : ""}`} aria-hidden="true">✓</span>
+                        <span
+                          className={`ots-theme-check ${isSelected ? "ots-theme-check-visible" : ""}`}
+                          aria-hidden="true"
+                        >
+                          ✓
+                        </span>
                       </button>
                     );
                   })}
@@ -1231,34 +1432,52 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <div>
                       <div className="flex items-center gap-2">
                         <Palette className="h-4 w-4 text-[var(--spotify-green)]" />
-                        <h4 className="text-base font-medium text-gray-900 dark:text-neutral-100">Custom palette</h4>
+                        <h4 className="text-base font-medium text-gray-900 dark:text-neutral-100">
+                          Custom palette
+                        </h4>
                       </div>
                       <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">
-                        Pick the colors that should shape the app. Changes apply immediately and are saved in this browser.
+                        Pick the colors that should shape the app. Changes apply
+                        immediately and are saved in this browser.
                       </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {([
-                      ["background", "Background", "The page background."],
-                      ["surface", "Panels", "Cards and main surfaces."],
-                      ["elevated", "Elevated", "Raised controls and active cards."],
-                      ["accent", "Accent", "Highlights and primary actions."],
-                      ["text", "Text", "Main readable text."],
-                      ["muted", "Muted text", "Secondary labels and hints."],
-                    ] as Array<[keyof CustomThemePalette, string, string]>).map(([key, label, description]) => (
+                    {(
+                      [
+                        ["background", "Background", "The page background."],
+                        ["surface", "Panels", "Cards and main surfaces."],
+                        [
+                          "elevated",
+                          "Elevated",
+                          "Raised controls and active cards.",
+                        ],
+                        ["accent", "Accent", "Highlights and primary actions."],
+                        ["text", "Text", "Main readable text."],
+                        ["muted", "Muted text", "Secondary labels and hints."],
+                      ] as Array<[keyof CustomThemePalette, string, string]>
+                    ).map(([key, label, description]) => (
                       <label key={key} className="ots-color-control">
                         <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-gray-900 dark:text-neutral-100">{label}</span>
-                          <span className="mt-1 block text-xs text-gray-500 dark:text-neutral-400">{description}</span>
+                          <span className="block text-sm font-semibold text-gray-900 dark:text-neutral-100">
+                            {label}
+                          </span>
+                          <span className="mt-1 block text-xs text-gray-500 dark:text-neutral-400">
+                            {description}
+                          </span>
                         </span>
                         <span className="flex items-center gap-2">
                           <input
                             aria-label={label}
                             type="color"
                             value={activeCustomPalette[key]}
-                            onChange={(event) => handleCustomPaletteColorChange(key, event.target.value)}
+                            onChange={(event) =>
+                              handleCustomPaletteColorChange(
+                                key,
+                                event.target.value,
+                              )
+                            }
                           />
                           <code>{activeCustomPalette[key].toUpperCase()}</code>
                         </span>
@@ -1268,9 +1487,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
                   <div className="mt-5 border-t border-gray-200 pt-5 dark:border-neutral-800/60">
                     <div className="mb-3">
-                      <h5 className="text-sm font-semibold text-gray-900 dark:text-neutral-100">Saved custom themes</h5>
+                      <h5 className="text-sm font-semibold text-gray-900 dark:text-neutral-100">
+                        Saved custom themes
+                      </h5>
                       <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
-                        Save this palette with a name so you can switch back to it later. Saving an existing name updates that theme.
+                        Save this palette with a name so you can switch back to
+                        it later. Saving an existing name updates that theme.
                       </p>
                     </div>
 
@@ -1283,7 +1505,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                           if (customThemeMessage) setCustomThemeMessage("");
                         }}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter") void handleSaveNamedCustomTheme();
+                          if (event.key === "Enter")
+                            void handleSaveNamedCustomTheme();
                         }}
                         placeholder="e.g. Warm studio"
                         aria-label="Saved theme name"
@@ -1301,7 +1524,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     </div>
 
                     {customThemeMessage && (
-                      <p className="mt-2 text-xs text-[var(--spotify-green)]" role="status">
+                      <p
+                        className="mt-2 text-xs text-[var(--spotify-green)]"
+                        role="status"
+                      >
                         {customThemeMessage}
                       </p>
                     )}
@@ -1315,17 +1541,35 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                         savedCustomThemes.map((savedTheme) => {
                           const savedPalette = savedTheme.theme[themeMode];
                           return (
-                            <div key={savedTheme.id} className="ots-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div
+                              key={savedTheme.id}
+                              className="ots-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
+                            >
                               <div className="flex min-w-0 items-center gap-3">
-                                <span className="ots-theme-preview" aria-hidden="true">
-                                  {[savedPalette.background, savedPalette.accent, savedPalette.text].map((swatch) => (
-                                    <span key={swatch} style={{ backgroundColor: swatch }} />
+                                <span
+                                  className="ots-theme-preview"
+                                  aria-hidden="true"
+                                >
+                                  {[
+                                    savedPalette.background,
+                                    savedPalette.accent,
+                                    savedPalette.text,
+                                  ].map((swatch) => (
+                                    <span
+                                      key={swatch}
+                                      style={{ backgroundColor: swatch }}
+                                    />
                                   ))}
                                 </span>
                                 <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold text-gray-900 dark:text-neutral-100">{savedTheme.name}</p>
+                                  <p className="truncate text-sm font-semibold text-gray-900 dark:text-neutral-100">
+                                    {savedTheme.name}
+                                  </p>
                                   <p className="mt-0.5 text-xs text-gray-500 dark:text-neutral-400">
-                                    Updated {new Date(savedTheme.updatedAt).toLocaleDateString()}
+                                    Updated{" "}
+                                    {new Date(
+                                      savedTheme.updatedAt,
+                                    ).toLocaleDateString()}
                                   </p>
                                 </div>
                               </div>
@@ -1333,7 +1577,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                                 <button
                                   type="button"
                                   className="ots-button ots-button-secondary ots-button-sm"
-                                  onClick={() => void onLoadCustomTheme(savedTheme)}
+                                  onClick={() =>
+                                    void onLoadCustomTheme(savedTheme)
+                                  }
                                 >
                                   Load
                                 </button>
@@ -1341,7 +1587,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                                   type="button"
                                   className="ots-button ots-button-danger ots-button-sm"
                                   aria-label={`Delete ${savedTheme.name}`}
-                                  onClick={() => void onDeleteCustomTheme(savedTheme.id)}
+                                  onClick={() =>
+                                    void onDeleteCustomTheme(savedTheme.id)
+                                  }
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                   Delete
@@ -1357,11 +1605,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   <button
                     type="button"
                     className="ots-button ots-button-secondary mt-4"
-                    onClick={() => void onCustomThemeChange({
-                      mode: themeMode,
-                      dark: { ...DEFAULT_CUSTOM_THEME.dark },
-                      light: { ...DEFAULT_CUSTOM_THEME.light },
-                    })}
+                    onClick={() =>
+                      void onCustomThemeChange({
+                        mode: themeMode,
+                        dark: { ...DEFAULT_CUSTOM_THEME.dark },
+                        light: { ...DEFAULT_CUSTOM_THEME.light },
+                      })
+                    }
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     Reset custom palette
@@ -1414,18 +1664,75 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           {section === "backup" && (
             <div className="animate-[fadeIn_0.2s_ease-out]">
               <div className="mb-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">Backup & Restore</h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">Back up settings, profiles, themes, queue history, and local-library metadata in one portable JSON file.</p>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-neutral-100">
+                  Backup & Restore
+                </h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">
+                  Back up settings, profiles, themes, queue history, and
+                  local-library metadata in one portable JSON file.
+                </p>
               </div>
               <div className="mb-5 border border-[var(--ots-border)] bg-[var(--spotify-surface-elevated)] p-4">
-                {renderInput("export_folder_path", "Default export folder", "text", "CSV exports, automation-config exports, and general backups use this folder. Leave blank to use Documents/OnTheSpot Exports.")}
-                {renderInput("playlist_backup_folder_path", "Playlist backup folder", "text", "Optional separate folder for Playlist sorting backups and restores. Leave blank to use a Playlist backups subfolder inside the default export folder.")}
-                <p className="mt-2 text-xs text-[#777]">Click Save Config after changing this default. Restore can still import a backup file from any folder.</p>
-                {backupMessage && <p className="mt-3 text-sm text-[var(--spotify-green)]">{backupMessage}</p>}
+                {renderInput(
+                  "export_folder_path",
+                  "Default export folder",
+                  "text",
+                  "CSV exports, automation-config exports, and general backups use this folder. Leave blank to use Documents/OnTheSpot Exports.",
+                )}
+                {renderInput(
+                  "playlist_backup_folder_path",
+                  "Playlist backup folder",
+                  "text",
+                  "Optional separate folder for Playlist sorting backups and restores. Leave blank to use a Playlist backups subfolder inside the default export folder.",
+                )}
+                <p className="mt-2 text-xs text-[#777]">
+                  Click Save Config after changing this default. Restore can
+                  still import a backup file from any folder.
+                </p>
+                {backupMessage && (
+                  <p className="mt-3 text-sm text-[var(--spotify-green)]">
+                    {backupMessage}
+                  </p>
+                )}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="ots-card p-5"><Archive className="h-5 w-5 text-[var(--spotify-green)]" /><h4 className="mt-3 font-bold text-gray-900 dark:text-neutral-100">Create a backup</h4><p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">Includes your saved themes, download profiles, statistics history, and library index.</p><button type="button" onClick={() => void triggerExport()} className="ots-button ots-button-primary mt-4"><Download className="h-4 w-4" /> Export backup</button></div>
-                <div className="ots-card p-5"><Upload className="h-5 w-5 text-[var(--spotify-green)]" /><h4 className="mt-3 font-bold text-gray-900 dark:text-neutral-100">Restore a backup</h4><p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">Restore settings and history without overwriting account credentials.</p><label className="ots-button ots-button-secondary mt-4 cursor-pointer"><Upload className="h-4 w-4" /> {importing ? "Restoring…" : "Choose backup"}<input type="file" accept="application/json,.json" className="hidden" onChange={triggerImport} /></label></div>
+                <div className="ots-card p-5">
+                  <Archive className="h-5 w-5 text-[var(--spotify-green)]" />
+                  <h4 className="mt-3 font-bold text-gray-900 dark:text-neutral-100">
+                    Create a backup
+                  </h4>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">
+                    Includes your saved themes, download profiles, statistics
+                    history, and library index.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void triggerExport()}
+                    className="ots-button ots-button-primary mt-4"
+                  >
+                    <Download className="h-4 w-4" /> Export backup
+                  </button>
+                </div>
+                <div className="ots-card p-5">
+                  <Upload className="h-5 w-5 text-[var(--spotify-green)]" />
+                  <h4 className="mt-3 font-bold text-gray-900 dark:text-neutral-100">
+                    Restore a backup
+                  </h4>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">
+                    Restore settings and history without overwriting account
+                    credentials.
+                  </p>
+                  <label className="ots-button ots-button-secondary mt-4 cursor-pointer">
+                    <Upload className="h-4 w-4" />{" "}
+                    {importing ? "Restoring…" : "Choose backup"}
+                    <input
+                      type="file"
+                      accept="application/json,.json"
+                      className="hidden"
+                      onChange={triggerImport}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           )}
