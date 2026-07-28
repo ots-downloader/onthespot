@@ -344,7 +344,8 @@ def progress_hook(
         status == ItemStatus.DOWNLOADING
         or item.get("item_status") == ItemStatus.DOWNLOADING
     ):
-        wait_for_download_resume(item)
+        #wait_for_download_resume(item)
+        pass
     update_download_telemetry(item, downloaded_bytes, total_bytes, speed_bps)
     item["progress"] = progress
     if status:

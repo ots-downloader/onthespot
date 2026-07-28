@@ -273,7 +273,14 @@ def download_via_ytdlp_audio(
                     "Tidal: Direct URL detected", extra={"url": direct_url[:80]}
                 )
                 headers = {"Authorization": f"Bearer {token['access_token']}"}
-                _download_http_with_resume(item, direct_url, temp_path, headers)
+                resp = requests.get(
+                    direct_url, headers=headers, stream=True, timeout=60
+                )
+                resp.raise_for_status()
+                with open(temp_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
                 mime = manifest_json.get("codecs", "audio/mp4")
                 default_format = ".flac" if "flac" in mime else ".m4a"
                 bitrate = "1411k"
@@ -359,7 +366,22 @@ def download_http_stream(
         bitrate = "128k"
         file_url = item_metadata["file_url"]
 
-    _download_http_with_resume(item, file_url, temp_path)
+    response = requests.get(file_url, stream=True, timeout=60)
+    total_size = int(response.headers.get("Content-Length", 0))
+    downloaded = 0
+
+    with open(temp_path, "wb") as audio_file:
+        for chunk in response.iter_content(
+            chunk_size=config.get("download_chunk_size", 1024)
+        ):
+            if not chunk:
+                continue
+            downloaded += len(chunk)
+            audio_file.write(chunk)
+            if total_size > 0 and downloaded != total_size:
+                if item["item_status"] == ItemStatus.CANCELLED:
+                    raise DownloadCancelled("Download cancelled by user.")
+                progress_hook(item, int((downloaded / total_size) * 100))
 
     return default_format, bitrate
 

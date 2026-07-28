@@ -252,7 +252,7 @@ class DownloadWorker:
 
                 self._apply_download_profile(item)
                 item["_active_download"] = True
-                wait_for_download_resume(item)
+                #wait_for_download_resume(item)
                 self._raise_if_cancelled(item)
                 item["item_status"] = ItemStatus.DOWNLOADING
                 progress_hook(item, 1, item["item_status"])
@@ -449,11 +449,6 @@ class DownloadWorker:
                     time.sleep(delay)
                     # remove possible trash files
                     for path in (temp_path, file_path, item.get("file_path", "")):
-                        # Keep the temporary download so the next retry can
-                        # continue it when the underlying service supports
-                        # ranged/continued downloads.
-                        if path == temp_path:
-                            continue
                         if isinstance(path, str) and path and os.path.exists(path):
                             os.remove(path)
 
