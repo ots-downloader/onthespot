@@ -2437,8 +2437,8 @@ async def event_generator(user_id: str, request: Request):
             if await request.is_disconnected():
                 break
             try:
-                data = await event_queue.get()
-            except TimeoutError:
+                data = event_queue.get_nowait()
+            except (TimeoutError, IndexError):
                 continue
             yield f"data: {json.dumps(data, skipkeys=True)}\n\n"
     finally:

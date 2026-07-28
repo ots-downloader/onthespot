@@ -89,7 +89,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Install locked dependencies
-        run: npm ci
+        run: npm install
 
       - name: Type-check frontend
         run: npm run lint

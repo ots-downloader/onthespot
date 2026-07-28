@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { Navbar, NavTab } from "./components/Navbar";
 import { SearchDashboard } from "./components/SearchDashboard";
 import type { SettingsSection } from "./components/SettingsPage";
@@ -61,7 +62,6 @@ import {
 } from "./lib/api";
 import type { DownloadProfile, QueueBatchAction } from "./lib/api";
 import type { AccountHealth } from "./lib/api";
-import { randomUUID } from "node:crypto";
 
 const PlaylistAutomationPage = lazy(() =>
   import("./components/PlaylistAutomationPage").then((module) => ({
@@ -340,13 +340,14 @@ export default function App() {
     null,
   );
   const [logs, setLogs] = useState<LogEntry[]>([]);
+
   const {
     notifications,
     history,
     dismissNotification,
     clearHistory,
     lastStatusChange,
-  } = useNotifications(randomUUID());
+  } = useNotifications(uuidv4());
   const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [themePreset, setThemePreset] = useState<ThemePreset>(
