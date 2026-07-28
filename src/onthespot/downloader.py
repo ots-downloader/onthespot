@@ -699,8 +699,6 @@ class DownloadWorker(QObject):
         elif int(song.get("FILESIZE_MP3_256", 0)) > 0:
             song_quality, song_format, bitrate = 5, "MP3_256", "256k"
 
-        temp_path += default_format
-
         headers = {
             "Origin": "https://www.deezer.com",
             "Accept-Encoding": "utf-8",
