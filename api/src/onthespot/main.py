@@ -1,4 +1,3 @@
-from ast import Raise
 import os
 import asyncio
 import secrets
@@ -383,7 +382,7 @@ def relogin():
     """
     Reloads the account pool to refresh accounts.
     """
-    
+
     global fillaccountpool
     previous_worker = fillaccountpool
     if previous_worker is not None and previous_worker.is_running:
@@ -420,7 +419,6 @@ async def lifespan(app: FastAPI):
     # Connect can finish advertising the device without EventLoopBlocked.
     # await asyncio.to_thread(start_spotify_connect_service)
 
-
     logger.info("Initializing...")
 
     yield
@@ -430,7 +428,6 @@ async def lifespan(app: FastAPI):
 
     fillaccountpool.stop()
     # stop_spotify_connect_service()
-    
 
     logger.info("Application shutdown")
 
@@ -1432,11 +1429,7 @@ async def set_config(nkey, nvalue):
             case _:
                 pass
     result = config.set(nkey, nvalue)
-    if nkey == "mirror_spotify_playback":
-        worker_action = (
-            spotifymirrorworker.start if nvalue else spotifymirrorworker.stop
-        )
-        await asyncio.to_thread(worker_action)
+
     return result
 
 
@@ -1486,6 +1479,8 @@ async def update_playlist_backup_location(payload: dict[str, Any]):
 
 @app.post("/exports/write")
 async def write_text_export(payload: dict[str, Any]):
+    raise NotImplementedError
+
     filename = (
         re.sub(
             r"[^A-Za-z0-9._-]+", "-", str(payload.get("filename") or "export.txt")
@@ -1545,6 +1540,7 @@ async def export_config():
 
 @app.post("/config/export-file")
 async def export_config_file(payload: dict[str, Any]):
+    raise NotImplementedError
     try:
         path = write_export_file(
             "onthespot-config",
@@ -1807,6 +1803,7 @@ async def export_playlist_automation_config():
 
 @app.post("/playlist-automation/export/config-file")
 async def export_playlist_automation_config_file(payload: dict[str, Any]):
+    raise NotImplementedError
     try:
         path = write_export_file(
             "playlist-automation-config",
@@ -1854,6 +1851,7 @@ async def export_selected_playlists_csv(payload: dict[str, Any]):
 
 @app.post("/playlist-automation/export/playlists-csv-file")
 async def export_selected_playlists_csv_file(payload: dict[str, Any]):
+    raise NotImplementedError
     content = await _playlist_operation(
         playlist_automation.export_playlists_csv,
         [str(value) for value in payload.get("playlist_ids", []) if value],
@@ -1935,6 +1933,7 @@ async def export_backup():
 
 @app.post("/backup/export-file")
 async def export_backup_file(payload: dict[str, Any]):
+    raise NotImplementedError
     backup = (
         payload.get("backup") if isinstance(payload.get("backup"), dict) else payload
     )
@@ -1952,6 +1951,7 @@ async def export_backup_file(payload: dict[str, Any]):
 
 @app.post("/backup/import")
 async def import_backup(payload: dict):
+    raise NotImplementedError
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Backup must be a JSON object")
     settings = (
@@ -1995,6 +1995,7 @@ async def check_version():
     except Exception:
         return status
 
+
 @app.get("/updates/check")
 async def updates_check(force: bool = False):
     """Return release metadata and the best asset for this platform."""
@@ -2004,7 +2005,6 @@ async def updates_check(force: bool = False):
 @app.post("/updates/install")
 async def updates_install():
     raise NotImplementedError
-    
 
 
 # ACCOUNTS ENDPOINTS
@@ -2015,7 +2015,7 @@ async def get_youtube_auth_status():
 
 
 @app.post("/accounts/youtube-auth/upload")
-async def upload_youtube_auth(cookies: UploadFile = File(...)):
+async def upload_youtube_auth(cookies: UploadFile):
     """Store an uploaded Netscape cookies.txt file in private app data."""
     contents = await cookies.read((5 * 1024 * 1024) + 1)
     try:
