@@ -114,6 +114,19 @@ class ThreadSafeDeque:
         with self._lock:
             return len(self._deque)
 
+    def __contains__(self, item):
+        # Tests membership without copying the whole queue, and stops at the
+        # first match. `item in queue.get_items()` builds a full list first.
+        with self._lock:
+            return item in self._deque
+
+    def __iter__(self):
+        # Iterates a snapshot taken under the lock, so another thread adding or
+        # removing entries mid-loop cannot invalidate the iterator.
+        with self._lock:
+            items = list(self._deque)
+        return iter(items)
+
 
 #: Pool of authenticated service accounts added by :class:`AccountPoolLoader`.
 account_pool: list = []
