@@ -43,7 +43,7 @@ _index_lock = threading.RLock()
 
 
 def _absolute(path: str | os.PathLike[str]) -> str:
-    return os.path.abspath(os.path.expanduser(os.fspath(path)))
+    return os.path.realpath(os.path.expanduser(os.fspath(path)))
 
 
 def library_roots() -> list[str]:
@@ -191,7 +191,10 @@ def _read_file(path: str) -> dict[str, Any]:
             raw_tags = getattr(MutagenFile(path), "tags", None)
             if raw_tags:
                 has_artwork = any(
-                    any(token in str(key).casefold() for token in ("apic", "covr", "picture", "artwork"))
+                    any(
+                        token in str(key).casefold()
+                        for token in ("apic", "covr", "picture", "artwork")
+                    )
                     for key in raw_tags.keys()
                 )
     except Exception as exc:
@@ -203,13 +206,17 @@ def _read_file(path: str) -> dict[str, Any]:
     try:
         tagged = music_tag.load_file(path)
         if not album_artist:
-            album_artist = _tag_string(tagged, ("albumartist", "album_artist", "artist"))
+            album_artist = _tag_string(
+                tagged, ("albumartist", "album_artist", "artist")
+            )
         if not lyrics:
             lyrics = _tag_string(tagged, ("lyrics", "unsyncedlyrics"))
         if not has_artwork and "artwork" in tagged:
             artwork = tagged["artwork"]
             value = getattr(artwork, "value", artwork)
-            has_artwork = bool(getattr(value, "data", None) or getattr(value, "raw", None))
+            has_artwork = bool(
+                getattr(value, "data", None) or getattr(value, "raw", None)
+            )
     except Exception as exc:
         if not metadata_error:
             metadata_error = str(exc)
@@ -225,7 +232,9 @@ def _read_file(path: str) -> dict[str, Any]:
             _path_key(path).encode("utf-8"), usedforsecurity=False
         ).hexdigest(),
         "path": _absolute(path),
-        "relative_path": relative_paths[0] if relative_paths else os.path.basename(path),
+        "relative_path": relative_paths[0]
+        if relative_paths
+        else os.path.basename(path),
         "filename": os.path.basename(path),
         "format": extension.removeprefix("."),
         "size": int(stat.st_size),
@@ -257,12 +266,16 @@ def _iter_audio_files() -> list[str]:
         if not os.path.isdir(root):
             continue
         for current, directories, files in os.walk(root):
-            directories[:] = [directory for directory in directories if not directory.startswith(".")]
+            directories[:] = [
+                directory for directory in directories if not directory.startswith(".")
+            ]
             for filename in files:
                 if filename == INDEX_FILENAME or filename.startswith("~"):
                     continue
                 path = os.path.join(current, filename)
-                if os.path.splitext(filename)[1].lower() in AUDIO_EXTENSIONS and os.path.isfile(path):
+                if os.path.splitext(filename)[
+                    1
+                ].lower() in AUDIO_EXTENSIONS and os.path.isfile(path):
                     paths.append(path)
     return paths
 
@@ -320,14 +333,17 @@ def scan_library(
             if key:
                 duplicate_counts[key] = duplicate_counts.get(key, 0) + 1
         for item in items:
-            item["duplicate_count"] = duplicate_counts.get(item.get("duplicate_key", ""), 0)
+            item["duplicate_count"] = duplicate_counts.get(
+                item.get("duplicate_key", ""), 0
+            )
             item["is_duplicate"] = item["duplicate_count"] > 1
 
         if query_value:
             items = [
                 item
                 for item in items
-                if query_value in " ".join(
+                if query_value
+                in " ".join(
                     str(item.get(field, ""))
                     for field in ("title", "artist", "album", "genre", "filename")
                 ).casefold()
@@ -337,24 +353,54 @@ def scan_library(
         if missing_artwork:
             items = [item for item in items if not item.get("has_artwork")]
         if failed_metadata:
-            items = [item for item in items if not item.get("metadata_complete") or item.get("metadata_error")]
+            items = [
+                item
+                for item in items
+                if not item.get("metadata_complete") or item.get("metadata_error")
+            ]
         if file_format:
             wanted_format = file_format.casefold().lstrip(".")
-            items = [item for item in items if str(item.get("format", "")).casefold() == wanted_format]
+            items = [
+                item
+                for item in items
+                if str(item.get("format", "")).casefold() == wanted_format
+            ]
         if artist:
             wanted_artist = artist.casefold().strip()
-            items = [item for item in items if wanted_artist in str(item.get("artist", "")).casefold()]
+            items = [
+                item
+                for item in items
+                if wanted_artist in str(item.get("artist", "")).casefold()
+            ]
         if genre:
             wanted_genre = genre.casefold().strip()
-            items = [item for item in items if wanted_genre in str(item.get("genre", "")).casefold()]
+            items = [
+                item
+                for item in items
+                if wanted_genre in str(item.get("genre", "")).casefold()
+            ]
         if date_from:
-            items = [item for item in items if int(item.get("modified_at", 0) or 0) >= int(date_from)]
+            items = [
+                item
+                for item in items
+                if int(item.get("modified_at", 0) or 0) >= int(date_from)
+            ]
         if date_to:
-            items = [item for item in items if int(item.get("modified_at", 0) or 0) <= int(date_to)]
+            items = [
+                item
+                for item in items
+                if int(item.get("modified_at", 0) or 0) <= int(date_to)
+            ]
 
         allowed_sorts = {"title", "artist", "album", "genre", "date", "size"}
         sort_key = sort if sort in allowed_sorts else "artist"
-        items.sort(key=lambda item: (_sort_value(item, sort_key), str(item.get("title", "")).casefold()), reverse=sort_descending)
+        items.sort(
+            key=lambda item: (
+                _sort_value(item, sort_key),
+                str(item.get("title", "")).casefold(),
+            ),
+            reverse=sort_descending,
+        )
         _save_index(index)
 
     return {
@@ -389,12 +435,22 @@ def verify_file(path: str) -> dict[str, Any]:
         raise ValueError("File is outside the configured music library")
     size = os.path.getsize(normalized)
     if size < 4096:
-        return {"path": normalized, "valid": False, "reason": "File is incomplete or too small", "size": size}
+        return {
+            "path": normalized,
+            "valid": False,
+            "reason": "File is incomplete or too small",
+            "size": size,
+        }
     try:
         media = MutagenFile(normalized)
         info = getattr(media, "info", None) if media is not None else None
         valid = media is not None and info is not None
-        return {"path": normalized, "valid": valid, "reason": "" if valid else "Audio metadata could not be read", "size": size}
+        return {
+            "path": normalized,
+            "valid": valid,
+            "reason": "" if valid else "Audio metadata could not be read",
+            "size": size,
+        }
     except Exception as exc:
         return {"path": normalized, "valid": False, "reason": str(exc), "size": size}
 
@@ -448,7 +504,10 @@ def missing_items(query: str = "") -> list[dict[str, Any]]:
             path = item.get("path", "")
             if os.path.isfile(path) or not item.get("source_url"):
                 continue
-            if query_value and query_value not in json.dumps(item, ensure_ascii=False).casefold():
+            if (
+                query_value
+                and query_value not in json.dumps(item, ensure_ascii=False).casefold()
+            ):
                 continue
             result.append(item)
     result.sort(key=lambda item: str(item.get("title", "")).casefold())
@@ -491,7 +550,11 @@ def rename_file(path: str, new_name: str) -> dict[str, Any]:
     if not is_allowed_path(normalized):
         raise ValueError("File is outside the configured music library")
     clean_name = os.path.basename((new_name or "").strip())
-    if not clean_name or clean_name in {".", ".."} or clean_name != (new_name or "").strip():
+    if (
+        not clean_name
+        or clean_name in {".", ".."}
+        or clean_name != (new_name or "").strip()
+    ):
         raise ValueError("New name must be a file name in the same folder")
     if not os.path.splitext(clean_name)[1]:
         clean_name += os.path.splitext(normalized)[1]
