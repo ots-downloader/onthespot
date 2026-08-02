@@ -72,12 +72,12 @@ def youtube_music_get_search_results(_, search_term, content_types):
         "extract_flat": True,
         "skip_download": True,
     }
-    auth_opts = youtube_ydl_options()
-    ydl_opts = {**base_opts, **auth_opts}
 
     search_results = []
     if "track" in content_types:
         try:
+            auth_opts = youtube_ydl_options()
+            ydl_opts = {**base_opts, **auth_opts}
             entries = _youtube_search(search_term, ydl_opts)
         except Exception as exc:
             if not auth_opts:
@@ -113,7 +113,7 @@ def youtube_music_get_search_results(_, search_term, content_types):
     return search_results
 
 
-def youtube_music_get_track_metadata(_, item_id, item = None):
+def youtube_music_get_track_metadata(_, item_id, item=None):
     url = f"https://music.youtube.com/watch?v={item_id}"
     request_key = md5(f"{url}".encode(), usedforsecurity=False).hexdigest()
     cache_dir = os.path.join(config.get("_cache_dir"), "reqcache")
