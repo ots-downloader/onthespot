@@ -132,10 +132,15 @@ def _patch_librespot_zeroconf_runner() -> bool:
             pass
         self._HttpRunner__worker.shutdown(wait=True, cancel_futures=True, timeout=2)
         runner_thread = getattr(self, "_onthespot_runner_thread", None)
-        if runner_thread is not None and runner_thread is not threading.current_thread():
+        if (
+            runner_thread is not None
+            and runner_thread is not threading.current_thread()
+        ):
             runner_thread.join(timeout=2)
             if runner_thread.is_alive():
-                logger.warning("Spotify Connect listener did not stop within two seconds")
+                logger.warning(
+                    "Spotify Connect listener did not stop within two seconds"
+                )
 
     runner_type.__init__ = patched_init
     runner_type.run = patched_run
@@ -166,31 +171,16 @@ def _spotify_connect_interface() -> str | None:
     the mDNS record.  An explicit environment value wins; otherwise the
     default-route address is selected without sending any traffic.
     """
-    configured = str(os.environ.get("ONTHESPOT_SPOTIFY_CONNECT_INTERFACE", "") or "").strip()
-    if configured:
+    configured = str(config.get("DOCKER_ETH_ADDRESS", "")).strip()
+    if configured != "":
         return configured
-
-    # Prefer a normal home/LAN address when one is available.  This avoids
-    # advertising a Hyper-V, VPN, or Tailscale address on Windows while still
-    # leaving ONTHESPOT_SPOTIFY_CONNECT_INTERFACE available for multi-NIC
-    # servers.
-    try:
-        candidates = socket.gethostbyname_ex(socket.gethostname())[2]
-        lan_candidates = [
-            address
-            for address in candidates
-            if address.startswith("192.168.") and not address.startswith("192.168.56.")
-        ]
-        if lan_candidates:
-            return lan_candidates[0]
-    except OSError:
-        pass
 
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         probe.connect(("8.8.8.8", 80))
         return probe.getsockname()[0]
-    except OSError:
+    except OSError as e:
+        logger.error("Error Getting Interface IP, error: %s", e)
         return None
     finally:
         probe.close()
@@ -235,8 +225,8 @@ def start_spotify_connect_service():
         # overrides to creation so VPN/virtual adapters cannot make mDNS
         # registration time out or publish an unreachable address.
         if interface:
-            librespot_zeroconf.zeroconf.Zeroconf = lambda *args, **kwargs: original_zeroconf(
-                *args, interfaces=[interface], **kwargs
+            librespot_zeroconf.zeroconf.Zeroconf = lambda *args, **kwargs: (
+                original_zeroconf(*args, interfaces=[interface], **kwargs)
             )
             ZeroconfServer.get_useful_hostname = lambda self: interface
 
@@ -277,7 +267,9 @@ def stop_spotify_connect_service() -> None:
         try:
             server.close()
         except Exception:
-            logger.debug("Spotify Connect discovery service close failed", exc_info=True)
+            logger.debug(
+                "Spotify Connect discovery service close failed", exc_info=True
+            )
 
 
 def spotify_connect_status() -> dict:
@@ -290,7 +282,9 @@ def spotify_connect_status() -> dict:
         }
 
 
-def add_spotify_zeroconf_login(zeroconf_login: dict, account_uuid: str | None = None) -> bool:
+def add_spotify_zeroconf_login(
+    zeroconf_login: dict, account_uuid: str | None = None
+) -> bool:
     """Persist a Spotify Connect login received locally or from a companion.
 
     The companion only forwards the same three fields produced by librespot's
@@ -302,7 +296,12 @@ def add_spotify_zeroconf_login(zeroconf_login: dict, account_uuid: str | None = 
     username = str(zeroconf_login.get("username") or "").strip()
     credentials = zeroconf_login.get("credentials")
     credential_type = str(zeroconf_login.get("type") or "").strip()
-    if not username or not isinstance(credentials, str) or not credentials or not credential_type:
+    if (
+        not username
+        or not isinstance(credentials, str)
+        or not credentials
+        or not credential_type
+    ):
         return False
     if any(
         isinstance(account, dict)
@@ -463,7 +462,9 @@ class MirrorSpotifyPlayback:
         thread.join(timeout=timeout)
         with self._lock:
             if thread.is_alive():
-                logger.warning("SpotifyMirrorPlayback did not stop within %.1f seconds", timeout)
+                logger.warning(
+                    "SpotifyMirrorPlayback did not stop within %.1f seconds", timeout
+                )
             elif self.thread is thread:
                 self.thread = None
 
@@ -1045,9 +1046,7 @@ def spotify_get_search_results(
     # and per-host serialisation. It raises on exhausted retries and returns None
     # on a permanent error; treat both as "no results" rather than crashing.
     try:
-        data = make_call(
-            f"{BASE_URL}/search", params=params, headers=headers
-        )
+        data = make_call(f"{BASE_URL}/search", params=params, headers=headers)
     except requests.exceptions.RequestException as e:
         logger.error("Spotify search failed for '%s': %s", search_term, str(e))
         return []
