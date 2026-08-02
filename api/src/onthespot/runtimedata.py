@@ -111,7 +111,7 @@ class ThreadSafeDeque:
 
     def empty(self):
         queue = self.__len__()
-        return False if queue > 0 else True
+        return not queue > 0
 
     def qsize(self) -> int:
         """Return the number of queued items using the adapter's lock."""
@@ -126,6 +126,9 @@ class ThreadSafeDeque:
     def __len__(self):
         with self._lock:
             return len(self._deque)
+
+    def __iter__(self):
+        return self.get_items()
 
 
 #: Pool of authenticated service accounts added by :class:`AccountPoolLoader`.
@@ -170,7 +173,7 @@ rate_limit_state = {
 }
 
 
-def subscribe_websocket(user_id: str) -> tuple[str, asyncio.Queue]:
+def subscribe_websocket(user_id: str) -> tuple[str, ThreadSafeDeque]:
     """Register one SSE connection and return its private event queue."""
     subscription_id = user_id
 
@@ -209,7 +212,7 @@ def websocket_event(etype: str, event=""):
         try:
             event_queue.put_nowait(data)
         except Exception as e:
-            logger.error("Queue Error %s id:%s",e, subscription_id)
+            logger.error("Queue Error %s id:%s", e, subscription_id)
             stale_subscriptions.append(subscription_id)
 
     if stale_subscriptions:
@@ -344,7 +347,7 @@ def progress_hook(
         status == ItemStatus.DOWNLOADING
         or item.get("item_status") == ItemStatus.DOWNLOADING
     ):
-        #wait_for_download_resume(item)
+        # wait_for_download_resume(item)
         pass
     update_download_telemetry(item, downloaded_bytes, total_bytes, speed_bps)
     item["progress"] = progress

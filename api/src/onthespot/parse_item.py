@@ -271,7 +271,7 @@ def get_search_results(search_term: str):
         return False
 
     # --- URL input -----------------------------------------------------------
-    if search_term.startswith("https://") or search_term.startswith("http://"):
+    if search_term.startswith(("https://", "http://")):
         logger.info("Search term is a URL: %s", search_term)
         result = parse_url(search_term)
         return result

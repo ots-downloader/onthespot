@@ -63,11 +63,6 @@ import {
 import type { DownloadProfile, QueueBatchAction } from "./lib/api";
 import type { AccountHealth } from "./lib/api";
 
-const PlaylistAutomationPage = lazy(() =>
-  import("./components/PlaylistAutomationPage").then((module) => ({
-    default: module.PlaylistAutomationPage,
-  })),
-);
 const LibraryPage = lazy(() =>
   import("./components/LibraryPage").then((module) => ({
     default: module.LibraryPage,
@@ -316,7 +311,6 @@ const initialTabFromLocation = (): NavTab => {
   const tab = new URLSearchParams(window.location.search).get("tab");
   const validTabs: NavTab[] = [
     "dashboard",
-    "playlist-automation",
     "library",
     "queue",
     "statistics",
@@ -445,26 +439,26 @@ export default function App() {
     [config?.language],
   );
 
-  useEffect(() => {
-    if (!config || config.check_for_updates === false) {
-      SetNewVersion(false);
-      return;
-    }
-    let mounted = true;
-    const checkUpdates = async () => {
-      const status = await fetchUpdateInfo();
-      if (mounted) SetNewVersion(Boolean(status?.update_available));
-    };
-    void checkUpdates();
-    const interval = window.setInterval(
-      () => void checkUpdates(),
-      6 * 60 * 60 * 1000,
-    );
-    return () => {
-      mounted = false;
-      window.clearInterval(interval);
-    };
-  }, [config?.check_for_updates]);
+  //  useEffect(() => {
+  //    if (!config || config.check_for_updates === false) {
+  //      SetNewVersion(false);
+  //      return;
+  //    }
+  //    let mounted = true;
+  //    const checkUpdates = async () => {
+  //      const status = await fetchUpdateInfo();
+  //      if (mounted) SetNewVersion(Boolean(status?.update_available));
+  //    };
+  //    void checkUpdates();
+  //    const interval = window.setInterval(
+  //      () => void checkUpdates(),
+  //      6 * 60 * 60 * 1000,
+  //    );
+  //    return () => {
+  //      mounted = false;
+  //      window.clearInterval(interval);
+  //    };
+  //  }, [config?.check_for_updates]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -484,36 +478,32 @@ export default function App() {
     async function fetchQueueData() {
       const q = await fetchDownloadQueue();
       if (q) setQueue(q);
-      const state = await fetchDownloadState();
-      setDownloadsPausedState(state.paused);
-      setDownloadSpeed(state.speed);
-      setDownloadEta(state.eta_seconds);
     }
     fetchQueueData();
-  }, [lastStatusChange]);
+  }, [notifications]);
 
-  useEffect(() => {
-    let mounted = true;
-    const refreshAccountHealth = async () => {
-      const [freshAccounts, freshHealth] = await Promise.all([
-        fetchAccounts(),
-        fetchAccountHealth(),
-      ]);
-      if (mounted) {
-        setAccounts(freshAccounts);
-        setAccountHealth(freshHealth);
-      }
-    };
-    void refreshAccountHealth();
-    const interval = window.setInterval(
-      () => void refreshAccountHealth(),
-      60000,
-    );
-    return () => {
-      mounted = false;
-      window.clearInterval(interval);
-    };
-  }, []);
+  //  useEffect(() => {
+  //    let mounted = true;
+  //    const refreshAccountHealth = async () => {
+  //      const [freshAccounts, freshHealth] = await Promise.all([
+  //        fetchAccounts(),
+  //        fetchAccountHealth(),
+  //      ]);
+  //      if (mounted) {
+  //        setAccounts(freshAccounts);
+  //        setAccountHealth(freshHealth);
+  //      }
+  //    };
+  //    void refreshAccountHealth();
+  //    const interval = window.setInterval(
+  //      () => void refreshAccountHealth(),
+  //      60000,
+  //    );
+  //    return () => {
+  //      mounted = false;
+  //      window.clearInterval(interval);
+  //    };
+  //  }, []);
 
   const persistThemeMode = (newMode: ThemeMode) => {
     themePersistenceRef.current = themePersistenceRef.current
@@ -697,6 +687,7 @@ export default function App() {
   };
 
   const handlePauseToggle = async () => {
+    return;
     const ok = await setDownloadsPaused(!downloadsPaused);
     if (ok) setDownloadsPausedState(!downloadsPaused);
     const state = await fetchDownloadState();
@@ -896,16 +887,6 @@ export default function App() {
               accounts={accounts}
               query={searchQuery}
               onQueryChange={setSearchQuery}
-            />
-          )}
-
-          {activeTab === "playlist-automation" && (
-            <PlaylistAutomationPage
-              onOpenApiConfig={() => {
-                setSettingsSection("search");
-                setActiveTab("settings");
-              }}
-              onDownloadPlaylist={handleDownloadItem}
             />
           )}
 

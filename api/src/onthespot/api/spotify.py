@@ -503,10 +503,7 @@ class MirrorSpotifyPlayback:
                     continue
                 if data.get("currently_playing_type") == "track" and item.get("id"):
                     item_id = item["id"]
-                    if (
-                        item_id not in pending.get_items()
-                        and item_id not in download_queue
-                    ):
+                    if item_id not in pending and item_id not in download_queue:
                         parent_category = "track"
                         playlist_name = ""
                         playlist_by = ""

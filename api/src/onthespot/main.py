@@ -122,7 +122,7 @@ logger = get_logger("gui")
 # but start/stop them on lifespan events
 parsing_worker = ParsingWorker()
 downloadworker = DownloadWorker()
-spotifymirrorworker = MirrorSpotifyPlayback()
+# spotifymirrorworker = MirrorSpotifyPlayback()
 retryworker = RetryWorker()
 fillaccountpool = FillAccountPool()
 _spotify_companion_pairings: dict[str, float] = {}
@@ -875,12 +875,14 @@ async def query_url(q: str | None = None, filters: dict | None = None):
 @app.post("/search")
 async def search_catalog(q: str, filters: dict[str, Any] | None = None):
     """Search all configured worker catalogues without enqueueing anything."""
+    raise NotImplementedError
     return await run_in_threadpool(search_service_catalogs, q, filters)
 
 
 @app.get("/catalog/spotify")
 async def search_spotify_catalog(q: str, types: str = "track"):
     """Search the Spotify public catalogue for the browse view."""
+    raise NotImplementedError
     content_types = [
         value
         for value in types.split(",")
@@ -927,6 +929,7 @@ async def search_spotify_catalog(q: str, types: str = "track"):
 @app.post("/spotify/mirror")
 async def mirror_spotify(state: bool = False):
     """Enable or disable automatic downloads of the currently playing Spotify track."""
+    raise NotImplementedError
     config.set("mirror_spotify_playback", state)
     config.save()
     worker_action = spotifymirrorworker.start if state else spotifymirrorworker.stop
@@ -1003,31 +1006,6 @@ async def query_download_state():
         }
 
 
-@app.post("/queue/downloads/pause")
-async def set_download_pause(paused: bool = True):
-    if paused:
-        download_paused.set()
-        with download_queue_lock:
-            for item in download_queue.values():
-                if item.get("item_status") == ItemStatus.DOWNLOADING:
-                    item["item_status"] = ItemStatus.PAUSED
-                    notification_hook(
-                        "Downloads paused",
-                        "The current track will resume from the queue.",
-                    )
-    else:
-        download_paused.clear()
-        with download_queue_lock:
-            for item in download_queue.values():
-                if item.get("item_status") == ItemStatus.PAUSED:
-                    if item.get("_active_download"):
-                        item["item_status"] = ItemStatus.DOWNLOADING
-                    else:
-                        item["item_status"] = ItemStatus.WAITING
-        notification_hook("Downloads resumed", "The download queue is running again.")
-    return {"paused": download_paused.is_set()}
-
-
 @app.post("/queue/downloads/reorder")
 async def reorder_download_queue(order: QueueOrder):
     requested = [str(local_id) for local_id in order.local_ids]
@@ -1037,23 +1015,16 @@ async def reorder_download_queue(order: QueueOrder):
                 download_queue[local_id]["queue_position"] = position
                 download_queue[local_id]["priority"] = len(requested) - position
 
-    # Use the thread-safe queue adapter rather than reaching into queue
-    # implementation internals. The adapter performs its own atomic swap.
-    with pending_lock:
-        pending_items = pending.get_items()
-        pending_by_id = {str(item.get("local_id")): item for item in pending_items}
-        ordered_pending = [
-            pending_by_id[local_id]
-            for local_id in requested
-            if local_id in pending_by_id
-        ]
-        ordered_ids = {str(item.get("local_id")) for item in ordered_pending}
-        ordered_pending.extend(
-            item
-            for item in pending_items
-            if str(item.get("local_id")) not in ordered_ids
-        )
-        pending.replace_items(ordered_pending)
+    pending_items = pending.get_items()
+    pending_by_id = {str(item.get("local_id")): item for item in pending_items}
+    ordered_pending = [
+        pending_by_id[local_id] for local_id in requested if local_id in pending_by_id
+    ]
+    ordered_ids = {str(item.get("local_id")) for item in ordered_pending}
+    ordered_pending.extend(
+        item for item in pending_items if str(item.get("local_id")) not in ordered_ids
+    )
+    pending.replace_items(ordered_pending)
     return {"success": True, "order": requested}
 
 
@@ -1594,6 +1565,7 @@ def _safe_queue_snapshot() -> list[dict]:
 
 @app.get("/statistics")
 async def download_statistics():
+    raise NotImplementedError
     stats = get_statistics()
     library_snapshot = scan_library()
     with download_queue_lock:
@@ -1616,303 +1588,6 @@ async def download_statistics():
 @app.post("/statistics/clear")
 async def clear_download_statistics():
     clear_history()
-    return {"success": True}
-
-
-# ---------------------------------------------------------------------------
-# SPOTIFY PLAYLIST AUTOMATION
-# ---------------------------------------------------------------------------
-
-
-async def _playlist_operation(function, *args):
-    try:
-        return await run_in_threadpool(function, *args)
-    except PlaylistAutomationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.get("/playlist-automation/status")
-async def playlist_automation_status():
-    return playlist_automation.status()
-
-
-@app.post("/playlist-automation/config")
-async def configure_playlist_automation(payload: dict[str, Any]):
-    return await _playlist_operation(
-        playlist_automation.configure,
-        str(payload.get("client_id") or ""),
-        str(payload.get("client_secret") or ""),
-        str(payload.get("redirect_uri") or ""),
-    )
-
-
-@app.get("/playlist-automation/login")
-async def playlist_automation_login():
-    try:
-        return RedirectResponse(
-            await _playlist_operation(playlist_automation.login_url)
-        )
-    except HTTPException:
-        raise
-
-
-@app.get("/playlist-automation/callback")
-async def playlist_automation_callback(code: str = "", state: str | None = None):
-    try:
-        await _playlist_operation(playlist_automation.callback, code, state)
-        return RedirectResponse(
-            f"{playlist_automation.application_url()}?tab=playlist-automation&playlist-automation=connected"
-        )
-    except HTTPException as exc:
-        message = quote(str(exc.detail))
-        return RedirectResponse(
-            f"{playlist_automation.application_url()}?tab=playlist-automation&playlist-automation=error&message={message}"
-        )
-
-
-@app.post("/playlist-automation/logout")
-async def playlist_automation_logout():
-    return await _playlist_operation(playlist_automation.logout)
-
-
-@app.get("/playlist-automation/playlists")
-async def playlist_automation_playlists():
-    return {"playlists": await _playlist_operation(playlist_automation.playlists)}
-
-
-@app.post("/playlist-automation/scan")
-async def playlist_automation_scan(payload: dict[str, Any]):
-    return await _playlist_operation(playlist_automation.scan, payload)
-
-
-@app.post("/playlist-automation/apply")
-async def playlist_automation_apply(payload: dict[str, Any]):
-    return await _playlist_operation(playlist_automation.apply, payload)
-
-
-@app.post("/playlist-automation/sort/scan")
-async def scan_selected_playlists_for_sorting(payload: dict[str, Any]):
-    return {
-        "playlists": await _playlist_operation(playlist_automation.sort_scan, payload)
-    }
-
-
-@app.post("/playlist-automation/sort/apply")
-async def apply_selected_playlist_sorting(payload: dict[str, Any]):
-    return await _playlist_operation(playlist_automation.sort_apply, payload)
-
-
-@app.get("/playlist-automation/history")
-async def playlist_automation_history():
-    return {"history": playlist_automation.history()}
-
-
-@app.delete("/playlist-automation/history")
-async def clear_playlist_automation_history():
-    playlist_automation.clear_history()
-    return {"success": True}
-
-
-@app.delete("/playlist-automation/history/{history_id}")
-async def delete_playlist_automation_history(history_id: str):
-    await _playlist_operation(playlist_automation.delete_history, history_id)
-    return {"success": True}
-
-
-@app.post("/playlist-automation/history/{history_id}/restore")
-async def restore_playlist_automation_history(history_id: str):
-    return await _playlist_operation(playlist_automation.restore_history, history_id)
-
-
-@app.post("/playlist-automation/compare")
-async def compare_playlist_automation(payload: dict[str, Any]):
-    return await _playlist_operation(
-        playlist_automation.compare,
-        [str(value) for value in payload.get("playlist_ids", []) if value],
-    )
-
-
-@app.post("/playlist-automation/remove-track")
-async def remove_playlist_automation_track(payload: dict[str, Any]):
-    return await _playlist_operation(
-        playlist_automation.remove_track,
-        str(payload.get("playlist_id") or ""),
-        str(payload.get("track_uri") or ""),
-    )
-
-
-@app.get("/playlist-automation/ignored")
-async def get_ignored_playlist_tracks():
-    return {"items": playlist_automation.ignored()}
-
-
-@app.post("/playlist-automation/ignored")
-async def add_ignored_playlist_track(payload: dict[str, Any]):
-    return await _playlist_operation(playlist_automation.ignore, payload)
-
-
-@app.delete("/playlist-automation/ignored")
-async def remove_ignored_playlist_tracks(payload: dict[str, Any]):
-    playlist_automation.remove_ignored(
-        [str(value) for value in payload.get("track_ids", []) if value]
-    )
-    return {"success": True}
-
-
-@app.get("/playlist-automation/configs")
-async def get_playlist_automation_configs():
-    return {"configs": playlist_automation.configs()}
-
-
-@app.post("/playlist-automation/configs")
-async def save_playlist_automation_config(payload: dict[str, Any]):
-    return await _playlist_operation(
-        playlist_automation.save_config, payload, str(payload.get("id") or "") or None
-    )
-
-
-@app.post("/playlist-automation/configs/reorder")
-async def reorder_playlist_automation_configs(payload: dict[str, Any]):
-    return {
-        "configs": playlist_automation.reorder_configs(
-            [str(value) for value in payload.get("config_ids", []) if value]
-        )
-    }
-
-
-@app.delete("/playlist-automation/configs/{config_id}")
-async def delete_playlist_automation_config(config_id: str):
-    playlist_automation.delete_config(config_id)
-    return {"success": True}
-
-
-@app.post("/playlist-automation/configs/{config_id}/run")
-async def run_playlist_automation_config(config_id: str):
-    return await _playlist_operation(playlist_automation.run_config, config_id)
-
-
-@app.post("/playlist-automation/configs/run-all")
-async def run_all_playlist_automation_configs():
-    return await _playlist_operation(playlist_automation.run_all_configs)
-
-
-@app.get("/playlist-automation/export/config")
-async def export_playlist_automation_config():
-    return playlist_automation.export_config()
-
-
-@app.post("/playlist-automation/export/config-file")
-async def export_playlist_automation_config_file(payload: dict[str, Any]):
-    raise NotImplementedError
-    try:
-        path = write_export_file(
-            "playlist-automation-config",
-            "json",
-            json.dumps(
-                playlist_automation.export_config(), indent=2, ensure_ascii=False
-            ),
-            str(payload.get("directory") or ""),
-        )
-        return {"success": True, "path": path}
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.post("/playlist-automation/import/config")
-async def import_playlist_automation_config(payload: dict[str, Any]):
-    playlist_automation.import_config(payload)
-    return {"success": True}
-
-
-@app.post("/playlist-automation/export/csv")
-async def export_playlist_automation_csv(payload: dict[str, Any]):
-    content = playlist_automation.export_csv(
-        payload.get("tracks", []) if isinstance(payload.get("tracks", []), list) else []
-    )
-    return Response(
-        content=content,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=playlist-automation.csv"},
-    )
-
-
-@app.post("/playlist-automation/export/playlists-csv")
-async def export_selected_playlists_csv(payload: dict[str, Any]):
-    content = await _playlist_operation(
-        playlist_automation.export_playlists_csv,
-        [str(value) for value in payload.get("playlist_ids", []) if value],
-    )
-    return Response(
-        content=content,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=spotify-playlists.csv"},
-    )
-
-
-@app.post("/playlist-automation/export/playlists-csv-file")
-async def export_selected_playlists_csv_file(payload: dict[str, Any]):
-    raise NotImplementedError
-    content = await _playlist_operation(
-        playlist_automation.export_playlists_csv,
-        [str(value) for value in payload.get("playlist_ids", []) if value],
-    )
-    try:
-        path = write_export_file(
-            "spotify-playlists", "csv", content, str(payload.get("directory") or "")
-        )
-        return {"success": True, "path": path}
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.get("/playlist-automation/export/playlists-csv")
-async def download_selected_playlists_csv(playlist_ids: str = Query("")):
-    identifiers = [value.strip() for value in playlist_ids.split(",") if value.strip()]
-    content = await _playlist_operation(
-        playlist_automation.export_playlists_csv, identifiers
-    )
-    return Response(
-        content=content,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=spotify-playlists.csv"},
-    )
-
-
-@app.get("/playlist-automation/backups")
-async def get_playlist_automation_backups():
-    return {"backups": playlist_automation.backups()}
-
-
-@app.post("/playlist-automation/backups")
-async def create_playlist_automation_backup(payload: dict[str, Any]):
-    return await _playlist_operation(
-        playlist_automation.create_backup,
-        [str(value) for value in payload.get("playlist_ids", []) if value],
-    )
-
-
-@app.post("/playlist-automation/backups/restore")
-async def restore_playlist_automation_backup(payload: dict[str, Any]):
-    return await _playlist_operation(
-        playlist_automation.restore_backup,
-        str(payload.get("filename") or ""),
-        str(payload.get("target_playlist_id") or ""),
-    )
-
-
-@app.get("/playlist-automation/schedules")
-async def get_playlist_automation_schedules():
-    return {"schedules": playlist_automation.schedules()}
-
-
-@app.post("/playlist-automation/schedules")
-async def save_playlist_automation_schedule(payload: dict[str, Any]):
-    return await _playlist_operation(playlist_automation.save_schedule, payload)
-
-
-@app.delete("/playlist-automation/schedules/{schedule_id}")
-async def delete_playlist_automation_schedule(schedule_id: str):
-    playlist_automation.delete_schedule(schedule_id)
     return {"success": True}
 
 
