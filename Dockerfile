@@ -22,6 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 # One runtime process serves both FastAPI and the compiled frontend.
 FROM python:3.12-slim AS runtime
 
+
+RUN groupadd -g 1001 appgroup && \
+    useradd -u 1001 -g appgroup -m otsusr
+
+USER otsusr
+
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
