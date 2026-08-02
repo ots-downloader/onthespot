@@ -65,6 +65,7 @@ def _patch_librespot_zeroconf_runner() -> bool:
     try:
         close_source = textwrap.dedent(inspect.getsource(runner_type.close)).strip()
     except (OSError, TypeError):
+        logger.error("Error patching librespot method for http.close()")
         close_source = ""
     if not close_source.endswith("pass"):
         return False
