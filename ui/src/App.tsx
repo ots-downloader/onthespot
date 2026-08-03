@@ -99,6 +99,8 @@ const LogViewer = lazy(() =>
   })),
 );
 
+const SSEid = uuidv4();
+
 const PageLoading = () => (
   <div className="ots-page flex min-h-[40vh] items-center justify-center text-sm text-[var(--spotify-text-muted)]">
     Loading…
@@ -341,7 +343,7 @@ export default function App() {
     dismissNotification,
     clearHistory,
     lastStatusChange,
-  } = useNotifications(uuidv4());
+  } = useNotifications(SSEid);
   const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [themePreset, setThemePreset] = useState<ThemePreset>(
