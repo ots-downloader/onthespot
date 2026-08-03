@@ -97,7 +97,10 @@ export async function searchCatalog(
   const qParam = query ? `?q=${encodeURIComponent(query)}` : "";
   const res = await request(`/search${qParam}`, {
     method: "POST",
-    body: JSON.stringify({ ...(filters || {}), ...(services ? { services } : {}) }),
+    body: JSON.stringify({
+      ...(filters || {}),
+      ...(services ? { services } : {}),
+    }),
   });
   if (!res.ok) throw new Error("Catalogue search failed");
   const data = await res.json();
@@ -138,7 +141,10 @@ export async function fetchDownloadState(): Promise<{
 
 export async function setDownloadsPaused(paused: boolean): Promise<boolean> {
   try {
-    const res = await request(`/queue/downloads/pause?paused=${paused ? "true" : "false"}`, { method: "POST" });
+    const res = await request(
+      `/queue/downloads/pause?paused=${paused ? "true" : "false"}`,
+      { method: "POST" },
+    );
     if (!res.ok) return false;
     const body = await res.json().catch(() => null);
     return body?.success ?? body === true;
@@ -148,7 +154,9 @@ export async function setDownloadsPaused(paused: boolean): Promise<boolean> {
   }
 }
 
-export async function reorderDownloadQueue(local_ids: string[]): Promise<boolean> {
+export async function reorderDownloadQueue(
+  local_ids: string[],
+): Promise<boolean> {
   try {
     const res = await request("/queue/downloads/reorder", {
       method: "POST",
@@ -161,7 +169,14 @@ export async function reorderDownloadQueue(local_ids: string[]): Promise<boolean
   }
 }
 
-export type QueueBatchAction = "pause" | "resume" | "retry" | "cancel" | "delete" | "priority" | "profile";
+export type QueueBatchAction =
+  | "pause"
+  | "resume"
+  | "retry"
+  | "cancel"
+  | "delete"
+  | "priority"
+  | "profile";
 
 export async function batchDownloadQueue(
   local_ids: string[],
@@ -175,7 +190,10 @@ export async function batchDownloadQueue(
     });
     return res.ok;
   } catch (err) {
-    console.error(`Batch queue action (${action}) failed:`, err);}}
+    console.error(`Batch queue action (${action}) failed:`, err);
+    throw new Error("Failed to fetch queue");
+  }
+}
 
 export async function fetchPendingQueue(): Promise<SearchResultItem[]> {
   try {
@@ -210,7 +228,12 @@ export async function performPendingAction(
 export async function verifyDownloadQueue(
   local_ids: string[] = [],
   retry = true,
-): Promise<{ checked: number; healthy: number; corrupt: number; retried: number }> {
+): Promise<{
+  checked: number;
+  healthy: number;
+  corrupt: number;
+  retried: number;
+}> {
   try {
     const res = await request("/queue/downloads/verify", {
       method: "POST",
@@ -232,7 +255,10 @@ export interface DownloadProfile {
   download_path: string;
 }
 
-export async function fetchDownloadProfiles(): Promise<{ active: string; profiles: DownloadProfile[] }> {
+export async function fetchDownloadProfiles(): Promise<{
+  active: string;
+  profiles: DownloadProfile[];
+}> {
   try {
     const res = await request("/profiles");
     if (!res.ok) throw new Error("Failed to fetch download profiles");
@@ -243,7 +269,9 @@ export async function fetchDownloadProfiles(): Promise<{ active: string; profile
   }
 }
 
-export async function setActiveDownloadProfile(profile_id: string): Promise<boolean> {
+export async function setActiveDownloadProfile(
+  profile_id: string,
+): Promise<boolean> {
   try {
     const res = await request("/profiles/active", {
       method: "POST",
@@ -258,9 +286,14 @@ export async function setActiveDownloadProfile(profile_id: string): Promise<bool
   }
 }
 
-export async function saveDownloadProfile(profile: DownloadProfile): Promise<DownloadProfile | null> {
+export async function saveDownloadProfile(
+  profile: DownloadProfile,
+): Promise<DownloadProfile | null> {
   try {
-    const res = await request("/profiles", { method: "POST", body: JSON.stringify(profile) });
+    const res = await request("/profiles", {
+      method: "POST",
+      body: JSON.stringify(profile),
+    });
     if (!res.ok) throw new Error("Save profile failed");
     const data = await res.json();
     return data?.success === false ? null : data;
@@ -270,9 +303,13 @@ export async function saveDownloadProfile(profile: DownloadProfile): Promise<Dow
   }
 }
 
-export async function deleteDownloadProfile(profile_id: string): Promise<boolean> {
+export async function deleteDownloadProfile(
+  profile_id: string,
+): Promise<boolean> {
   try {
-    const res = await request(`/profiles/${encodeURIComponent(profile_id)}`, { method: "DELETE" });
+    const res = await request(`/profiles/${encodeURIComponent(profile_id)}`, {
+      method: "DELETE",
+    });
     if (!res.ok) return false;
     const data = await res.json().catch(() => ({}));
     return data.success !== false;
@@ -339,11 +376,24 @@ export interface LibraryFilters {
 const dateToTimestamp = (value?: string, endOfDay = false) => {
   if (!value) return "";
   const date = new Date(`${value}T${endOfDay ? "23:59:59" : "00:00:00"}`);
-  return Number.isNaN(date.getTime()) ? "" : String(Math.floor(date.getTime() / 1000));
+  return Number.isNaN(date.getTime())
+    ? ""
+    : String(Math.floor(date.getTime() / 1000));
 };
 
-const libraryParams = (query: string, sort: string, sortDescending: boolean, duplicatesOnly: boolean, filters: LibraryFilters) => {
-  const params = new URLSearchParams({ q: query, sort, sort_descending: String(sortDescending), duplicates_only: String(duplicatesOnly) });
+const libraryParams = (
+  query: string,
+  sort: string,
+  sortDescending: boolean,
+  duplicatesOnly: boolean,
+  filters: LibraryFilters,
+) => {
+  const params = new URLSearchParams({
+    q: query,
+    sort,
+    sort_descending: String(sortDescending),
+    duplicates_only: String(duplicatesOnly),
+  });
   if (filters.missingArtwork) params.set("missing_artwork", "true");
   if (filters.failedMetadata) params.set("failed_metadata", "true");
   if (filters.format) params.set("file_format", filters.format);
@@ -370,13 +420,26 @@ export async function fetchLibrary(
   filters: LibraryFilters = {},
 ): Promise<LibraryResponse> {
   try {
-    const params = libraryParams(query, sort, sortDescending, duplicatesOnly, filters);
+    const params = libraryParams(
+      query,
+      sort,
+      sortDescending,
+      duplicatesOnly,
+      filters,
+    );
     const res = await request(`/library?${params.toString()}`);
     if (!res.ok) throw new Error("Failed to fetch local library");
     return await res.json();
   } catch (err) {
     console.error("Fetch local library failed:", err);
-    return { items: [], count: 0, duplicate_count: 0, roots: [], storage_used: 0, scanned_at: 0 };
+    return {
+      items: [],
+      count: 0,
+      duplicate_count: 0,
+      roots: [],
+      storage_used: 0,
+      scanned_at: 0,
+    };
   }
 }
 
@@ -388,19 +451,39 @@ export async function scanLibrary(
   filters: LibraryFilters = {},
 ): Promise<LibraryResponse> {
   try {
-    const params = libraryParams(query, sort, sortDescending, duplicatesOnly, filters);
-    const res = await request(`/library/scan?${params.toString()}`, { method: "POST" });
+    const params = libraryParams(
+      query,
+      sort,
+      sortDescending,
+      duplicatesOnly,
+      filters,
+    );
+    const res = await request(`/library/scan?${params.toString()}`, {
+      method: "POST",
+    });
     if (!res.ok) throw new Error("Failed to scan local library");
     return await res.json();
   } catch (err) {
     console.error("Scan local library failed:", err);
-    return { items: [], count: 0, duplicate_count: 0, roots: [], storage_used: 0, scanned_at: 0 };
+    return {
+      items: [],
+      count: 0,
+      duplicate_count: 0,
+      roots: [],
+      storage_used: 0,
+      scanned_at: 0,
+    };
   }
 }
 
-export async function verifyLibraryFiles(paths: string[] = []): Promise<{ checked: number; healthy: number; corrupt: number }> {
+export async function verifyLibraryFiles(
+  paths: string[] = [],
+): Promise<{ checked: number; healthy: number; corrupt: number }> {
   try {
-    const res = await request("/library/verify", { method: "POST", body: JSON.stringify({ paths }) });
+    const res = await request("/library/verify", {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    });
     if (!res.ok) throw new Error("Library verification failed");
     return await res.json();
   } catch (err) {
@@ -409,7 +492,9 @@ export async function verifyLibraryFiles(paths: string[] = []): Promise<{ checke
   }
 }
 
-export async function fetchMissingLibraryItems(query = ""): Promise<LibraryItem[]> {
+export async function fetchMissingLibraryItems(
+  query = "",
+): Promise<LibraryItem[]> {
   try {
     const params = new URLSearchParams({ q: query });
     const res = await request(`/library/missing?${params.toString()}`);
@@ -422,9 +507,15 @@ export async function fetchMissingLibraryItems(query = ""): Promise<LibraryItem[
   }
 }
 
-export async function openLibraryItem(path: string, action: "play" | "folder" = "folder"): Promise<boolean> {
+export async function openLibraryItem(
+  path: string,
+  action: "play" | "folder" = "folder",
+): Promise<boolean> {
   try {
-    const res = await request("/library/open", { method: "POST", body: JSON.stringify({ path, action }) });
+    const res = await request("/library/open", {
+      method: "POST",
+      body: JSON.stringify({ path, action }),
+    });
     return res.ok;
   } catch (err) {
     console.error("Open library item failed:", err);
@@ -432,9 +523,15 @@ export async function openLibraryItem(path: string, action: "play" | "folder" = 
   }
 }
 
-export async function renameLibraryItem(path: string, new_name: string): Promise<LibraryItem | null> {
+export async function renameLibraryItem(
+  path: string,
+  new_name: string,
+): Promise<LibraryItem | null> {
   try {
-    const res = await request("/library/rename", { method: "POST", body: JSON.stringify({ path, new_name }) });
+    const res = await request("/library/rename", {
+      method: "POST",
+      body: JSON.stringify({ path, new_name }),
+    });
     if (!res.ok) {
       let detail = "Could not rename that file.";
       try {
@@ -455,14 +552,28 @@ export async function renameLibraryItem(path: string, new_name: string): Promise
 
 export async function updateLibraryMetadata(
   path: string,
-  changes: Partial<Pick<LibraryItem, "title" | "artist" | "album" | "genre" | "year" | "release_date" | "lyrics">> & {
+  changes: Partial<
+    Pick<
+      LibraryItem,
+      | "title"
+      | "artist"
+      | "album"
+      | "genre"
+      | "year"
+      | "release_date"
+      | "lyrics"
+    >
+  > & {
     album_artist?: string;
     track_number?: string | number;
     disc_number?: string | number;
   },
 ): Promise<LibraryItem | null> {
   try {
-    const res = await request("/library/metadata", { method: "POST", body: JSON.stringify({ path, ...changes }) });
+    const res = await request("/library/metadata", {
+      method: "POST",
+      body: JSON.stringify({ path, ...changes }),
+    });
     if (!res.ok) return null;
     const data = await res.json();
     return data.item || null;
@@ -472,7 +583,10 @@ export async function updateLibraryMetadata(
   }
 }
 
-export async function uploadLibraryCover(path: string, file: File): Promise<LibraryItem | null> {
+export async function uploadLibraryCover(
+  path: string,
+  file: File,
+): Promise<LibraryItem | null> {
   try {
     const form = new FormData();
     form.append("path", path);
@@ -487,9 +601,15 @@ export async function uploadLibraryCover(path: string, file: File): Promise<Libr
   }
 }
 
-export async function createLibraryM3U(name: string, paths: string[]): Promise<string | null> {
+export async function createLibraryM3U(
+  name: string,
+  paths: string[],
+): Promise<string | null> {
   try {
-    const res = await request("/library/m3u", { method: "POST", body: JSON.stringify({ name, paths }) });
+    const res = await request("/library/m3u", {
+      method: "POST",
+      body: JSON.stringify({ name, paths }),
+    });
     if (!res.ok) return null;
     const data = await res.json();
     return data.path || null;
@@ -499,9 +619,14 @@ export async function createLibraryM3U(name: string, paths: string[]): Promise<s
   }
 }
 
-export async function requeueMissingLibraryItem(path: string): Promise<boolean> {
+export async function requeueMissingLibraryItem(
+  path: string,
+): Promise<boolean> {
   try {
-    const res = await request("/library/requeue", { method: "POST", body: JSON.stringify({ path }) });
+    const res = await request("/library/requeue", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
     return res.ok;
   } catch (err) {
     console.error("Requeue missing library item failed:", err);
@@ -509,9 +634,14 @@ export async function requeueMissingLibraryItem(path: string): Promise<boolean> 
   }
 }
 
-export async function removeMissingLibraryItems(paths: string[] = []): Promise<number> {
+export async function removeMissingLibraryItems(
+  paths: string[] = [],
+): Promise<number> {
   try {
-    const res = await request("/library/missing", { method: "DELETE", body: JSON.stringify({ paths }) });
+    const res = await request("/library/missing", {
+      method: "DELETE",
+      body: JSON.stringify({ paths }),
+    });
     if (!res.ok) throw new Error("Failed to remove missing library entries");
     const data = await res.json();
     return Number(data?.removed || 0);
@@ -633,7 +763,12 @@ export async function fetchAccounts(): Promise<AccountItem[]> {
 
 export interface AccountHealth {
   healthy: boolean;
-  spotify: { configured: boolean; connected: boolean; status: string; connect_service?: { running: boolean; device_name: string; port: number } };
+  spotify: {
+    configured: boolean;
+    connected: boolean;
+    status: string;
+    connect_service?: { running: boolean; device_name: string; port: number };
+  };
   configured_accounts: number;
   authenticated_accounts: number;
   missing_services: string[];
@@ -671,11 +806,29 @@ export async function reconnectAccounts(): Promise<boolean> {
 export interface SystemDiagnostics {
   backend: { status: string; version: string };
   workers: Record<string, boolean>;
-  queue: { pending: number; parsing: number; downloads: number; statuses: Record<string, number>; paused: boolean };
+  queue: {
+    pending: number;
+    parsing: number;
+    downloads: number;
+    statuses: Record<string, number>;
+    paused: boolean;
+  };
   ffmpeg: { path: string; available: boolean };
   disk: { total: number; free: number; used: number };
-  rate_limit: { active: boolean; host: string; seconds_remaining: number; count: number };
-  spotify_api: { configured: boolean; connected: boolean; status: string; rate_limited: boolean; seconds_remaining: number; connect_service?: { running: boolean; device_name: string; port: number } };
+  rate_limit: {
+    active: boolean;
+    host: string;
+    seconds_remaining: number;
+    count: number;
+  };
+  spotify_api: {
+    configured: boolean;
+    connected: boolean;
+    status: string;
+    rate_limited: boolean;
+    seconds_remaining: number;
+    connect_service?: { running: boolean; device_name: string; port: number };
+  };
 }
 
 export interface UpdateAsset {
@@ -711,7 +864,9 @@ export interface UpdateInstallResult {
   message: string;
 }
 
-export async function fetchUpdateInfo(force = false): Promise<UpdateInfo | null> {
+export async function fetchUpdateInfo(
+  force = false,
+): Promise<UpdateInfo | null> {
   try {
     const suffix = force ? "?force=true" : "";
     const res = await request(`/updates/check${suffix}`);
@@ -727,7 +882,8 @@ export async function installApplicationUpdate(): Promise<UpdateInstallResult | 
   try {
     const res = await request("/updates/install", { method: "POST" });
     const data = await res.json();
-    if (!data || typeof data !== "object") throw new Error("Invalid update response");
+    if (!data || typeof data !== "object")
+      throw new Error("Invalid update response");
     return data as UpdateInstallResult;
   } catch (err) {
     console.error("Install application update failed:", err);
@@ -747,9 +903,25 @@ export async function fetchSystemDiagnostics(): Promise<SystemDiagnostics | null
 }
 
 export interface DownloadStatistics {
-  totals: { downloads: number; bytes: number; success: number; failed: number; success_rate: number };
+  totals: {
+    downloads: number;
+    bytes: number;
+    success: number;
+    failed: number;
+    success_rate: number;
+  };
   formats: Record<string, number>;
-  history: Array<{ id: string; timestamp: number; status: string; success: boolean; bytes: number; format: string; name: string; artist: string; error?: string }>;
+  history: Array<{
+    id: string;
+    timestamp: number;
+    status: string;
+    success: boolean;
+    bytes: number;
+    format: string;
+    name: string;
+    artist: string;
+    error?: string;
+  }>;
   storage_used: number;
   library_tracks: number;
   queue_counts: Record<string, number>;
@@ -788,9 +960,15 @@ export async function exportBackup(): Promise<Record<string, unknown> | null> {
   }
 }
 
-export async function saveBackupFile(backup: Record<string, unknown>, directory = ""): Promise<string | null> {
+export async function saveBackupFile(
+  backup: Record<string, unknown>,
+  directory = "",
+): Promise<string | null> {
   try {
-    const res = await request("/backup/export-file", { method: "POST", body: JSON.stringify({ backup, directory }) });
+    const res = await request("/backup/export-file", {
+      method: "POST",
+      body: JSON.stringify({ backup, directory }),
+    });
     if (!res.ok) throw new Error("Failed to save backup file");
     return String((await res.json()).path || "") || null;
   } catch (err) {
@@ -821,9 +999,14 @@ export async function fetchPlaylistBackupDirectory(): Promise<string> {
   }
 }
 
-export async function savePlaylistBackupDirectory(directory: string): Promise<string | null> {
+export async function savePlaylistBackupDirectory(
+  directory: string,
+): Promise<string | null> {
   try {
-    const res = await request("/exports/playlist-backup-location", { method: "POST", body: JSON.stringify({ directory }) });
+    const res = await request("/exports/playlist-backup-location", {
+      method: "POST",
+      body: JSON.stringify({ directory }),
+    });
     if (!res.ok) throw new Error("Failed to save playlist backup location");
     return String((await res.json()).directory || "") || null;
   } catch (err) {
@@ -832,9 +1015,16 @@ export async function savePlaylistBackupDirectory(directory: string): Promise<st
   }
 }
 
-export async function saveTextExport(filename: string, content: string, directory = ""): Promise<string | null> {
+export async function saveTextExport(
+  filename: string,
+  content: string,
+  directory = "",
+): Promise<string | null> {
   try {
-    const res = await request("/exports/write", { method: "POST", body: JSON.stringify({ filename, content, directory }) });
+    const res = await request("/exports/write", {
+      method: "POST",
+      body: JSON.stringify({ filename, content, directory }),
+    });
     if (!res.ok) throw new Error("Failed to save export file");
     return String((await res.json()).path || "") || null;
   } catch (err) {
@@ -843,9 +1033,14 @@ export async function saveTextExport(filename: string, content: string, director
   }
 }
 
-export async function openExportFolder(playlistBackups = false): Promise<string | null> {
+export async function openExportFolder(
+  playlistBackups = false,
+): Promise<string | null> {
   try {
-    const res = await request("/exports/open-folder", { method: "POST", body: JSON.stringify({ playlist_backups: playlistBackups }) });
+    const res = await request("/exports/open-folder", {
+      method: "POST",
+      body: JSON.stringify({ playlist_backups: playlistBackups }),
+    });
     if (!res.ok) throw new Error("Failed to open export folder");
     return String((await res.json()).path || "") || null;
   } catch (err) {
@@ -854,9 +1049,14 @@ export async function openExportFolder(playlistBackups = false): Promise<string 
   }
 }
 
-export async function importBackup(payload: Record<string, unknown>): Promise<boolean> {
+export async function importBackup(
+  payload: Record<string, unknown>,
+): Promise<boolean> {
   try {
-    const res = await request("/backup/import", { method: "POST", body: JSON.stringify(payload) });
+    const res = await request("/backup/import", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
     return res.ok;
   } catch (err) {
     console.error("Import backup failed:", err);
@@ -864,7 +1064,10 @@ export async function importBackup(payload: Record<string, unknown>): Promise<bo
   }
 }
 
-export async function exportSettings(): Promise<Record<string, unknown> | null> {
+export async function exportSettings(): Promise<Record<
+  string,
+  unknown
+> | null> {
   try {
     const res = await request("/config/export");
     if (!res.ok) throw new Error("Failed to export settings");
@@ -875,9 +1078,14 @@ export async function exportSettings(): Promise<Record<string, unknown> | null> 
   }
 }
 
-export async function importSettings(payload: Record<string, unknown>): Promise<boolean> {
+export async function importSettings(
+  payload: Record<string, unknown>,
+): Promise<boolean> {
   try {
-    const res = await request("/config/import", { method: "POST", body: JSON.stringify(payload) });
+    const res = await request("/config/import", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
     return res.ok;
   } catch (err) {
     console.error("Import settings failed:", err);
@@ -968,7 +1176,9 @@ export interface SpotifyCompanionPairing {
 
 export async function createSpotifyCompanionPairing(): Promise<SpotifyCompanionPairing | null> {
   try {
-    const res = await request("/accounts/spotify/companion/pair", { method: "POST" });
+    const res = await request("/accounts/spotify/companion/pair", {
+      method: "POST",
+    });
     if (!res.ok) throw new Error("Create Spotify companion pairing failed");
     return await res.json();
   } catch (err) {
@@ -991,7 +1201,9 @@ export interface YouTubeAuthenticationStatus {
   error: string;
 }
 
-export async function configureYouTubeAuthentication(authentication: YouTubeAuthentication): Promise<boolean> {
+export async function configureYouTubeAuthentication(
+  authentication: YouTubeAuthentication,
+): Promise<boolean> {
   try {
     const res = await request("/accounts/youtube-auth", {
       method: "POST",
@@ -999,7 +1211,9 @@ export async function configureYouTubeAuthentication(authentication: YouTubeAuth
     });
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}));
-      throw new Error(payload.detail || "The YouTube authentication setup is not usable");
+      throw new Error(
+        payload.detail || "The YouTube authentication setup is not usable",
+      );
     }
     return true;
   } catch (err) {
@@ -1019,14 +1233,21 @@ export async function fetchYouTubeAuthenticationStatus(): Promise<YouTubeAuthent
   }
 }
 
-export async function uploadYouTubeCookies(file: File): Promise<YouTubeAuthenticationStatus | null> {
+export async function uploadYouTubeCookies(
+  file: File,
+): Promise<YouTubeAuthenticationStatus | null> {
   try {
     const form = new FormData();
     form.append("cookies", file);
-    const res = await request("/accounts/youtube-auth/upload", { method: "POST", body: form });
+    const res = await request("/accounts/youtube-auth/upload", {
+      method: "POST",
+      body: form,
+    });
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}));
-      throw new Error(payload.detail || "The cookies file could not be uploaded");
+      throw new Error(
+        payload.detail || "The cookies file could not be uploaded",
+      );
     }
     return await res.json();
   } catch (err) {
@@ -1041,7 +1262,11 @@ export interface PlaylistAutomationStatus {
   redirect_uri: string;
   scope: string;
   credentials_source?: string;
-  user?: { id?: string; display_name?: string; images?: Array<{ url?: string }> } | null;
+  user?: {
+    id?: string;
+    display_name?: string;
+    images?: Array<{ url?: string }>;
+  } | null;
 }
 
 export interface SpotifyPlaylistSummary {
@@ -1174,9 +1399,16 @@ export function getPlaylistAutomationLoginUrl(): string {
   return getEndpoint("/playlist-automation/login");
 }
 
-export async function configurePlaylistAutomation(payload: { client_id: string; client_secret: string; redirect_uri?: string }): Promise<PlaylistAutomationStatus | null> {
+export async function configurePlaylistAutomation(payload: {
+  client_id: string;
+  client_secret: string;
+  redirect_uri?: string;
+}): Promise<PlaylistAutomationStatus | null> {
   try {
-    const res = await request("/playlist-automation/config", { method: "POST", body: JSON.stringify(payload) });
+    const res = await request("/playlist-automation/config", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
     if (!res.ok) throw new Error("Could not save Spotify playlist credentials");
     return await res.json();
   } catch (err) {
@@ -1187,7 +1419,9 @@ export async function configurePlaylistAutomation(payload: { client_id: string; 
 
 export async function logoutPlaylistAutomation(): Promise<boolean> {
   try {
-    const res = await request("/playlist-automation/logout", { method: "POST" });
+    const res = await request("/playlist-automation/logout", {
+      method: "POST",
+    });
     return res.ok;
   } catch (err) {
     console.error("Playlist automation logout failed:", err);
@@ -1195,7 +1429,9 @@ export async function logoutPlaylistAutomation(): Promise<boolean> {
   }
 }
 
-export async function fetchPlaylistAutomationPlaylists(): Promise<SpotifyPlaylistSummary[]> {
+export async function fetchPlaylistAutomationPlaylists(): Promise<
+  SpotifyPlaylistSummary[]
+> {
   try {
     const res = await request("/playlist-automation/playlists");
     if (!res.ok) throw new Error("Failed to fetch Spotify playlists");
@@ -1207,10 +1443,19 @@ export async function fetchPlaylistAutomationPlaylists(): Promise<SpotifyPlaylis
   }
 }
 
-export async function scanPlaylistAutomation(payload: Record<string, unknown>): Promise<PlaylistAutomationPreview | null> {
+export async function scanPlaylistAutomation(
+  payload: Record<string, unknown>,
+): Promise<PlaylistAutomationPreview | null> {
   try {
-    const res = await request("/playlist-automation/scan", { method: "POST", body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Failed to scan playlists");
+    const res = await request("/playlist-automation/scan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok)
+      throw new Error(
+        (await res.json().catch(() => ({}))).detail ||
+          "Failed to scan playlists",
+      );
     return await res.json();
   } catch (err) {
     console.error("Scan playlists failed:", err);
@@ -1218,10 +1463,19 @@ export async function scanPlaylistAutomation(payload: Record<string, unknown>): 
   }
 }
 
-export async function scanSelectedPlaylistsForSorting(payload: Record<string, unknown>): Promise<PlaylistSortPreview[]> {
+export async function scanSelectedPlaylistsForSorting(
+  payload: Record<string, unknown>,
+): Promise<PlaylistSortPreview[]> {
   try {
-    const res = await request("/playlist-automation/sort/scan", { method: "POST", body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Failed to scan playlists for sorting");
+    const res = await request("/playlist-automation/sort/scan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok)
+      throw new Error(
+        (await res.json().catch(() => ({}))).detail ||
+          "Failed to scan playlists for sorting",
+      );
     const data = await res.json();
     return Array.isArray(data.playlists) ? data.playlists : [];
   } catch (err) {
@@ -1230,10 +1484,23 @@ export async function scanSelectedPlaylistsForSorting(payload: Record<string, un
   }
 }
 
-export async function applySelectedPlaylistSorting(payload: Record<string, unknown>): Promise<{ success: boolean; playlist_name?: string; tracks_processed?: number } | null> {
+export async function applySelectedPlaylistSorting(
+  payload: Record<string, unknown>,
+): Promise<{
+  success: boolean;
+  playlist_name?: string;
+  tracks_processed?: number;
+} | null> {
   try {
-    const res = await request("/playlist-automation/sort/apply", { method: "POST", body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Failed to apply playlist sorting");
+    const res = await request("/playlist-automation/sort/apply", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok)
+      throw new Error(
+        (await res.json().catch(() => ({}))).detail ||
+          "Failed to apply playlist sorting",
+      );
     return await res.json();
   } catch (err) {
     console.error("Apply playlist sorting failed:", err);
@@ -1241,10 +1508,23 @@ export async function applySelectedPlaylistSorting(payload: Record<string, unkno
   }
 }
 
-export async function applyPlaylistAutomation(payload: Record<string, unknown>): Promise<{ success: boolean; playlist_name?: string; tracks_processed?: number } | null> {
+export async function applyPlaylistAutomation(
+  payload: Record<string, unknown>,
+): Promise<{
+  success: boolean;
+  playlist_name?: string;
+  tracks_processed?: number;
+} | null> {
   try {
-    const res = await request("/playlist-automation/apply", { method: "POST", body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Failed to update playlist");
+    const res = await request("/playlist-automation/apply", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok)
+      throw new Error(
+        (await res.json().catch(() => ({}))).detail ||
+          "Failed to update playlist",
+      );
     return await res.json();
   } catch (err) {
     console.error("Apply playlist automation failed:", err);
@@ -1252,7 +1532,9 @@ export async function applyPlaylistAutomation(payload: Record<string, unknown>):
   }
 }
 
-export async function fetchPlaylistAutomationHistory(): Promise<PlaylistAutomationHistoryItem[]> {
+export async function fetchPlaylistAutomationHistory(): Promise<
+  PlaylistAutomationHistoryItem[]
+> {
   try {
     const res = await request("/playlist-automation/history");
     if (!res.ok) throw new Error("Failed to fetch playlist history");
@@ -1264,9 +1546,14 @@ export async function fetchPlaylistAutomationHistory(): Promise<PlaylistAutomati
   }
 }
 
-export async function restorePlaylistAutomationHistory(id: string): Promise<boolean> {
+export async function restorePlaylistAutomationHistory(
+  id: string,
+): Promise<boolean> {
   try {
-    const res = await request(`/playlist-automation/history/${encodeURIComponent(id)}/restore`, { method: "POST" });
+    const res = await request(
+      `/playlist-automation/history/${encodeURIComponent(id)}/restore`,
+      { method: "POST" },
+    );
     return res.ok;
   } catch (err) {
     console.error("Restore playlist history failed:", err);
@@ -1276,7 +1563,9 @@ export async function restorePlaylistAutomationHistory(id: string): Promise<bool
 
 export async function clearPlaylistAutomationHistory(): Promise<boolean> {
   try {
-    const res = await request("/playlist-automation/history", { method: "DELETE" });
+    const res = await request("/playlist-automation/history", {
+      method: "DELETE",
+    });
     return res.ok;
   } catch (err) {
     console.error("Clear playlist history failed:", err);
@@ -1284,9 +1573,14 @@ export async function clearPlaylistAutomationHistory(): Promise<boolean> {
   }
 }
 
-export async function deletePlaylistAutomationHistory(id: string): Promise<boolean> {
+export async function deletePlaylistAutomationHistory(
+  id: string,
+): Promise<boolean> {
   try {
-    const res = await request(`/playlist-automation/history/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await request(
+      `/playlist-automation/history/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
     return res.ok;
   } catch (err) {
     console.error("Delete playlist history failed:", err);
@@ -1294,9 +1588,23 @@ export async function deletePlaylistAutomationHistory(id: string): Promise<boole
   }
 }
 
-export async function comparePlaylistAutomation(playlist_ids: string[]): Promise<{ playlists_compared: number; duplicate_count: number; duplicates: Array<{ name: string; artist: string; track_id: string; found_in_playlists: string[] }> } | null> {
+export async function comparePlaylistAutomation(
+  playlist_ids: string[],
+): Promise<{
+  playlists_compared: number;
+  duplicate_count: number;
+  duplicates: Array<{
+    name: string;
+    artist: string;
+    track_id: string;
+    found_in_playlists: string[];
+  }>;
+} | null> {
   try {
-    const res = await request("/playlist-automation/compare", { method: "POST", body: JSON.stringify({ playlist_ids }) });
+    const res = await request("/playlist-automation/compare", {
+      method: "POST",
+      body: JSON.stringify({ playlist_ids }),
+    });
     if (!res.ok) throw new Error("Failed to compare playlists");
     return await res.json();
   } catch (err) {
@@ -1305,9 +1613,15 @@ export async function comparePlaylistAutomation(playlist_ids: string[]): Promise
   }
 }
 
-export async function removePlaylistAutomationTrack(playlist_id: string, track_uri: string): Promise<boolean> {
+export async function removePlaylistAutomationTrack(
+  playlist_id: string,
+  track_uri: string,
+): Promise<boolean> {
   try {
-    const res = await request("/playlist-automation/remove-track", { method: "POST", body: JSON.stringify({ playlist_id, track_uri }) });
+    const res = await request("/playlist-automation/remove-track", {
+      method: "POST",
+      body: JSON.stringify({ playlist_id, track_uri }),
+    });
     return res.ok;
   } catch (err) {
     console.error("Remove playlist duplicate failed:", err);
@@ -1315,9 +1629,14 @@ export async function removePlaylistAutomationTrack(playlist_id: string, track_u
   }
 }
 
-export async function ignorePlaylistAutomationTrack(track: PlaylistAutomationTrack): Promise<boolean> {
+export async function ignorePlaylistAutomationTrack(
+  track: PlaylistAutomationTrack,
+): Promise<boolean> {
   try {
-    const res = await request("/playlist-automation/ignored", { method: "POST", body: JSON.stringify(track) });
+    const res = await request("/playlist-automation/ignored", {
+      method: "POST",
+      body: JSON.stringify(track),
+    });
     return res.ok;
   } catch (err) {
     console.error("Ignore playlist track failed:", err);
@@ -1325,7 +1644,9 @@ export async function ignorePlaylistAutomationTrack(track: PlaylistAutomationTra
   }
 }
 
-export async function fetchIgnoredPlaylistAutomationTracks(): Promise<Array<{ track_id: string; name: string; artist: string }>> {
+export async function fetchIgnoredPlaylistAutomationTracks(): Promise<
+  Array<{ track_id: string; name: string; artist: string }>
+> {
   try {
     const res = await request("/playlist-automation/ignored");
     if (!res.ok) throw new Error("Failed to fetch ignored tracks");
@@ -1337,9 +1658,14 @@ export async function fetchIgnoredPlaylistAutomationTracks(): Promise<Array<{ tr
   }
 }
 
-export async function removeIgnoredPlaylistAutomationTracks(track_ids: string[]): Promise<boolean> {
+export async function removeIgnoredPlaylistAutomationTracks(
+  track_ids: string[],
+): Promise<boolean> {
   try {
-    const res = await request("/playlist-automation/ignored", { method: "DELETE", body: JSON.stringify({ track_ids }) });
+    const res = await request("/playlist-automation/ignored", {
+      method: "DELETE",
+      body: JSON.stringify({ track_ids }),
+    });
     return res.ok;
   } catch (err) {
     console.error("Remove ignored playlist tracks failed:", err);
@@ -1347,7 +1673,9 @@ export async function removeIgnoredPlaylistAutomationTracks(track_ids: string[])
   }
 }
 
-export async function fetchPlaylistAutomationConfigs(): Promise<PlaylistAutomationConfig[]> {
+export async function fetchPlaylistAutomationConfigs(): Promise<
+  PlaylistAutomationConfig[]
+> {
   try {
     const res = await request("/playlist-automation/configs");
     if (!res.ok) throw new Error("Failed to fetch automation configs");
@@ -1359,9 +1687,14 @@ export async function fetchPlaylistAutomationConfigs(): Promise<PlaylistAutomati
   }
 }
 
-export async function savePlaylistAutomationConfig(value: Partial<PlaylistAutomationConfig>): Promise<PlaylistAutomationConfig | null> {
+export async function savePlaylistAutomationConfig(
+  value: Partial<PlaylistAutomationConfig>,
+): Promise<PlaylistAutomationConfig | null> {
   try {
-    const res = await request("/playlist-automation/configs", { method: "POST", body: JSON.stringify(value) });
+    const res = await request("/playlist-automation/configs", {
+      method: "POST",
+      body: JSON.stringify(value),
+    });
     if (!res.ok) throw new Error("Failed to save automation config");
     return await res.json();
   } catch (err) {
@@ -1370,9 +1703,14 @@ export async function savePlaylistAutomationConfig(value: Partial<PlaylistAutoma
   }
 }
 
-export async function deletePlaylistAutomationConfig(id: string): Promise<boolean> {
+export async function deletePlaylistAutomationConfig(
+  id: string,
+): Promise<boolean> {
   try {
-    const res = await request(`/playlist-automation/configs/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await request(
+      `/playlist-automation/configs/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
     return res.ok;
   } catch (err) {
     console.error("Delete automation config failed:", err);
@@ -1380,9 +1718,14 @@ export async function deletePlaylistAutomationConfig(id: string): Promise<boolea
   }
 }
 
-export async function reorderPlaylistAutomationConfigs(config_ids: string[]): Promise<PlaylistAutomationConfig[] | null> {
+export async function reorderPlaylistAutomationConfigs(
+  config_ids: string[],
+): Promise<PlaylistAutomationConfig[] | null> {
   try {
-    const res = await request("/playlist-automation/configs/reorder", { method: "POST", body: JSON.stringify({ config_ids }) });
+    const res = await request("/playlist-automation/configs/reorder", {
+      method: "POST",
+      body: JSON.stringify({ config_ids }),
+    });
     if (!res.ok) throw new Error("Failed to reorder automation configs");
     const data = await res.json();
     return Array.isArray(data.configs) ? data.configs : [];
@@ -1392,9 +1735,14 @@ export async function reorderPlaylistAutomationConfigs(config_ids: string[]): Pr
   }
 }
 
-export async function runPlaylistAutomationConfig(id: string): Promise<boolean> {
+export async function runPlaylistAutomationConfig(
+  id: string,
+): Promise<boolean> {
   try {
-    const res = await request(`/playlist-automation/configs/${encodeURIComponent(id)}/run`, { method: "POST" });
+    const res = await request(
+      `/playlist-automation/configs/${encodeURIComponent(id)}/run`,
+      { method: "POST" },
+    );
     return res.ok;
   } catch (err) {
     console.error("Run automation config failed:", err);
@@ -1402,9 +1750,14 @@ export async function runPlaylistAutomationConfig(id: string): Promise<boolean> 
   }
 }
 
-export async function runAllPlaylistAutomationConfigs(): Promise<{ success: boolean; configs_processed?: number } | null> {
+export async function runAllPlaylistAutomationConfigs(): Promise<{
+  success: boolean;
+  configs_processed?: number;
+} | null> {
   try {
-    const res = await request("/playlist-automation/configs/run-all", { method: "POST" });
+    const res = await request("/playlist-automation/configs/run-all", {
+      method: "POST",
+    });
     if (!res.ok) throw new Error("Failed to run playlist sorting configs");
     return await res.json();
   } catch (err) {
@@ -1413,7 +1766,9 @@ export async function runAllPlaylistAutomationConfigs(): Promise<{ success: bool
   }
 }
 
-export async function fetchPlaylistAutomationSchedules(): Promise<PlaylistAutomationSchedule[]> {
+export async function fetchPlaylistAutomationSchedules(): Promise<
+  PlaylistAutomationSchedule[]
+> {
   try {
     const res = await request("/playlist-automation/schedules");
     if (!res.ok) throw new Error("Failed to fetch automation schedules");
@@ -1425,9 +1780,14 @@ export async function fetchPlaylistAutomationSchedules(): Promise<PlaylistAutoma
   }
 }
 
-export async function savePlaylistAutomationSchedule(value: Partial<PlaylistAutomationSchedule>): Promise<PlaylistAutomationSchedule | null> {
+export async function savePlaylistAutomationSchedule(
+  value: Partial<PlaylistAutomationSchedule>,
+): Promise<PlaylistAutomationSchedule | null> {
   try {
-    const res = await request("/playlist-automation/schedules", { method: "POST", body: JSON.stringify(value) });
+    const res = await request("/playlist-automation/schedules", {
+      method: "POST",
+      body: JSON.stringify(value),
+    });
     if (!res.ok) throw new Error("Failed to save automation schedule");
     return await res.json();
   } catch (err) {
@@ -1436,9 +1796,14 @@ export async function savePlaylistAutomationSchedule(value: Partial<PlaylistAuto
   }
 }
 
-export async function deletePlaylistAutomationSchedule(id: string): Promise<boolean> {
+export async function deletePlaylistAutomationSchedule(
+  id: string,
+): Promise<boolean> {
   try {
-    const res = await request(`/playlist-automation/schedules/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await request(
+      `/playlist-automation/schedules/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
     return res.ok;
   } catch (err) {
     console.error("Delete automation schedule failed:", err);
@@ -1446,7 +1811,9 @@ export async function deletePlaylistAutomationSchedule(id: string): Promise<bool
   }
 }
 
-export async function fetchPlaylistAutomationBackups(): Promise<Array<{ filename: string; created_at: number; playlists: number }>> {
+export async function fetchPlaylistAutomationBackups(): Promise<
+  Array<{ filename: string; created_at: number; playlists: number }>
+> {
   try {
     const res = await request("/playlist-automation/backups");
     if (!res.ok) throw new Error("Failed to fetch playlist backups");
@@ -1458,9 +1825,14 @@ export async function fetchPlaylistAutomationBackups(): Promise<Array<{ filename
   }
 }
 
-export async function createPlaylistAutomationBackup(playlist_ids: string[]): Promise<boolean> {
+export async function createPlaylistAutomationBackup(
+  playlist_ids: string[],
+): Promise<boolean> {
   try {
-    const res = await request("/playlist-automation/backups", { method: "POST", body: JSON.stringify({ playlist_ids }) });
+    const res = await request("/playlist-automation/backups", {
+      method: "POST",
+      body: JSON.stringify({ playlist_ids }),
+    });
     return res.ok;
   } catch (err) {
     console.error("Create playlist backup failed:", err);
@@ -1468,9 +1840,15 @@ export async function createPlaylistAutomationBackup(playlist_ids: string[]): Pr
   }
 }
 
-export async function restorePlaylistAutomationBackup(filename: string, target_playlist_id = ""): Promise<boolean> {
+export async function restorePlaylistAutomationBackup(
+  filename: string,
+  target_playlist_id = "",
+): Promise<boolean> {
   try {
-    const res = await request("/playlist-automation/backups/restore", { method: "POST", body: JSON.stringify({ filename, target_playlist_id }) });
+    const res = await request("/playlist-automation/backups/restore", {
+      method: "POST",
+      body: JSON.stringify({ filename, target_playlist_id }),
+    });
     return res.ok;
   } catch (err) {
     console.error("Restore playlist backup failed:", err);
@@ -1482,9 +1860,14 @@ export function downloadPlaylistAutomationConfig(): void {
   window.open(getEndpoint("/playlist-automation/export/config"), "_blank");
 }
 
-export async function importPlaylistAutomationConfig(value: Record<string, unknown>): Promise<boolean> {
+export async function importPlaylistAutomationConfig(
+  value: Record<string, unknown>,
+): Promise<boolean> {
   try {
-    const res = await request("/playlist-automation/import/config", { method: "POST", body: JSON.stringify(value) });
+    const res = await request("/playlist-automation/import/config", {
+      method: "POST",
+      body: JSON.stringify(value),
+    });
     return res.ok;
   } catch (err) {
     console.error("Import playlist automation config failed:", err);
@@ -1492,9 +1875,14 @@ export async function importPlaylistAutomationConfig(value: Record<string, unkno
   }
 }
 
-export async function exportPlaylistAutomationCsv(tracks: PlaylistAutomationTrack[]): Promise<Blob | null> {
+export async function exportPlaylistAutomationCsv(
+  tracks: PlaylistAutomationTrack[],
+): Promise<Blob | null> {
   try {
-    const res = await request("/playlist-automation/export/csv", { method: "POST", body: JSON.stringify({ tracks }) });
+    const res = await request("/playlist-automation/export/csv", {
+      method: "POST",
+      body: JSON.stringify({ tracks }),
+    });
     if (!res.ok) throw new Error("Failed to export playlist CSV");
     return await res.blob();
   } catch (err) {
@@ -1503,9 +1891,14 @@ export async function exportPlaylistAutomationCsv(tracks: PlaylistAutomationTrac
   }
 }
 
-export async function exportSelectedPlaylistsCsv(playlist_ids: string[]): Promise<Blob | null> {
+export async function exportSelectedPlaylistsCsv(
+  playlist_ids: string[],
+): Promise<Blob | null> {
   try {
-    const res = await request("/playlist-automation/export/playlists-csv", { method: "POST", body: JSON.stringify({ playlist_ids }) });
+    const res = await request("/playlist-automation/export/playlists-csv", {
+      method: "POST",
+      body: JSON.stringify({ playlist_ids }),
+    });
     if (!res.ok) throw new Error("Failed to export selected playlists");
     return await res.blob();
   } catch (err) {
@@ -1518,9 +1911,15 @@ export function getSelectedPlaylistsCsvUrl(playlist_ids: string[]): string {
   return `${getEndpoint("/playlist-automation/export/playlists-csv")}?playlist_ids=${encodeURIComponent(playlist_ids.join(","))}`;
 }
 
-export async function saveSelectedPlaylistsCsv(playlist_ids: string[], directory = ""): Promise<string | null> {
+export async function saveSelectedPlaylistsCsv(
+  playlist_ids: string[],
+  directory = "",
+): Promise<string | null> {
   try {
-    const res = await request("/playlist-automation/export/playlists-csv-file", { method: "POST", body: JSON.stringify({ playlist_ids, directory }) });
+    const res = await request(
+      "/playlist-automation/export/playlists-csv-file",
+      { method: "POST", body: JSON.stringify({ playlist_ids, directory }) },
+    );
     if (!res.ok) throw new Error("Failed to save selected playlists CSV");
     return String((await res.json()).path || "") || null;
   } catch (err) {
@@ -1529,9 +1928,14 @@ export async function saveSelectedPlaylistsCsv(playlist_ids: string[], directory
   }
 }
 
-export async function savePlaylistAutomationConfigFile(directory = ""): Promise<string | null> {
+export async function savePlaylistAutomationConfigFile(
+  directory = "",
+): Promise<string | null> {
   try {
-    const res = await request("/playlist-automation/export/config-file", { method: "POST", body: JSON.stringify({ directory }) });
+    const res = await request("/playlist-automation/export/config-file", {
+      method: "POST",
+      body: JSON.stringify({ directory }),
+    });
     if (!res.ok) throw new Error("Failed to save playlist automation config");
     return String((await res.json()).path || "") || null;
   } catch (err) {
