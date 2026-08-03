@@ -127,9 +127,6 @@ class ThreadSafeDeque:
         with self._lock:
             return len(self._deque)
 
-    def __iter__(self):
-        return self.get_items()
-
 
 #: Pool of authenticated service accounts added by :class:`AccountPoolLoader`.
 account_pool: list = []
