@@ -1,5 +1,3 @@
-import html.parser
-import json
 import random
 import re
 import requests
@@ -13,25 +11,6 @@ from ..utils import conv_list_format, make_call
 
 logger = get_logger("api.deezer")
 BASE_URL = "https://api.deezer.com/"
-
-
-class ScriptExtractor(html.parser.HTMLParser):
-    """extract <script> tag contents from a html page"""
-
-    def __init__(self):
-        html.parser.HTMLParser.__init__(self)
-        self.scripts = []
-        self.curtag = None
-
-    def handle_starttag(self, tag, attrs):
-        self.curtag = tag.lower()
-
-    def handle_data(self, data):
-        if self.curtag == "script":
-            self.scripts.append(data)
-
-    def handle_endtag(self, tag):
-        self.curtag = None
 
 
 def deezer_add_account(arl):
@@ -79,8 +58,7 @@ def deezer_get_playlist_data(_, playlist_id):
         track_ids.append(track.get("id"))
     return playlist_name, playlist_by, track_ids
 
-
-def deezer_get_track_metadata(_, item_id):
+def deezer_get_track_metadata(token, item_id):
     logger.info(f"Get track info for: '{item_id}'")
 
     track_data = make_call(f"{BASE_URL}/track/{item_id}")
@@ -136,31 +114,34 @@ def deezer_get_track_metadata(_, item_id):
     info["album_artists"] = album_data.get("artist", {}).get("name")
     info["album_name"] = track_data.get("album", {}).get("title")
     info["album_type"] = album_data.get("record_type")
-    info["is_playable"] = track_data.get("readable")
+    info["is_playable"] = bool(track_data.get("readable"))
+    if not info["is_playable"]:
+        fallback = get_song_info_from_deezer_website(token, item_id)
+        info["is_playable"] = bool(
+            fallback
+            and str(fallback.get("SNG_ID")) != str(item_id)
+            and fallback.get("TRACK_TOKEN")
+        )
     info["item_id"] = track_data.get("id")
 
     return info
 
 
 def get_song_info_from_deezer_website(token, track_id):
-    url = f"https://www.deezer.com/us/track/{track_id}"
-    session = token["session"]
-    resp = session.get(url)
-    if resp.status_code == 404:
-        logger.info(f"Received 404 while fetching MD5_ORIGIN, {url}")
-    if "MD5_ORIGIN" not in resp.text:
-        logger.info(f"Deezer MD5_ORIGIN missing for {url}")
-    parser = ScriptExtractor()
-    parser.feed(resp.text)
-    parser.close()
-
-    songs = []
-    for script in parser.scripts:
-        regex = re.search(r'{"DATA":.*', script)
-        if regex:
-            DZR_APP_STATE = json.loads(regex.group())
-            songs.append(DZR_APP_STATE["DATA"])
-    return songs[0]
+    params = {
+        "api_version": "1.0",
+        "api_token": token["api_token"],
+        "input": "3",
+        "method": "song.getData",
+    }
+    song_data = token["session"].post(
+        "https://www.deezer.com/ajax/gw-light.php",
+        params=params,
+        json={"SNG_ID": str(track_id)},
+    ).json().get("results")
+    if not isinstance(song_data, dict):
+        return None
+    return song_data.get("FALLBACK") or song_data
 
 
 def md5hex(data):
@@ -317,6 +298,7 @@ def deezer_login_user(account):
                 "bitrate": bitrate,
                 "login": {
                     "arl": arl,
+                    "api_token": user_data["results"]["checkForm"],
                     "license_token": user_data["results"]["USER"]["OPTIONS"][
                         "license_token"
                     ],
