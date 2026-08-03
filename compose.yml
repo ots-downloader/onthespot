@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     pull_policy: build
+    user: "1000:1000"
     # One FastAPI process serves both the API and compiled React application.
     ports:
       - "${ONTHESPOT_WEB_PORT:-6767}:6767"
