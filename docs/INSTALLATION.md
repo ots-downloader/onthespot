@@ -6,7 +6,7 @@ This is the easiest way to get started.
 
 1. **Download the Latest Release**
 
-   - Visit our [GitHub Releases Page](https://github.com/justin025/onthespot/releases).
+   - Visit our [GitHub Releases Page](https://github.com/ots-downloader/onthespot/releases).
    - Look for the latest version suitable for your operating system:
      - **Windows Users**: Download the `.exe` file.
      - **MacOS Users**: Download the `.dmg` file associated with your mac (x86_64 for intel, arm64 for apple silicone).
@@ -37,7 +37,7 @@ If you prefer to build OnTheSpot yourself, follow these steps.
    - The source code can be downloaded through github or through the commands below:
 
      ```bash
-     git clone https://github.com/justin025/onthespot
+     git clone https://github.com/ots-downloader/onthespot
      cd onthespot
      ```
 
@@ -61,7 +61,7 @@ source venv/bin/activate
 ```
 Next you can download and run the app by installing via pip:
 ```bash
-python3 -m pip install git+https://github.com/justin025/onthespot --force
+python3 -m pip install git+https://github.com/ots-downloader/onthespot --force
 
 onthespot-cli #cli
 onthespot-gui #gui
@@ -69,7 +69,7 @@ onthespot-web #web ui
 ```
 Alternatively you can run the app from source following the commands listed below:
 ```bash
-git clone https://github.com/justin025/onthespot
+git clone https://github.com/ots-downloader/onthespot
 
 cd onthespot/src
 

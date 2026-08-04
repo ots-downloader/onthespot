@@ -1,6 +1,6 @@
 # Disclaimer
 
-OnTheSpot is an open-source project licensed under [GPL-2.0](https://github.com/justin025/onthespot/blob/main/LICENSE) and its code is distributed for educational and personal use only.
+OnTheSpot is an open-source project licensed under [GPL-2.0](https://github.com/ots-downloader/onthespot/blob/main/LICENSE) and its code is distributed for educational and personal use only.
 
 By using this software, you agree to the following terms:
 

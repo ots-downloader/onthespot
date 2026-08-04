@@ -4,14 +4,14 @@ _branch="master"
 pkgrel=1
 pkgdesc="Qt based music downloader written in python"
 arch=('any')
-url="https://github.com/justin025/onthespot"
+url="https://github.com/ots-downloader/onthespot"
 license=('GPLv2')
 depends=('ffmpeg' 'python-requests' 'python_urllib3' 'python-musictag' 'python-mutagen' 'python-pyqt6' 'python-pillow' 'python-librespot' 'yt-dlp' 'python-flask' 'python-flask-login' 'python-m3u8' 'python-pywidevine')
 conflicts=('onthespot')
 provides=('onthespot')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
 optdepends=()
-source=("https://github.com/justin025/onthespot/archive/refs/heads/$_branch.zip")
+source=("https://github.com/ots-downloader/onthespot/archive/refs/heads/$_branch.zip")
 sha256sums=(SKIP)
 
 build() {

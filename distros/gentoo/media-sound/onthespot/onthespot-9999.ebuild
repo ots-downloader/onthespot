@@ -10,15 +10,15 @@ inherit distutils-r1 desktop xdg
 
 if [[ ${PV} == *9999 ]]; then
 	inherit git-r3
-	EGIT_REPO_URI="https://github.com/justin025/onthespot.git"
+	EGIT_REPO_URI="https://github.com/ots-downloader/onthespot.git"
 else
-	SRC_URI="https://github.com/justin025/onthespot/archive/refs/tags/v${PV}.tar.gz
+	SRC_URI="https://github.com/ots-downloader/onthespot/archive/refs/tags/v${PV}.tar.gz
 			 -> ${P}.tar.gz"
 	KEYWORDS="~amd64"
 fi
 
 DESCRIPTION="qt based music downloader written in python"
-HOMEPAGE="https://github.com/justin025/onthespot"
+HOMEPAGE="https://github.com/ots-downloader/onthespot"
 
 LICENSE="GPL-2"
 SLOT="0"

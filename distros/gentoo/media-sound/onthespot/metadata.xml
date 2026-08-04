@@ -11,6 +11,6 @@
                 </flag>
         </use>
         <upstream>
-                <remote-id type="github">justin025/onthespot</remote-id>
+                <remote-id type="github">ots-downloader/onthespot</remote-id>
         </upstream>
 </pkgmetadata>

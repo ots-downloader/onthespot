@@ -78,7 +78,7 @@ def format_local_id(item_id):
 
 
 def is_latest_release():
-    url = "https://api.github.com/repos/justin025/onthespot/releases/latest"
+    url = "https://api.github.com/repos/ots-downloader/onthespot/releases/latest"
     response = requests.get(url)
     if response.status_code == 200:
         current_version = config.get("version").replace('v', '').replace('.', '')
@@ -333,7 +333,7 @@ def embed_metadata(item, metadata):
         # https://wiki.multimedia.cx/index.php?title=FFmpeg_Metadata
 
         if config.get("embed_branding"):
-            branding = "Downloaded by OnTheSpot, https://github.com/justin025/onthespot"
+            branding = "Downloaded by OnTheSpot, https://github.com/ots-downloader/onthespot"
             if filetype == '.mp3':
                 # Incorrectly embedded to TXXX:TCMP, patch sent upstream
                 command += ['-metadata', 'COMM={}'.format(branding)]
