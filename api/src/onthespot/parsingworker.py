@@ -107,7 +107,7 @@ class ParsingWorker:
         if service == "spotify":
             if item_type == "playlist":
                 self._expand_spotify_playlist(
-                    token, item_url
+                    token, item_id
                 )  # URL Passed down
                 return
             if item_type == "liked_songs":
