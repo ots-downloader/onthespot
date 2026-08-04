@@ -1,135 +1,148 @@
-# Installation Options
+# Installation
 
-> **Note:** This project consists of two parts — a backend API (FastAPI) and a frontend UI (Vite). You can choose to run them together using Docker Compose, or separately from source code.
+OnTheSpot's production web build is a single application: one FastAPI process
+serves the API and the compiled React UI on port `6767`.
 
----
+## Docker Compose (recommended)
 
-## Option 1: Run with Docker Compose (Recommended)
+Requirements:
 
-This is the easiest way to get started — no need to install Node.js or Python manually!
+- Docker Engine or Docker Desktop with Docker Compose v2
+- Enough free space for the selected media and config folders
 
-### Prerequisites
-- [Docker](https://www.docker.com/get-started/) installed on your machine
-- A text editor (optional, just for editing environment variables)
+Clone the repository and select this branch:
 
-### Steps
-
-1. **Clone the repository**
-     #### Git:
-      ```bash
-      git clone <your-repo-url>
-      cd <repo-folder>
-      ```
-     #### Zip:
-     Download the zip from the release page and extract in some folder
-  
-3. **Configure the variables**
-   Open `compose.yml` and update the `VITE_API_URL` environment variable to match the ip/domain of the machine in which the app is running:
-   ```yaml
-   VITE_API_URL: http://localhost:6767
-   ```
-   **Change Download Variables** (optional) 
-   By default the app saves data into the root folder where the docker compose lives.
-   You can change the folders mapped by changing the values in the compose file.
-   ```
-   volumes:
-      - YOURFOLDERPATH:/root/Music/OnTheSpot
-      - YOURFOLDERPATH:/root/Videos/OnTheSpot
-      - YOURFOLDERPATH:/root/.config/onthespot
-   ```   
-
-5. **Start the containers**
-   From the project root, run:
-   ```bash
-   docker compose up --build
-   ```
-
-6. **Access the application**
-   - Frontend: `http://yourip:6768`
-   - Backend AP DocsI: `http://yourip:6767/docs`
-
-7. **Stop when done** (optional)
-   you won't loose data, only the download queue history.
-   ```bash
-   docker compose down
-   ```
-
----
-
-## Option 2: Run from Source Code (Not Recommended)
-
-If you prefer to run the app directly on your machine, follow these steps.
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [uv](https://docs.astral.sh/uv/) — a fast Python package installer and resolver
-
-### Backend API (`/api`)
-
-1. Open a terminal in the `/api` folder:
-   ```bash
-   cd /path/to/project/api
-   uv run fastapi run
-   ```
-
-2. The backend will start on `http://localhost:6767`.
-
-### Frontend UI (`/ui`)
-
-You have two options to run the frontend:
-
-#### A. Development Mode (with hot-reload)
 ```bash
-cd /path/to/project/ui
+git clone --branch fastapi-dev --single-branch https://github.com/JamyPatch44/onthespot.git
+cd onthespot
+```
+
+Copy the example environment file, review the paths, then build and start:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+docker compose ps
+```
+
+PowerShell uses `Copy-Item .env.example .env` instead of `cp`.
+
+Open `http://127.0.0.1:6767` on the Docker host, or
+`http://SERVER-IP:6767` from another device on the same private network. API
+documentation is available at `/docs` on the same address.
+
+Follow startup logs with:
+
+```bash
+docker compose logs -f onthespot
+```
+
+Stop the container without deleting persisted data:
+
+```bash
+docker compose down
+```
+
+### Persistent folders
+
+The default `.env.example` stores data under `./otsdata`:
+
+| Variable | Container destination | Contents |
+| --- | --- | --- |
+| `ONTHESPOT_MUSIC_DIR` | `/root/Music/OnTheSpot` | downloaded audio |
+| `ONTHESPOT_VIDEO_DIR` | `/root/Videos/OnTheSpot` | downloaded video |
+| `ONTHESPOT_CONFIG_DIR` | `/root/.config/onthespot` | settings, accounts, cached sessions, playlist automation, statistics, and uploaded YouTube cookies |
+| `ONTHESPOT_WEB_PORT` | container port `6767` | host port used to open the application |
+
+Back up the configured host folders, especially `ONTHESPOT_CONFIG_DIR`. API
+credentials and account sessions are stored in that private folder, not in the
+Git repository or Docker image.
+
+## Unraid
+
+Use absolute Unraid paths in `.env`, for example:
+
+```dotenv
+ONTHESPOT_WEB_PORT=6769
+ONTHESPOT_MUSIC_DIR=/mnt/user/Music/OnTheSpot
+ONTHESPOT_VIDEO_DIR=/mnt/user/Videos/OnTheSpot
+ONTHESPOT_CONFIG_DIR=/mnt/user/appdata/onthespot
+```
+
+Then run `docker compose up -d --build` and open
+`http://UNRAID-IP:6769`. The default Compose deployment uses bridge networking
+and exposes only the web port.
+
+Spotify Connect discovery does not cross Docker bridge, VPN, or routed-network
+boundaries. To add a Spotify worker when Spotify is running on another
+computer, open **Accounts → Add account → Spotify → Remote access** and follow
+the generated companion instructions. The helper runs beside Spotify for the
+one-time pairing and removes itself when `--cleanup` is used.
+
+Playlist sorting uses Spotify OAuth, which is separate from the download
+worker login. Local installations can use the displayed `127.0.0.1` callback.
+A remotely opened installation needs a private HTTPS address or HTTPS reverse
+proxy; enter the exact callback shown by OnTheSpot in the Spotify Developer
+Dashboard. Do not make the whole application public merely to complete OAuth.
+
+## Run the production build from source
+
+Requirements:
+
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/)
+- Node.js 22 with npm
+- FFmpeg available on `PATH`
+
+Build the UI and start the same single-process server used by Docker:
+
+```bash
+cd ui
+npm ci
+npm run build
+cd ..
+uv run --project api uvicorn onthespot.main:app --app-dir api/src --host 127.0.0.1 --port 6767
+```
+
+Open `http://127.0.0.1:6767`.
+
+On Windows, settings are stored under `%APPDATA%\onthespot` and media defaults
+to the current user's Music and Videos folders. On Linux, settings default to
+`~/.config/onthespot`.
+
+## Frontend development
+
+Run the backend command above, then start Vite in a second terminal:
+
+```bash
+cd ui
+npm ci
 npm run dev
 ```
-This runs Vite in development mode with live reload — great for testing changes.
 
-#### B. Production Build
+The development UI opens on port `3000` and talks to the API on port `6767`.
+The production Docker image does not run Vite and does not require a separate
+frontend port.
+
+## Updating
+
+Preserve the configured volume folders, pull the branch, and rebuild:
+
 ```bash
-npm run build
-npm run preview
+git pull --ff-only
+docker compose up -d --build
 ```
-This builds the app and serves it locally on `http://localhost:4173`.
 
-### Running Detached (Background)
-
-If you want to run the app in the background without keeping a terminal open, use platform-specific commands. **Note:** This is not recommended for development — only do this if you need to free up your terminal for other tasks.
-
-- **Linux/macOS**
-  ```bash
-  # Backend (in /api)
-  uv run fastapi run &
-
-  # Frontend (in /ui)
-  npm run dev > output.log 2>&1 &
-  ```
-
-- **Windows PowerShell**
-  ```powershell
-  # Backend (in api folder)
-  uv run fastapi run | Out-File -FilePath "backend.log"
-
-  # Frontend (in ui folder)
-  npm run dev >> output.log 2>&1 &
-  ```
-
-> ⚠️ **Warning:** Detached processes may not restart automatically if your computer goes to sleep or crashes. Always use Docker Compose for production deployments!
-
----
+The bundled application version replaces stale version values from older
+config volumes during startup.
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| `VITE_APP_URL` is undefined in the frontend | Check that `compose.yml` has the correct environment variable set |
-| Backend won't start | Ensure Python 3.10+ and uv are installed; run `uv sync` first |
-| Frontend shows blank page | Verify the VITE_API_URL is correct |
-| Docker containers fail to build | Run `docker compose pull` to refresh images, then rebuild |
-
----
-
-## Need Help?
-
-- Check the [README](../README.md) for more details about the project architecture.
-- Open an issue on GitHub if you encounter a bug or have questions!
+| Symptom | Check |
+| --- | --- |
+| Container is unhealthy | `docker compose logs onthespot`; confirm port 6767 is not already in use and the config folder is writable |
+| UI opens but requests fail | Use the same origin that served the page; do not configure a separate API URL for production |
+| Spotify worker is not visible | Use the generated companion when Spotify and Docker are not on the same LAN broadcast domain |
+| Playlist OAuth returns elsewhere | Save the exact callback currently shown in Playlist sorting and in the Spotify Developer Dashboard |
+| YouTube asks for sign-in | Upload a fresh Netscape-format `cookies.txt` through the YouTube Music account setup; browser-profile import only works when the browser runs on the API host |
+| Settings disappear after rebuild | Confirm `ONTHESPOT_CONFIG_DIR` is an existing persistent host path mounted at `/root/.config/onthespot` |

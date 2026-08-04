@@ -2,6 +2,7 @@ import re
 import requests
 import json
 from uuid import uuid4
+from ..constants import HTTP_TIMEOUT
 from ..otsconfig import config
 from ..runtimedata import get_logger, account_pool
 from ..utils import make_call, conv_list_format
@@ -33,7 +34,9 @@ def soundcloud_parse_url(url, token):
 def soundcloud_login_user(account):
     logger.info("Logging into Soundcloud account...")
     try:
-        page_text = requests.get("https://soundcloud.com").text
+        page_text = requests.get(
+            "https://soundcloud.com", timeout=HTTP_TIMEOUT
+        ).text
 
         app_version_match = re.search(
             r'<script>window\.__sc_version="(\d+)"</script>',
@@ -47,7 +50,9 @@ def soundcloud_login_user(account):
         )
         *_, client_id_url_match = client_id_url_match
         client_id_url = client_id_url_match.group(1)
-        client_id_page_text = requests.get(client_id_url).text
+        client_id_page_text = requests.get(
+            client_id_url, timeout=HTTP_TIMEOUT
+        ).text
         client_id_match = re.search(r'client_id:\s*"(\w+)"', client_id_page_text)
         client_id = client_id_match.group(1)
 
@@ -78,6 +83,7 @@ def soundcloud_login_user(account):
                             headers=headers,
                             data=data,
                             params=params,
+                            timeout=HTTP_TIMEOUT,
                         ).status_code
                         != 200
                     ):
@@ -160,7 +166,10 @@ def soundcloud_get_search_results(token, search_term, content_types):
 
     if "track" in content_types:
         track_search = requests.get(
-            f"{BASE_URL}/search/tracks", headers=headers, params=params
+            f"{BASE_URL}/search/tracks",
+            headers=headers,
+            params=params,
+            timeout=HTTP_TIMEOUT,
         ).json()
         for track in track_search["collection"]:
             search_results.append(
@@ -177,7 +186,10 @@ def soundcloud_get_search_results(token, search_term, content_types):
 
     if "album" in content_types:
         playlist_search = requests.get(
-            f"{BASE_URL}/search/albums", headers=headers, params=params
+            f"{BASE_URL}/search/albums",
+            headers=headers,
+            params=params,
+            timeout=HTTP_TIMEOUT,
         ).json()
         for playlist in playlist_search["collection"]:
             search_results.append(
@@ -194,7 +206,10 @@ def soundcloud_get_search_results(token, search_term, content_types):
 
     if "artist" in content_types:
         playlist_search = requests.get(
-            f"{BASE_URL}/search/users", headers=headers, params=params
+            f"{BASE_URL}/search/users",
+            headers=headers,
+            params=params,
+            timeout=HTTP_TIMEOUT,
         ).json()
         for playlist in playlist_search["collection"]:
             search_results.append(
@@ -214,6 +229,7 @@ def soundcloud_get_search_results(token, search_term, content_types):
             f"{BASE_URL}/search/playlists_without_albums",
             headers=headers,
             params=params,
+            timeout=HTTP_TIMEOUT,
         ).json()
         for playlist in playlist_search["collection"]:
             search_results.append(
@@ -369,7 +385,7 @@ def soundcloud_get_track_metadata(token, item_id):
             image_url = track_data.get("user", {}).get("avatar_url")
         # It seems 't500x500' is more accessible than 'original'
         image_url = image_url.replace("large", "t500x500")
-        resp = requests.head(image_url)
+        resp = requests.head(image_url, timeout=HTTP_TIMEOUT)
         resp.raise_for_status()
     except Exception as e:
         logger.info(

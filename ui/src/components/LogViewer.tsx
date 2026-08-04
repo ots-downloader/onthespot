@@ -32,23 +32,23 @@ export const LogViewer: React.FC<LogViewerProps> = ({
   };
 
   const getLevelBadge = (lvl: string) => {
-    const baseClass = "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider";
+    const baseClass = "ots-log-badge text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider";
     switch (lvl) {
       case 'ERROR': 
-        return <span className={`${baseClass} bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400`}>Error</span>;
+        return <span className={`${baseClass} ots-log-badge-error`}>Error</span>;
       case 'WARNING': 
-        return <span className={`${baseClass} bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400`}>Warn</span>;
+        return <span className={`${baseClass} ots-log-badge-warning`}>Warn</span>;
       default: 
-        return <span className={`${baseClass} bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400`}>Info</span>;
+        return <span className={`${baseClass} ots-log-badge-info`}>Info</span>;
     }
   };
 
-  const iconBtnClass = "p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-800 dark:text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-neutral-700";
+  const iconBtnClass = "ots-icon-button";
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 h-[calc(100vh-80px)] flex flex-col font-sans">
+    <div className="spotify-fade-up ots-page flex h-[calc(100vh-170px)] flex-col font-sans">
       {/* Material Card Surface */}
-      <div className="bg-white dark:bg-[#141414] rounded-2xl shadow-sm border border-gray-200 dark:border-neutral-800/60 flex flex-col h-full overflow-hidden">
+      <div className="ots-panel flex h-full flex-col overflow-hidden shadow-xl shadow-black/10">
         
         {/* App Bar / Toolbar */}
         <div className="px-4 py-4 md:px-6 border-b border-gray-100 dark:border-neutral-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
@@ -64,7 +64,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 
           {/* Actions & Search */}
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative flex items-center bg-gray-50 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-full px-4 py-2 w-full md:w-64 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
+            <div className="ots-input relative flex w-full items-center px-4 md:w-64">
               <Search className="w-4 h-4 text-gray-400 shrink-0" />
               <input
                 type="text"
@@ -95,10 +95,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({
             <button
               key={lvl}
               onClick={() => setLevelFilter(lvl)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${
+              className={`ots-segment whitespace-nowrap ${
                 levelFilter === lvl
-                  ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-neutral-200 dark:text-neutral-900 dark:border-neutral-200'
-                  : 'bg-transparent text-gray-600 border-gray-200 hover:bg-gray-100 dark:text-neutral-400 dark:border-neutral-800 dark:hover:bg-neutral-800'
+                  ? 'ots-segment-active'
+                  : ''
               }`}
             >
               {lvl}

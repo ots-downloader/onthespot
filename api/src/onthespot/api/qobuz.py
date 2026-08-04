@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 import requests
+from ..constants import HTTP_TIMEOUT
 from ..otsconfig import config
 from ..runtimedata import get_logger, account_pool
 from ..utils import conv_list_format, make_call
@@ -18,7 +19,7 @@ def qobuz_add_account(email, password):
     logger.info("Logging into Qobuz account...")
     try:
         session = requests.Session()
-        response = session.get("https://play.qobuz.com/login")
+        response = session.get("https://play.qobuz.com/login", timeout=HTTP_TIMEOUT)
         login_page = response.text
 
         bundle_url_match = re.search(
@@ -30,7 +31,9 @@ def qobuz_add_account(email, password):
 
         bundle_url = bundle_url_match.group(1)
 
-        response = session.get("https://play.qobuz.com" + bundle_url)
+        response = session.get(
+            "https://play.qobuz.com" + bundle_url, timeout=HTTP_TIMEOUT
+        )
         bundle = response.text
 
         app_id_regex = r'production:{api:{appId:"(?P<app_id>\d{9})",appSecret:"(\w{32})'
@@ -91,7 +94,9 @@ def qobuz_add_account(email, password):
         params["password"] = password
         params["app_id"] = app_id
 
-        login_data = requests.get(login_url, params=params).json()
+        login_data = requests.get(
+            login_url, params=params, timeout=HTTP_TIMEOUT
+        ).json()
 
         cfg_copy = config.get("accounts").copy()
         new_user = {
@@ -118,7 +123,7 @@ def qobuz_add_account(email, password):
 def qobuz_login_user(account):
     try:
         # Ping to verify connectivity
-        requests.get("https://qobuz.com")
+        requests.get("https://qobuz.com", timeout=HTTP_TIMEOUT)
         account_pool.append(
             {
                 "uuid": account["uuid"],
@@ -426,7 +431,11 @@ def qobuz_get_file_url(token, item_id):
         # Create the signature for the request
         unix_ts = int(time.time())
         r_sig = f"trackgetFileUrlformat_id{quality}intent{intent}track_id{item_id}{unix_ts}{secret}"  # Replace with your secret
-        r_sig_hashed = hashlib.md5(r_sig.encode("utf-8")).hexdigest()
+        # Qobuz's request-signing protocol mandates MD5; this is not used for
+        # password storage or local integrity checks.
+        r_sig_hashed = hashlib.md5(
+            r_sig.encode("utf-8"), usedforsecurity=False
+        ).hexdigest()
 
         params = {}
         params["request_ts"] = unix_ts
@@ -436,7 +445,10 @@ def qobuz_get_file_url(token, item_id):
         params["intent"] = intent
 
         file_response = requests.get(
-            f"{BASE_URL}/track/getFileUrl", params=params, headers=headers
+            f"{BASE_URL}/track/getFileUrl",
+            params=params,
+            headers=headers,
+            timeout=HTTP_TIMEOUT,
         )
         if file_response.status_code == 200:
             file_data = file_response.json()

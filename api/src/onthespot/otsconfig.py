@@ -1,6 +1,17 @@
+import copy
 import json
+import logging
 import os
+import shutil
 import uuid
+
+
+logger = logging.getLogger(__name__)
+
+
+def _expanded_path(value: str) -> str:
+    """Return an absolute path after expanding user and environment markers."""
+    return os.path.abspath(os.path.expandvars(os.path.expanduser(value)))
 
 
 def config_dir():
@@ -9,17 +20,18 @@ def config_dir():
 
     :return: The configuration directory path as a string.
     """
-    if os.path.exists(os.environ.get("ONTHESPOTDIR", "")):
-        return os.environ["ONTHESPOTDIR"]
-    elif os.name == "nt" and os.path.exists(os.environ.get("APPDATA", "")):
+    override = os.environ.get("ONTHESPOTDIR", "").strip()
+    if override:
+        return _expanded_path(override)
+    if os.name == "nt" and os.environ.get("APPDATA"):
         base_dir = os.environ["APPDATA"]
-    elif os.name == "nt" and os.path.exists(os.environ.get("LOCALAPPDATA", "")):
+    elif os.name == "nt" and os.environ.get("LOCALAPPDATA"):
         base_dir = os.environ["LOCALAPPDATA"]
-    elif os.path.exists(os.environ.get("XDG_CONFIG_HOME", "")):
+    elif os.environ.get("XDG_CONFIG_HOME"):
         base_dir = os.environ["XDG_CONFIG_HOME"]
     else:
         base_dir = os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base_dir, "onthespot")
+    return _expanded_path(os.path.join(base_dir, "onthespot"))
 
 
 def cache_dir():
@@ -28,14 +40,13 @@ def cache_dir():
 
     :return: The cache directory path as a string.
     """
-    if os.name == "nt" and os.path.exists(os.environ.get("TEMP", "")):
-        base_dir = os.environ["TEMP"]
-    elif os.path.exists(os.environ.get("XDG_CACHE_HOME", "")):
-        base_dir = os.environ["XDG_CACHE_HOME"]
-    else:
-        base_dir = os.path.join(os.path.expanduser("~"), ".cache")
-    return os.path.join(base_dir, "onthespot")
-
+    override = os.environ.get("ONTHESPOTCACHEDIR", "").strip()
+    if override:
+        return _expanded_path(override)
+    # Cache-backed state includes Spotify sessions, statistics, playlist
+    # automation state, and uploaded YouTube cookies. Keep it beside the main
+    # configuration so Docker/Unraid's config volume persists it.
+    return os.path.join(config_dir(), "cache")
 
 class Config:
     def __init__(self):
@@ -54,7 +65,9 @@ class Config:
 
         If any step fails, appropriate fallback mechanisms are used to ensure that the application can still run.
         """
-        self.__cfg_path = "/root/.config/onthespot/otsconfig.json"
+        config_root = config_dir()
+        
+        self.__cfg_path = os.path.join(config_root, "otsconfig.json")
         self.__default_cfg_path = os.path.join(
             os.path.dirname(__file__), "otsconfig_default.json"
         )
@@ -97,6 +110,36 @@ class Config:
                     json.dump(self.__template_data, cf, indent=4, ensure_ascii=False)
                 self.__config = self.__template_data
 
+        # Version identifies the bundled application build, not a user setting.
+        # Keep existing configuration volumes from pinning the UI to an older
+        # release after the Docker image has been upgraded.
+        if self.__template_data.get("version"):
+            self.__config["version"] = self.__template_data["version"]
+
+        # ``cache_metadata_in_queue`` was the original UI key for the global
+        # API-cache switch.  Preserve an existing user's choice while moving
+        # to the accurately named setting.
+        # if "cache_api_calls" not in self.__config:
+        #    self.__config["cache_api_calls"] = bool(
+        #        self.__config.get(
+        #            "cache_metadata_in_queue",
+        #            self.__template_data.get("cache_api_calls", True),
+        #        )
+        #    )
+
+        # The bundled defaults are written for the Linux/Docker image. When
+        # running the API directly on Windows, translate those container paths
+        # to the user's normal Music/Videos folders instead of creating a
+        # literal ``C:\\root`` directory.
+        # if os.name == "nt":
+        #     for path_key in ("audio_download_path", "video_download_path"):
+        #         configured_path = self.__config.get(path_key)
+        #         normalized_path = str(configured_path or "").replace("\\", "/")
+        #         if normalized_path.startswith("/root/"):
+        #             self.__config[path_key] = os.path.join(
+        #                 os.path.expanduser("~"), normalized_path.removeprefix("/root/")
+        #             )
+
         # Make Download Dirs
         try:
             os.makedirs(self.get("audio_download_path"), exist_ok=True)
@@ -113,9 +156,9 @@ class Config:
             os.makedirs(self.get("video_download_path"), exist_ok=True)
 
         # Set FFMPEG Path
-        ffmpeg_path = os.environ.get(
-            "FFMPEG_PATH", "/usr/bin/ffmpeg"
-        )  # Assuming ffmpeg is available at /usr/bin/ffmpeg in the Docker container
+        ffmpeg_path = os.environ.get("FFMPEG_PATH") or shutil.which("ffmpeg")
+        if not ffmpeg_path and os.name != "nt":
+            ffmpeg_path = "/usr/bin/ffmpeg"
 
         if ffmpeg_path and os.path.isfile(ffmpeg_path):
             self._ffmpeg_bin_path = ffmpeg_path
@@ -130,7 +173,7 @@ class Config:
         self.set(
             "_log_file",
             os.path.join(
-                "/root/.config/onthespot",
+                config_root,
                 "logs",
                 self.session_uuid,
                 "onthespot.log",
@@ -138,14 +181,11 @@ class Config:
         )
         self.set(
             "_cache_dir",
-            os.path.join(
-                "/root/.config/onthespot",
-                "cache",
-            ),
+            cache_dir(),
         )
         try:
             os.makedirs(os.path.dirname(self.get("_log_file")), exist_ok=True)
-            os.makedirs(os.path.dirname(self.get("_cache_dir")), exist_ok=True)
+            os.makedirs(self.get("_cache_dir"), exist_ok=True)
         except (FileNotFoundError, PermissionError):
             fallback_logdir = os.path.abspath(
                 os.path.join(".logs", self.session_uuid, "onthespot.log")
@@ -171,6 +211,55 @@ class Config:
             return self.__template_data[key]
         else:
             return default
+
+    def as_dict(self, *, include_runtime=False, include_secrets=False):
+        """Return a detached configuration snapshot for API responses.
+
+        Historically FastAPI serialised the ``Config`` instance directly.
+        That exposed Python implementation details, runtime filesystem paths,
+        account login payloads, and the Spotify client secret.  Keep the
+        public response flat and useful to the UI while never returning
+        authentication material by default.
+        """
+        snapshot = copy.deepcopy(self.__template_data)
+        snapshot.update(copy.deepcopy(self.__config))
+
+        if not include_runtime:
+            snapshot = {
+                key: value
+                for key, value in snapshot.items()
+                if not str(key).startswith("_")
+            }
+
+        if include_secrets:
+            return snapshot
+
+        accounts = []
+        for account in snapshot.get("accounts", []) or []:
+            if not isinstance(account, dict):
+                continue
+            accounts.append(
+                {
+                    "uuid": str(account.get("uuid") or ""),
+                    "service": str(account.get("service") or ""),
+                    "active": bool(account.get("active", True)),
+                }
+            )
+        snapshot["accounts"] = accounts
+
+        secret_keys = {
+            "spotify_webapi_override_client_secret",
+            "playlist_automation_client_secret",
+            "webui_password",
+        }
+        for key in list(snapshot):
+            if key in secret_keys or any(
+                marker in key.casefold() for marker in ("password", "secret", "token")
+            ):
+                snapshot[f"{key}_configured"] = bool(snapshot.get(key))
+                snapshot[key] = ""
+
+        return snapshot
 
     def set(self, key, value):
         """

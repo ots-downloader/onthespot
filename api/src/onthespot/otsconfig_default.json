@@ -1,5 +1,5 @@
 {
-  "version": "v2.0.0alpha1",
+  "version": "v2.0.0 Alpha 2",
   "debug_mode": false,
   "language_index": 0,
   "total_downloaded_items": 0,
@@ -38,6 +38,28 @@
 
   "language": "en_US",
   "theme": "dark",
+  "active_download_profile": "mp3-320",
+  "export_folder_path": "",
+  "playlist_backup_folder_path": "",
+  "youtube_auth_mode": "none",
+  "youtube_cookies_browser": "",
+  "youtube_cookies_file": "",
+  "download_profiles": [
+    {
+      "id": "mp3-320",
+      "name": "MP3 · 320 kbps",
+      "format": "mp3",
+      "bitrate": "320k",
+      "download_path": ""
+    },
+    {
+      "id": "flac",
+      "name": "FLAC · lossless",
+      "format": "flac",
+      "bitrate": "1411k",
+      "download_path": ""
+    }
+  ],
   "explicit_label": "🅴",
   "download_copy_btn": false,
   "download_open_btn": false,
@@ -52,6 +74,8 @@
   "mirror_spotify_playback": false,
 
   "check_for_updates": true,
+  "update_repository": "ots-downloader/onthespot",
+  "update_check_interval_hours": 12,
   "illegal_character_replacement": "-",
   "raw_media_download": false,
   "rotate_active_account_number": false,
@@ -66,6 +90,12 @@
   "api_retry_base_delay": 2,
   "api_retry_max_delay": 60,
   "api_request_delay": 1,
+  "cache_api_calls": true,
+  "api_response_cache_ttl_seconds": 86400,
+  "spotify_metadata_cache_ttl_seconds": 604800,
+  "spotify_search_cache_ttl_seconds": 900,
+  "playlist_automation_cache_ttl_seconds": 60,
+  "spotify_connect_port": 6768,
   "spotify_webapi_override_client_id": "",
   "spotify_webapi_override_client_secret": "",
   "cache_metadata_in_queue": true,

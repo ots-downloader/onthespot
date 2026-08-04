@@ -37,6 +37,10 @@ YOUTUBE_MUSIC_URL_REGEX = re.compile(
     r"|channel/(?P<channel_id>[a-zA-Z0-9_-]+)"
     r"|playlist\?list=(?P<playlist_id>[a-zA-Z0-9_-]+))"
 )
+YOUTUBE_URL_REGEX = re.compile(
+    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?(?:[^#]*?&)?v=|shorts/|live/)|youtu\.be/)"
+    r"(?P<video_id>[a-zA-Z0-9_-]+)"
+)
 
 # Video services
 CRUNCHYROLL_URL_REGEX = re.compile(

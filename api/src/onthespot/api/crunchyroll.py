@@ -1,7 +1,5 @@
 import base64
-from hashlib import md5
 import json
-import os
 import re
 import requests
 import time
@@ -9,11 +7,10 @@ from uuid import uuid4
 from pywidevine.cdm import Cdm
 from pywidevine.pssh import PSSH
 from pywidevine.device import Device
-from yt_dlp import YoutubeDL
-from ..constants import WVN_KEY
+from ..constants import HTTP_TIMEOUT, WVN_KEY
 from ..otsconfig import config
 from ..runtimedata import get_logger, account_pool
-from ..utils import make_call, conv_list_format
+from ..utils import make_call
 
 logger = get_logger("api.crunchyroll")
 PUBLIC_TOKEN = (
@@ -30,7 +27,8 @@ def crunchyroll_login_user(account):
 
         if account["uuid"] == "public_crunchyroll":
             response = requests.get(
-                "https://static.crunchyroll.com/vilos-v2/web/vilos/js/bundle.js"
+                "https://static.crunchyroll.com/vilos-v2/web/vilos/js/bundle.js",
+                timeout=HTTP_TIMEOUT,
             )
             tokens = re.search(
                 r'prod="([\w-]+:[\w-]+)",\w+\.staging="([\w-]+:[\w-]+)",\w+\.proto0="([\w-]+:[\w-]+)"',
@@ -63,7 +61,10 @@ def crunchyroll_login_user(account):
             payload["device_type"] = "OnTheSpot"
 
         token_data = requests.post(
-            f"{BASE_URL}/auth/v1/token", headers=headers, data=payload
+            f"{BASE_URL}/auth/v1/token",
+            headers=headers,
+            data=payload,
+            timeout=HTTP_TIMEOUT,
         ).json()
         token = token_data.get("access_token")
         refresh_token = token_data.get("refresh_token")
@@ -155,7 +156,10 @@ def crunchyroll_get_token(parsing_index):
             payload["grant_type"] = "client_id"
 
             token_data = requests.post(
-                f"{BASE_URL}/auth/v1/token", headers=headers, data=payload
+                f"{BASE_URL}/auth/v1/token",
+                headers=headers,
+                data=payload,
+                timeout=HTTP_TIMEOUT,
             ).json()
         else:
             headers["Authorization"] = f"Basic {PUBLIC_TOKEN}"
@@ -175,7 +179,10 @@ def crunchyroll_get_token(parsing_index):
             payload["device_type"] = "OnTheSpot"
 
             token_data = requests.post(
-                f"{BASE_URL}/auth/v1/token", headers=headers, data=payload
+                f"{BASE_URL}/auth/v1/token",
+                headers=headers,
+                data=payload,
+                timeout=HTTP_TIMEOUT,
             ).json()
             account_pool[parsing_index]["login"]["refresh_token"] = token_data.get(
                 "refresh_token"
@@ -202,7 +209,10 @@ def crunchyroll_get_search_results(token, search_term, _):
     # params["type"] = "top_results,series,movie_listing,episode"
 
     search_data = requests.get(
-        f"{BASE_URL}/content/v2/discover/search", headers=headers, params=params
+        f"{BASE_URL}/content/v2/discover/search",
+        headers=headers,
+        params=params,
+        timeout=HTTP_TIMEOUT,
     ).json()
 
     search_results = []
@@ -342,7 +352,7 @@ def crunchyroll_get_mpd_info(token, episode_id):
 
     # Ensure you properly delete session otherwise app will lockup
     url = f"https://cr-play-service.prd.crunchyrollsvc.com/v1/{episode_id.split('/')[0]}/android/phone/play"
-    resp = requests.get(url, headers=headers, params=params)
+    resp = requests.get(url, headers=headers, params=params, timeout=HTTP_TIMEOUT)
     if resp.status_code != 200:
         raise Exception(f"{resp.status_code} Response: {resp.text}")
     stream_data = resp.json()
@@ -373,7 +383,9 @@ def crunchyroll_get_decryption_key(token, item_id, mpd_url, stream_token):
     headers["Content-Type"] = "application/json"
     headers["User-Agent"] = f"Crunchyroll/{APP_VERSION} Android/13 okhttp/4.12.0"
 
-    mpd_content = requests.get(mpd_url, headers=headers).text
+    mpd_content = requests.get(
+        mpd_url, headers=headers, timeout=HTTP_TIMEOUT
+    ).text
     match = re.search(r"<cenc:pssh>(.*?)</cenc:pssh>", mpd_content)
     if match:
         pssh = match.group(1)
@@ -388,7 +400,11 @@ def crunchyroll_get_decryption_key(token, item_id, mpd_url, stream_token):
     url = "https://cr-license-proxy.prd.crunchyrollsvc.com/v1/license/widevine"
     license_data = base64.b64decode(
         requests.post(
-            url, headers=headers, params={"specConform": True}, data=challenge
+            url,
+            headers=headers,
+            params={"specConform": True},
+            data=challenge,
+            timeout=HTTP_TIMEOUT,
         ).content
     )
     cdm.parse_license(session_id, license_data)
@@ -407,4 +423,5 @@ def crunchyroll_close_stream(token, episode_id, stream_token):
     headers["User-Agent"] = f"Crunchyroll/{APP_VERSION} Android/13 okhttp/4.12.0"
 
     url = f"https://cr-play-service.prd.crunchyrollsvc.com/v1/token/{episode_id.split('/')[0]}/{stream_token}"
-    resp = requests.delete(url, headers=headers)
+    response = requests.delete(url, headers=headers, timeout=HTTP_TIMEOUT)
+    response.raise_for_status()

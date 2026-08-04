@@ -157,7 +157,9 @@ spotify_creds.txt
 debug_*.py
 run_dev.ps1
 
-uv.lock
-
 node_modules/
-package-lock.json
+
+# Application lockfiles are part of the reproducible Docker build. Keep local
+# virtual environments and installed modules ignored, but commit these files.
+!api/uv.lock
+!ui/package-lock.json

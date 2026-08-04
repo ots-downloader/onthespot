@@ -1,4 +1,4 @@
-name: Docker Backend CI
+name: Docker CI
 
 on:
   release:
@@ -27,7 +27,6 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./api
-          file: ./api/Dockerfile
+          context: .
           push: true
-          tags: moddroid94/ots-api:latest,moddroid94/ots-api:${{ steps.version.outputs.current-v-version }}
+          tags: moddroid94/ots-dl:latest,moddroid94/ots-dl:${{ steps.version.outputs.current-v-version }}

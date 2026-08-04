@@ -176,9 +176,6 @@ from .spotify import (
     spotify_get_album_track_ids,
     spotify_get_artist_album_ids,
     spotify_get_playlist_data,
-    spotify_get_playlist_items,
-    spotify_get_liked_songs,
-    spotify_get_your_episodes,
     spotify_get_podcast_episode_ids,
 )
 from .tidal import (
@@ -250,13 +247,3 @@ SERVICE_CHANNEL_TRACK_ID_FUNCTIONS = {
 SERVICE_PODCAST_EPISODE_ID_FUNCTIONS = {
     "spotify": spotify_get_podcast_episode_ids,
 }
-
-# Qobuz file download URL (service-specific, no generic pattern)
-from .qobuz import qobuz_get_file_url  # noqa: E402
-
-# Crunchyroll helpers (service-specific)
-from .crunchyroll import (  # noqa: E402
-    crunchyroll_get_decryption_key,
-    crunchyroll_get_mpd_info,
-    crunchyroll_close_stream,
-)
