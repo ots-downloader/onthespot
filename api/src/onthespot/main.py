@@ -1673,13 +1673,8 @@ async def check_version():
 
 @app.get("/updates/check")
 async def updates_check(force: bool = False):
-    """Return release metadata and the best asset for this platform."""
+    """Return release metadata."""
     return await run_in_threadpool(check_for_updates)
-
-
-@app.post("/updates/install")
-async def updates_install():
-    raise NotImplementedError
 
 
 # ACCOUNTS ENDPOINTS

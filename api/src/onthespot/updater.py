@@ -9,25 +9,17 @@ can update through the deployment method they chose.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-import platform
 import re
-import subprocess
-import sys
-import tempfile
 import threading
 import time
-import shutil
-import zipfile
-from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import requests
 
 from .otsconfig import config
-
+from .runtimedata import notification_hook
 
 logger = logging.getLogger("onthespot.updater")
 _check_lock = threading.Lock()
@@ -42,11 +34,7 @@ CACHE_MAX_AGE_SECONDS = 60 * 60
 
 def _repository() -> str:
     """Return the configured GitHub ``owner/repository`` identifier."""
-    configured = (
-        os.environ.get("ONTHESPOT_UPDATE_REPOSITORY")
-        or config.get("update_repository")
-        or DEFAULT_REPOSITORY
-    )
+    configured = config.get("update_repository") or DEFAULT_REPOSITORY
     value = str(configured).strip().rstrip("/")
     value = re.sub(r"^https?://github\.com/", "", value, flags=re.IGNORECASE)
     value = value.removesuffix(".git").strip("/")
@@ -84,8 +72,13 @@ def _version_key(value: str | None) -> tuple[int, int, int, int, int]:
 
 
 def _normalise_release(payload: dict[str, Any], current_version: str) -> dict[str, Any]:
-    raw_assets = payload.get("assets") if isinstance(payload.get("assets"), list) else []
+    raw_assets = (
+        payload.get("assets") if isinstance(payload.get("assets"), list) else None
+    )
     assets: list[dict[str, Any]] = []
+    if raw_assets is None:
+        logger.error("No Releases unavailable")
+        return {}
     for raw in raw_assets:
         if not isinstance(raw, dict) or not raw.get("browser_download_url"):
             continue
@@ -94,24 +87,24 @@ def _normalise_release(payload: dict[str, Any], current_version: str) -> dict[st
                 "name": str(raw.get("name") or ""),
                 "size": int(raw.get("size") or 0),
                 "download_url": str(raw.get("browser_download_url")),
-                "platform": _asset_platform(str(raw.get("name") or "")),
             }
         )
-    recommended = _select_asset(assets)
     latest_version = str(payload.get("tag_name") or payload.get("name") or "").strip()
     return {
         "repository": _repository(),
         "current_version": current_version,
         "latest_version": latest_version,
-        "update_available": _version_key(latest_version) > _version_key(current_version),
+        "update_available": _version_key(latest_version)
+        > _version_key(current_version),
         "release_name": str(payload.get("name") or latest_version),
-        "release_url": str(payload.get("html_url") or f"https://github.com/{_repository()}/releases/latest"),
+        "release_url": str(
+            payload.get("html_url")
+            or f"https://github.com/{_repository()}/releases/latest"
+        ),
         "release_notes": str(payload.get("body") or ""),
         "published_at": payload.get("published_at"),
         "prerelease": bool(payload.get("prerelease")),
         "assets": assets,
-        "recommended_asset": recommended,
-        "install_supported": bool(getattr(sys, "frozen", False) and platform.system() == "Windows" and recommended),
         "checked_at": time.time(),
         "error": "",
     }
@@ -119,7 +112,7 @@ def _normalise_release(payload: dict[str, Any], current_version: str) -> dict[st
 
 def check_for_updates(force: bool = False) -> dict[str, Any] | bool:
     """Fetch and return structured release information.
-        returns None if an error occurs in the request
+    returns None if an error occurs in the request
 
     """
     with _check_lock:
@@ -134,11 +127,16 @@ def check_for_updates(force: bool = False) -> dict[str, Any] | bool:
             response.raise_for_status()
             payload = response.json()
             if not isinstance(payload, dict):
-                raise ValueError("GitHub returned an invalid release payload")
+                raise TypeError("GitHub returned an invalid release payload")
             result = _normalise_release(payload, current_version)
+            if result.get("update_available", False) is True:
+                notification_hook(
+                    "New Update Available",
+                    "Update Via Docker",
+                    result.get("release_url", ""),
+                )
         except Exception as exc:  # Network failures should never affect downloading.
             logger.error("Update check unavailable: %s", exc)
             return False
 
         return result
-
