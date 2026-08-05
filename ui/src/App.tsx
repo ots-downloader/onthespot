@@ -63,16 +63,6 @@ import {
 import type { DownloadProfile, QueueBatchAction } from "./lib/api";
 import type { AccountHealth } from "./lib/api";
 
-const LibraryPage = lazy(() =>
-  import("./components/LibraryPage").then((module) => ({
-    default: module.LibraryPage,
-  })),
-);
-const StatisticsPanel = lazy(() =>
-  import("./components/StatisticsPanel").then((module) => ({
-    default: module.StatisticsPanel,
-  })),
-);
 const DownloadQueue = lazy(() =>
   import("./components/DownloadQueue").then((module) => ({
     default: module.DownloadQueue,
@@ -313,9 +303,7 @@ const initialTabFromLocation = (): NavTab => {
   const tab = new URLSearchParams(window.location.search).get("tab");
   const validTabs: NavTab[] = [
     "dashboard",
-    "library",
     "queue",
-    "statistics",
     "settings",
     "accounts",
     "diagnostics",
@@ -684,6 +672,7 @@ export default function App() {
   };
 
   const handleVerifyQueue = async () => {
+    return;
     await verifyDownloadQueue([], true);
     setQueue(await fetchDownloadQueue());
   };

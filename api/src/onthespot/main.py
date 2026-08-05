@@ -95,7 +95,7 @@ from .statistics import clear_history, export_history, get_statistics, import_hi
 from .updater import (
     check_for_updates,
 )
-from .playlist_automation import PlaylistAutomationError, playlist_automation
+
 from .export_locations import (
     default_export_directory,
     playlist_backup_directory,
@@ -412,12 +412,6 @@ async def lifespan(app: FastAPI):
         retryworker.start()
 
     fillaccountpool.start()
-    # Keep OnTheSpot visible in Spotify's Connect device picker even when an
-    # account was already configured before this process started.
-    # Zeroconf registration performs a blocking mDNS operation.  Run it
-    # outside the event-loop thread so the API can start cleanly and Spotify
-    # Connect can finish advertising the device without EventLoopBlocked.
-    # await asyncio.to_thread(start_spotify_connect_service)
 
     logger.info("Initializing...")
 
@@ -1974,24 +1968,11 @@ async def get_system_diagnostics():
     except OSError:
         disk = {"total": 0, "free": 0, "used": 0}
     rate_limit = get_rate_limit_state()
-    spotify_status = playlist_automation.status()
     spotify_rate_limited = (
         bool(rate_limit.get("active"))
         and "spotify" in str(rate_limit.get("host") or "").casefold()
     )
-    spotify_api_status = (
-        "Rate limited"
-        if spotify_rate_limited
-        else (
-            "Connected"
-            if spotify_status.get("authenticated")
-            else (
-                "Needs sign-in"
-                if spotify_status.get("configured")
-                else "Not configured"
-            )
-        )
-    )
+    spotify_api_status = "Rate limited" if spotify_rate_limited else "ND"
     return {
         "backend": {"status": "online", "version": config.get("version")},
         "workers": {
@@ -2016,14 +1997,14 @@ async def get_system_diagnostics():
         "disk": disk,
         "rate_limit": rate_limit,
         "spotify_api": {
-            "configured": bool(spotify_status.get("configured")),
-            "connected": bool(spotify_status.get("authenticated")),
+            "configured": False,
+            "connected": False,
             "status": spotify_api_status,
             "rate_limited": spotify_rate_limited,
             "seconds_remaining": int(rate_limit.get("seconds_remaining") or 0)
             if spotify_rate_limited
             else 0,
-            "connect_service": spotify_connect_status(),
+            "connect_service": [],
         },
     }
 
