@@ -8,6 +8,11 @@ from ..utils import conv_list_format, make_call
 
 logger = get_logger("api.bandcamp")
 
+# bandcamp.com/search is served behind a bot challenge and no longer returns
+# result markup, so use the endpoint the site's own search box calls.
+SEARCH_URL = 'https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic'
+SEARCH_FILTERS = {'track': 't', 'album': 'a', 'artist': 'b'}
+
 
 def bandcamp_login_user(account):
     logger.info('Logging into Bandcamp account...')
@@ -51,44 +56,38 @@ def bandcamp_add_account():
 
 def bandcamp_get_search_results(_, search_term, content_types):
     search_results = []
-    urls = []
-    if 'track' in content_types:
-        urls.append(f'https://bandcamp.com/search?q={search_term}&item_type=t')
-    if 'album' in content_types:
-        urls.append(f'https://bandcamp.com/search?q={search_term}&item_type=a')
-    if 'artist' in content_types:
-        urls.append(f'https://bandcamp.com/search?q={search_term}&item_type=b')
 
-    result_pattern = r'<li class="searchresult data-search"[^>]*>.*?</li>'
-    artwork_pattern = r'<a class="artcont" href=".*?">\s*<div class="art">\s*<img src="(?P<artwork_url>.*?)"\s*.*?>'
-    item_type_pattern = r'<div class="itemtype">\s*(?P<item_type>.*?)\s*</div>'
-    heading_pattern = r'<div class="heading">\s*<a href="(?P<url>.*?)".*?>(?P<title>.*?)</a>'
+    for item_type, search_filter in SEARCH_FILTERS.items():
+        if item_type not in content_types:
+            continue
 
-    for url in urls:
-        data = make_call(url, skip_cache=True, text=True, use_ssl=True)
+        response = requests.post(SEARCH_URL, json={
+            'search_text': search_term,
+            'search_filter': search_filter,
+            'full_page': False,
+            'fan_id': None
+        })
 
-        results = re.findall(result_pattern, data, re.DOTALL)
-        for result in results:
-            artwork_match = re.search(artwork_pattern, result, re.DOTALL)
-            artwork_url = artwork_match.group('artwork_url') if artwork_match else None
+        if response.status_code != 200:
+            logger.info(f"Request status error {response.status_code}: {SEARCH_URL}")
+            continue
 
-            item_type_match = re.search(item_type_pattern, result, re.DOTALL)
-            item_type = item_type_match.group('item_type').strip().lower() if item_type_match else None
+        results = response.json().get('auto', {}).get('results', [])
+        for result in results[:config.get("max_search_results")]:
+            # Artists carry no item_url_path; their root url is the artist page.
+            url = result.get('item_url_path') or result.get('item_url_root')
+            if not url:
+                continue
 
-            heading_match = re.search(heading_pattern, result, re.DOTALL)
-            url = heading_match.group('url') if heading_match else None
-            title = heading_match.group('title').strip() if heading_match else None
-
-            if artwork_url and item_type and url and title:
-                search_results.append({
-                    'item_id': url.split('?')[0],
-                    'item_name': title,
-                    'item_by': None,
-                    'item_type': item_type,
-                    'item_service': "bandcamp",
-                    'item_url': url.split('?')[0], # Clean url
-                    'item_thumbnail_url': artwork_url
-                })
+            search_results.append({
+                'item_id': url,
+                'item_name': result.get('name'),
+                'item_by': result.get('band_name'),
+                'item_type': item_type,
+                'item_service': "bandcamp",
+                'item_url': url,
+                'item_thumbnail_url': result.get('img')
+            })
 
     return search_results
 
