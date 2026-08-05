@@ -11,10 +11,23 @@ echo " => Fetch Dependencies"
 mkdir build
 cd build
 
-curl -L -o appimagetool-x86_64.AppImage https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+curl -fL -o appimagetool-x86_64.AppImage https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage || exit 1
 chmod +x appimagetool-x86_64.AppImage
 
-curl -L -o python.AppImage https://github.com/niess/python-appimage/releases/download/python3.12/python3.12.12-cp312-cp312-manylinux2014_x86_64.AppImage
+# python-appimage publishes to a rolling "python3.12" tag and deletes the old
+# asset on every patch bump, so a pinned patch version 404s a few weeks later.
+# Ask the release for whichever 3.12.x it currently carries.
+PYTHON_APPIMAGE_URL=$(curl -fsSL https://api.github.com/repos/niess/python-appimage/releases/tags/python3.12 \
+    | grep -o 'https://github.com/niess/python-appimage/releases/download/[^"]*-cp312-cp312-manylinux2014_x86_64\.AppImage' \
+    | head -n 1)
+
+if [ -z "$PYTHON_APPIMAGE_URL" ]; then
+    echo "Could not find a cp312 manylinux2014 x86_64 asset on the python3.12 release" >&2
+    exit 1
+fi
+
+echo " => Using $PYTHON_APPIMAGE_URL"
+curl -fL -o python.AppImage "$PYTHON_APPIMAGE_URL" || exit 1
 chmod +x python.AppImage
 
 ./python.AppImage --appimage-extract
