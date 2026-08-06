@@ -1,6 +1,6 @@
 flask>=3.1.0
 flask-login>=0.6.3
-librespot @ git+https://github.com/justin025/librespot-python.git
+librespot @ git+https://github.com/moddroid94/librespot-python.git
 m3u8>=6.0.0
 music-tag>=0.4.3
 mutagen>=1.47.0
