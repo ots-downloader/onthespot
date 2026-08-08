@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 # librespot currently ships protobuf files generated for the compatibility
 # runtime. Set this before importing librespot so a fresh companion venv works
@@ -26,6 +27,78 @@ os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 import requests
 import librespot.zeroconf as librespot_zeroconf
 from librespot.zeroconf import ZeroconfServer
+
+# Carrier-grade NAT. Tailscale hands out addresses from this range, and the
+# setup docs recommend Tailscale, but Python does not treat it as private.
+_CGNAT_V4 = ipaddress.ip_network("100.64.0.0/10")
+
+
+class InsecureServerURL(Exception):
+    """Raised when --server-url would send the login payload in the clear."""
+
+
+def _is_trusted_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """True when *address* cannot leave the local network."""
+    if address.is_loopback or address.is_private or address.is_link_local:
+        return True
+    return address.version == 4 and address in _CGNAT_V4
+
+
+def validate_server_url(raw_url: str, allow_insecure: bool = False) -> str:
+    """Return *raw_url* trimmed, refusing plain HTTP to a non-local host.
+
+    The companion posts a reusable Spotify login blob to this URL, so the one
+    thing it must not do is send it over the open internet unencrypted. HTTPS
+    is always accepted. Plain HTTP is accepted only when the host resolves
+    entirely to loopback, private, link-local or CGNAT addresses.
+
+    A hostname that cannot be resolved is rejected rather than assumed local,
+    so a typo or a dead DNS entry fails loudly instead of leaking credentials.
+    """
+    url = raw_url.strip().rstrip("/")
+    parsed = urlparse(url)
+
+    if parsed.scheme not in {"http", "https"}:
+        raise InsecureServerURL(
+            f"--server-url must be an http or https URL, got {parsed.scheme or url!r}"
+        )
+    if not parsed.hostname:
+        raise InsecureServerURL(f"--server-url has no host: {raw_url!r}")
+    if parsed.scheme == "https":
+        return url
+    if allow_insecure:
+        print(
+            "Warning: sending the Spotify login over plain HTTP because "
+            "--allow-insecure was passed.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return url
+
+    host = parsed.hostname
+    try:
+        addresses = {ipaddress.ip_address(host)}
+    except ValueError:
+        try:
+            addresses = {
+                ipaddress.ip_address(info[4][0])
+                for info in socket.getaddrinfo(host, parsed.port or None)
+            }
+        except (socket.gaierror, ValueError) as exc:
+            raise InsecureServerURL(
+                f"Refusing plain HTTP to {host!r}: the name could not be resolved "
+                f"({exc}), so it cannot be confirmed as local. Use https, or pass "
+                f"--allow-insecure if you are certain the network is trusted."
+            ) from exc
+
+    if addresses and all(_is_trusted_address(address) for address in addresses):
+        return url
+
+    raise InsecureServerURL(
+        f"Refusing to send the Spotify login to {host!r} over plain HTTP. "
+        f"Use an https URL, a loopback/LAN address, or Tailscale. "
+        f"Pass --allow-insecure to override."
+    )
 
 
 def choose_interface(configured: str | None) -> str | None:
@@ -177,6 +250,11 @@ def parse_args() -> argparse.Namespace:
         default=6768,
         help="Preferred local Spotify Connect HTTP port; the next available port is used automatically",
     )
+    parser.add_argument(
+        "--allow-insecure",
+        action="store_true",
+        help="Permit plain HTTP to a non-local host; sends the Spotify login unencrypted",
+    )
     parser.add_argument("--name", default="OnTheSpot Companion", help="Name shown in Spotify Connect")
     parser.add_argument(
         "--state-file",
@@ -193,7 +271,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    server_url = args.server_url.rstrip("/")
+    try:
+        server_url = validate_server_url(args.server_url, args.allow_insecure)
+    except InsecureServerURL as exc:
+        print(str(exc), file=sys.stderr, flush=True)
+        return 1
     state_file = Path(args.state_file).expanduser() if args.state_file else Path.home() / ".onthespot" / "companion" / "spotify_connect_login.json"
     state_file.parent.mkdir(parents=True, exist_ok=True)
     try:
