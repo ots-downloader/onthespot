@@ -5,6 +5,8 @@ import os
 import shutil
 import uuid
 
+from .credentials import CREDENTIAL_KEYS, CredentialStore
+
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,12 @@ class Config:
                     json.dump(self.__template_data, cf, indent=4, ensure_ascii=False)
                 self.__config = self.__template_data
 
+        # Credentials live in their own encrypted file beside whichever config
+        # path was actually used, including the fallback one. See #368.
+        self.__credentials = CredentialStore(os.path.dirname(self.__cfg_path))
+        self.__credential_values = self.__credentials.load()
+        self.__adopt_plaintext_credentials()
+
         # Version identifies the bundled application build, not a user setting.
         # Keep existing configuration volumes from pinning the UI to an older
         # release after the Docker image has been upgraded.
@@ -197,6 +205,33 @@ class Config:
             self.set("_log_file", fallback_logdir)
             os.makedirs(os.path.dirname(self.get("_log_file")), exist_ok=True)
 
+    def __adopt_plaintext_credentials(self):
+        """Move any plaintext credentials out of the config file.
+
+        Leaving them in place would defeat the encrypted store, and simply
+        dropping them would sign the user out without saying so, which is why
+        they are carried across once rather than discarded. Only the credential
+        keys move; nothing else from an old config is imported.
+        """
+        found = {
+            key: self.__config.pop(key)
+            for key in list(self.__config)
+            if key in CREDENTIAL_KEYS
+        }
+        if not found:
+            return
+
+        carried = {key: value for key, value in found.items() if value}
+        if carried and not self.__credential_values:
+            self.__credential_values.update(carried)
+            if self.__credentials.save(self.__credential_values):
+                print(
+                    "Moved "
+                    + ", ".join(sorted(carried))
+                    + " out of otsconfig.json into the encrypted credential store."
+                )
+        self.save()
+
     def get(self, key, default=None):
         """
         Retrieves the value of a configuration key.
@@ -205,6 +240,10 @@ class Config:
         :param default: The default value to return if the key is not found in either the user or template configurations.
         :return: The value associated with the key, or the default value if the key is not found.
         """
+        if key in CREDENTIAL_KEYS:
+            if key in self.__credential_values:
+                return self.__credential_values[key]
+            return self.__template_data.get(key, default)
         if key in self.__config:
             return self.__config[key]
         if key in self.__template_data:
@@ -223,6 +262,10 @@ class Config:
         """
         snapshot = copy.deepcopy(self.__template_data)
         snapshot.update(copy.deepcopy(self.__config))
+        # Credentials no longer live in __config, so merge them back in or the
+        # UI's account list would silently come back empty. They are reduced to
+        # uuid/service/active below unless secrets were explicitly requested.
+        snapshot.update(copy.deepcopy(self.__credential_values))
 
         if not include_runtime:
             snapshot = {
@@ -269,6 +312,12 @@ class Config:
         :param value: The value to associate with the key.
         :return: The value that was set.
         """
+        if key in CREDENTIAL_KEYS:
+            self.__credential_values[key] = (
+                value.copy() if isinstance(value, (list, dict)) else value
+            )
+            self.__credentials.save(self.__credential_values)
+            return value
         if type(value) in [list, dict]:
             self.__config[key] = value.copy()
         else:
@@ -285,8 +334,14 @@ class Config:
         os.makedirs(os.path.dirname(self.__cfg_path), exist_ok=True)
         # Merge template data into config for missing keys
         for key in list(set(self.__template_data).difference(set(self.__config))):
-            if not key.startswith("_"):
+            # Credential keys are deliberately absent from __config. Merging the
+            # template default back in would route through set() and overwrite
+            # the stored credentials with an empty list.
+            if not key.startswith("_") and key not in CREDENTIAL_KEYS:
                 self.set(key, self.__template_data[key])
+        # Never let a credential reach the plaintext config file.
+        for key in CREDENTIAL_KEYS:
+            self.__config.pop(key, None)
         try:
             with open(self.__cfg_path, "w", encoding="utf-8") as cf:
                 json.dump(self.__config, cf, indent=4, ensure_ascii=False)
