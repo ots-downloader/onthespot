@@ -1377,25 +1377,22 @@ async def get_config():
 
 
 @app.post("/config/set")
-async def set_config(nkey, nvalue):
+async def set_config(nkey: str, nvalue: str):
     """
     Endpoint to set a configuration setting.
 
+    The value arrives as text on the query string and is converted to the type
+    the default configuration template declares for the key.
+
     :param nkey: Key of the configuration setting.
     :param nvalue: Value for the configuration setting.
-    :return: Updated configuration setting.
+    :return: Updated configuration setting, as the type of the key's default.
+    :raises HTTPException: 400 if the value does not suit the type of the key.
     """
-    if nvalue in ["false", "true"]:
-        match nvalue:
-            case "false":
-                nvalue = False
-            case "true":
-                nvalue = True
-            case _:
-                pass
-    result = config.set(nkey, nvalue)
-
-    return result
+    try:
+        return config.set(nkey, nvalue)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/config/save")
@@ -1525,19 +1522,25 @@ async def import_config(payload: dict):
             status_code=400, detail="Configuration must be a JSON object"
         )
     protected = {"_ffmpeg_bin_path", "_log_file", "_cache_dir"}
+    validated = {}
     for key, value in payload.items():
         if key in protected or key.startswith("_"):
             continue
-        if key == "spotify_webapi_override_client_secret" and value in {
-            "",
-            "<redacted>",
-            None,
-        }:
-            continue
-        if key == "accounts" and isinstance(value, list):
+        if key == "accounts":
             # Accounts contain authentication material and are deliberately
-            # not imported from a redacted export.
+            # not imported from a redacted export, whatever shape they arrive in.
             continue
+        if key == "spotify_webapi_override_client_secret" and (
+            value is None or value == "" or value == "<redacted>"
+        ):
+            continue
+        try:
+            validated[key] = config.coerce(key, value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # Apply nothing until every entry passes, so a bad entry late in the payload
+    # cannot leave the live configuration half imported.
+    for key, value in validated.items():
         config.set(key, value)
     config.save()
     return {"success": True, "config": _exportable_config()}
