@@ -116,6 +116,25 @@ class Config:
         if self.__template_data.get("version"):
             self.__config["version"] = self.__template_data["version"]
 
+        # Earlier releases stored whatever the settings endpoint received, so an
+        # existing configuration file can hold text or booleans where the
+        # template declares another type. Repair those values on load; the
+        # healed configuration reaches disk on the next normal save.
+        for key, value in list(self.__config.items()):
+            if str(key).startswith("_") or key not in self.__template_data:
+                continue
+            if isinstance(value, bool) and isinstance(self.__template_data[key], str):
+                # The old endpoint parsed every "true"/"false" into a boolean,
+                # including for text settings. Restore the user's text instead
+                # of discarding it.
+                self.__config[key] = "true" if value else "false"
+                continue
+            try:
+                self.__config[key] = self.coerce(key, value)
+            except ValueError as e:
+                print(f"{e}, restoring the default value")
+                self.__config[key] = copy.deepcopy(self.__template_data[key])
+
         # ``cache_metadata_in_queue`` was the original UI key for the global
         # API-cache switch.  Preserve an existing user's choice while moving
         # to the accurately named setting.
@@ -261,14 +280,88 @@ class Config:
 
         return snapshot
 
+    def coerce(self, key, value):
+        """
+        Converts a value to the type the default template declares for the key.
+
+        The bundled ``otsconfig_default.json`` is the type authority: the type of
+        a key's default decides the type stored under that key. Only the text
+        forms the query-string transport produces are converted; a conversion
+        between other types would hide a programming error, so it raises
+        instead. Keys the template does not hold (runtime ``_`` keys, and keys a
+        newer build adds) pass through unchanged, but a template key whose
+        default is neither a bool, an int, a string nor a list raises, so that a
+        new template type cannot bypass the type authority unnoticed.
+
+        :param key: The configuration key the value belongs to.
+        :param value: The value to convert.
+        :return: The value as the type of the key's default.
+        :raises ValueError: If the value does not suit the type of the key's default.
+        """
+        if key not in self.__template_data:
+            return value
+
+        expected = type(self.__template_data[key])
+
+        # A bool is an int in Python, so test for bool before int.
+        if expected is bool:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str) and value.casefold() in ("true", "false"):
+                return value.casefold() == "true"
+            raise ValueError(f"Configuration key '{key}' needs a true or false value")
+
+        if expected is int:
+            if isinstance(value, bool):
+                raise ValueError(f"Configuration key '{key}' needs a whole number")
+            if isinstance(value, int):
+                return value
+            if isinstance(value, str):
+                try:
+                    return int(value)
+                except ValueError:
+                    raise ValueError(
+                        f"Configuration key '{key}' needs a whole number"
+                    ) from None
+            raise ValueError(f"Configuration key '{key}' needs a whole number")
+
+        if expected is str:
+            if isinstance(value, str):
+                return value
+            raise ValueError(f"Configuration key '{key}' needs a text value")
+
+        if expected is list:
+            if isinstance(value, list):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                except json.JSONDecodeError:
+                    raise ValueError(
+                        f"Configuration key '{key}' needs a list value"
+                    ) from None
+                if isinstance(parsed, list):
+                    return parsed
+            raise ValueError(f"Configuration key '{key}' needs a list value")
+
+        raise ValueError(
+            f"Configuration key '{key}' has the unsupported default type "
+            f"'{expected.__name__}'"
+        )
+
     def set(self, key, value):
         """
         Sets a configuration key to a given value.
 
+        The value is converted to the type of the key's default first, so that
+        text from the settings endpoint reaches storage as the right type.
+
         :param key: The configuration key to set.
         :param value: The value to associate with the key.
-        :return: The value that was set.
+        :return: The value that was set, as the type of the key's default.
+        :raises ValueError: If the value does not suit the type of the key's default.
         """
+        value = self.coerce(key, value)
         if type(value) in [list, dict]:
             self.__config[key] = value.copy()
         else:
