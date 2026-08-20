@@ -111,8 +111,6 @@ class ConfigEndpointTests(unittest.TestCase):
         )
 
     def test_import_never_writes_accounts(self):
-        original = copy.deepcopy(config.get("accounts"))
-
         self.client.post(
             "/config/import",
             json={
@@ -120,7 +118,7 @@ class ConfigEndpointTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(config.get("accounts"), original)
+        self.assertEqual(config.get("accounts"), self.snapshot["accounts"])
 
 
 if __name__ == "__main__":

@@ -121,7 +121,7 @@ class Config:
         # template declares another type. Repair those values on load; the
         # healed configuration reaches disk on the next normal save.
         for key, value in list(self.__config.items()):
-            if str(key).startswith("_") or key not in self.__template_data:
+            if key not in self.__template_data:
                 continue
             if isinstance(value, bool) and isinstance(self.__template_data[key], str):
                 # The old endpoint parsed every "true"/"false" into a boolean,
@@ -303,7 +303,6 @@ class Config:
 
         expected = type(self.__template_data[key])
 
-        # A bool is an int in Python, so test for bool before int.
         if expected is bool:
             if isinstance(value, bool):
                 return value
@@ -312,17 +311,14 @@ class Config:
             raise ValueError(f"Configuration key '{key}' needs a true or false value")
 
         if expected is int:
-            if isinstance(value, bool):
-                raise ValueError(f"Configuration key '{key}' needs a whole number")
-            if isinstance(value, int):
+            # A bool is an int in Python, so exclude it from the number path.
+            if isinstance(value, int) and not isinstance(value, bool):
                 return value
             if isinstance(value, str):
                 try:
                     return int(value)
                 except ValueError:
-                    raise ValueError(
-                        f"Configuration key '{key}' needs a whole number"
-                    ) from None
+                    pass
             raise ValueError(f"Configuration key '{key}' needs a whole number")
 
         if expected is str:
@@ -337,9 +333,7 @@ class Config:
                 try:
                     parsed = json.loads(value)
                 except json.JSONDecodeError:
-                    raise ValueError(
-                        f"Configuration key '{key}' needs a list value"
-                    ) from None
+                    parsed = None
                 if isinstance(parsed, list):
                     return parsed
             raise ValueError(f"Configuration key '{key}' needs a list value")
