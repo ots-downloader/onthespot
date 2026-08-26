@@ -13,6 +13,13 @@ After the user selects it, the companion sends the one-time login payload to
 the OnTheSpot URL over HTTPS or Tailscale. The Spotify credentials are not
 printed or stored on the remote server until pairing succeeds.
 
+That payload is a reusable Spotify login, so the companion refuses to send it
+over plain HTTP unless the destination is local. `https://` URLs are always
+accepted, and `http://` is accepted when the host resolves entirely to
+loopback, private, link-local or Tailscale (CGNAT) addresses. A hostname that
+cannot be resolved is refused rather than assumed local. Pass
+`--allow-insecure` to override the check on a network you trust.
+
 The preferred local discovery port is `6768`. If another companion or local
 service is already using it, the helper automatically selects the next free
 port and prints the address it chose.
