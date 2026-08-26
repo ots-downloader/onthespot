@@ -88,7 +88,9 @@ class CredentialStore:
             key = self._key_path.read_bytes().strip()
             if key:
                 return key
-            logger.warning("Credential key at %s is empty; generating a new one.", self._key_path)
+            logger.warning(
+                "Credential key at %s is empty; generating a new one.", self._key_path
+            )
         except FileNotFoundError:
             pass
         except OSError as exc:
@@ -124,7 +126,7 @@ class CredentialStore:
 
         try:
             plaintext = Fernet(key).decrypt(blob)
-        except InvalidToken:
+        except (InvalidToken, ValueError):
             logger.error(
                 "Stored credentials at %s could not be decrypted with %s. The key "
                 "was probably replaced or lost; sign in again to rebuild them.",
@@ -163,6 +165,9 @@ class CredentialStore:
             _write_private(self._store_path, Fernet(key).encrypt(payload))
         except OSError as exc:
             logger.error("Could not write %s: %s", self._store_path, exc)
+            return False
+        except ValueError:
+            logger.error("Could not encrypt payload %s", self._store_path)
             return False
         return True
 

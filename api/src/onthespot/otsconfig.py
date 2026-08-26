@@ -50,6 +50,7 @@ def cache_dir():
     # configuration so Docker/Unraid's config volume persists it.
     return os.path.join(config_dir(), "cache")
 
+
 class Config:
     def __init__(self):
         """
@@ -68,7 +69,7 @@ class Config:
         If any step fails, appropriate fallback mechanisms are used to ensure that the application can still run.
         """
         config_root = config_dir()
-        
+
         self.__cfg_path = os.path.join(config_root, "otsconfig.json")
         self.__default_cfg_path = os.path.join(
             os.path.dirname(__file__), "otsconfig_default.json"
@@ -214,7 +215,7 @@ class Config:
         keys move; nothing else from an old config is imported.
         """
         found = {
-            key: self.__config.pop(key)
+            key: self.__config.get(key)
             for key in list(self.__config)
             if key in CREDENTIAL_KEYS
         }
@@ -225,12 +226,17 @@ class Config:
         if carried and not self.__credential_values:
             self.__credential_values.update(carried)
             if self.__credentials.save(self.__credential_values):
+                for key in found:
+                    self.__config.pop(key, None)
+                self.save()
                 print(
                     "Moved "
                     + ", ".join(sorted(carried))
                     + " out of otsconfig.json into the encrypted credential store."
                 )
-        self.save()
+            else:
+                print("Credentials Write failed, credentials are kept in config file.")
+                return
 
     def get(self, key, default=None):
         """
