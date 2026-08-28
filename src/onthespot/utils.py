@@ -57,6 +57,11 @@ def make_call(url, params=None, headers=None, session=None, skip_cache=False, te
     response = session.get(url, headers=headers, params=params)
 
     if response.status_code == 200:
+        # SoundCloud serves 'Content-Type: text/html' with no charset, so
+        # requests falls back to ISO-8859-1 and mangles non-Latin text.
+        # Trust the body's own encoding instead.
+        if response.encoding is None or response.encoding.lower() in ('iso-8859-1', 'latin-1'):
+            response.encoding = response.apparent_encoding or 'utf-8'
         if not skip_cache:
             with open(req_cache_file, 'w', encoding='utf-8') as cf:
                 cf.write(response.text)

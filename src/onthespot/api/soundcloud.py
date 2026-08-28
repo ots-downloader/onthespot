@@ -347,7 +347,11 @@ def soundcloud_get_track_metadata(token, item_id):
     info['track_number'] = track_number
     info['total_tracks'] = total_tracks
     #info['file_url'] = track_file.get("url")
-    info['length'] = str(track_data.get("media", {}).get("transcodings", [{}])[0].get("duration", 0))
+    # The [{}] default only applies when the key is missing; SoundCloud often
+    # returns an empty list, so fall back to the track's own duration.
+    transcodings = track_data.get("media", {}).get("transcodings") or []
+    info['length'] = str(transcodings[0].get("duration", 0) if transcodings
+                         else track_data.get("duration", 0))
     info['artists'] = artists
     info['album_name'] = album_name
     info['album_type'] = album_type

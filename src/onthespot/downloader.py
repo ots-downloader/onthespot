@@ -417,7 +417,7 @@ class DownloadWorker(QObject):
                         elif item_service == "youtube_music":
                             default_format = '.m4a'
                             bitrate = "128k"
-                            ydl_opts['format'] = 'bestaudio[ext=m4a]'
+                            ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio'
                         ydl_opts['quiet'] = True
                         ydl_opts['no_warnings'] = True
                         ydl_opts['noprogress'] = True
