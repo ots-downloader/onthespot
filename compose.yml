@@ -18,3 +18,18 @@ services:
       - "${ONTHESPOT_CONFIG_DIR:-./otsdata/Config}:/root/.config/onthespot"
     restart: unless-stopped
     stop_grace_period: 20s
+    networks:
+      - ots-network
+  
+  bgutil-ytdlp-pot-provider:
+    container_name: bgutil-provider
+    init: true
+    ports:
+      - "4416:4416"
+    image: brainicism/bgutil-ytdlp-pot-provider
+    networks:
+      - ots-network
+
+networks:
+  ots-network:
+    driver: bridge

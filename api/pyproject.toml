@@ -5,6 +5,7 @@ description = "An easy to use music downloader written in Python."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "bgutil-ytdlp-pot-provider>=1.3.2",
     "cryptography>=43.0.0",
     "defusedxml>=0.7.1",
     "fastapi[standard]>=0.138.0",
@@ -16,7 +17,7 @@ dependencies = [
     "pywidevine>=1.8.0",
     "requests>=2.32.3",
     "urllib3>=2.2.3",
-    "yt-dlp>=2025.1.12",
+    "yt-dlp[default]>=2026.8.19",
 ]
 
 [tool.uv.sources]

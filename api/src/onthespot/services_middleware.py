@@ -318,7 +318,10 @@ def download_via_ytdlp_audio(
         # needed for download
         ydl_opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["android_vr"],
+                "player_client": ["mweb"],
+            },
+            "youtubepot-bgutilhttp": {
+                "base_url": ["http://bgutil-provider:4416"],
             }
         }
         ydl_opts.update(youtube_ydl_options())

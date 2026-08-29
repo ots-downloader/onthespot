@@ -25,6 +25,9 @@ FROM python:3.12-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=denoland/deno:bin-2.9.5 /deno /usr/local/bin/deno
+RUN chmod +x /usr/local/bin/deno
+
 RUN groupadd -g 1000 appgroup && \
     useradd -u 1000 -g appgroup -m appusr
 
