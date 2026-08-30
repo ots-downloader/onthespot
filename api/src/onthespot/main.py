@@ -1393,6 +1393,11 @@ async def set_config(nkey, nvalue):
                 nvalue = True
             case _:
                 pass
+    try:
+        if str(nvalue).isdigit():
+            nvalue = int(nvalue)
+    except:
+        pass
     result = config.set(nkey, nvalue)
 
     return result
