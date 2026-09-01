@@ -13,7 +13,7 @@ Requirements:
 Clone the repository and select this branch:
 
 ```bash
-git clone --branch fastapi-dev --single-branch https://github.com/JamyPatch44/onthespot.git
+git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
 cd onthespot
 ```
 
