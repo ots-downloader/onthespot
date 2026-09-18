@@ -22,7 +22,7 @@ from .api.crunchyroll import crunchyroll_get_episode_metadata, crunchyroll_get_d
 from .api.generic import generic_get_track_metadata
 from .otsconfig import config
 from .runtimedata import get_logger, download_queue, download_queue_lock, account_pool, temp_download_path
-from .utils import format_item_path, convert_audio_format, embed_metadata, set_music_thumbnail, fix_mp3_metadata, add_to_m3u_file, strip_metadata, convert_video_format
+from .utils import format_item_path, convert_audio_format, embed_metadata, set_music_thumbnail, fix_mp3_metadata, fix_multivalue_tags, add_to_m3u_file, strip_metadata, convert_video_format
 
 logger = get_logger("downloader")
 
@@ -226,6 +226,12 @@ class DownloadWorker(QObject):
 
                                         if os.path.splitext(item['file_path'])[1] == '.mp3':
                                             fix_mp3_metadata(item['file_path'])
+
+                                        # Must run last: set_music_thumbnail() remuxes mp3/flac/ogg
+                                        # files through ffmpeg (-c copy) to attach cover art, which
+                                        # does not preserve a multi-value ID3v2.4/Vorbis-comment tag
+                                        # written earlier - it collapses it back to a single value.
+                                        fix_multivalue_tags(item['file_path'])
                                     else:
                                         if config.get('save_album_cover'):
                                             item['item_status'] = 'Setting Thumbnail'
@@ -731,6 +737,12 @@ class DownloadWorker(QObject):
 
                             if os.path.splitext(file_path)[1] == '.mp3':
                                 fix_mp3_metadata(file_path)
+
+                            # Must run last: set_music_thumbnail() remuxes mp3/flac/ogg
+                            # files through ffmpeg (-c copy) to attach cover art, which
+                            # does not preserve a multi-value ID3v2.4/Vorbis-comment tag
+                            # written earlier - it collapses it back to a single value.
+                            fix_multivalue_tags(file_path)
                         else:
                             if config.get('save_album_cover'):
                                 item['item_status'] = 'Setting Thumbnail'

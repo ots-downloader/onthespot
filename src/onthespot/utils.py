@@ -8,8 +8,9 @@ import subprocess
 from hashlib import md5
 from io import BytesIO
 from PIL import Image
-from mutagen.flac import Picture
-from mutagen.id3 import ID3, ID3NoHeaderError, WOAS, USLT, TCMP, COMM
+from mutagen.flac import FLAC, Picture
+from mutagen.id3 import ID3, ID3NoHeaderError, TPE1, TPE2, TCON, TCOM, TEXT, WOAS, USLT, TCMP, COMM
+from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 import music_tag
 from .otsconfig import config
@@ -637,6 +638,118 @@ def fix_mp3_metadata(filename):
         id3['TCMP'] = TCMP(encoding=3, text=id3['TXXX:TCMP'].text[0])
         del id3['TXXX:TCMP']
     id3.save()
+
+
+# (ID3 frame id, ID3 frame class, Vorbis comment key) for the tag fields
+# that get a single ffmpeg -metadata value even when onthespot (or some
+# upstream source, e.g. a librespot/ffmpeg pass-through for composer) put
+# a metadata_separator-joined multi-value string in them.
+SIMPLE_FIELDS = [
+    ("TPE1", TPE1, "artist"),
+    ("TPE2", TPE2, "albumartist"),
+    ("TCON", TCON, "genre"),
+    ("TCOM", TCOM, "composer"),
+    ("TEXT", TEXT, "author"),  # onthespot's own writers->TEXT(mp3)/author(vorbis) mapping
+]
+
+
+def split_value(value, separator):
+    if not value:
+        return []
+    return [part.strip() for part in value.split(separator) if part.strip()]
+
+
+def fix_multivalue_tags(filename):
+    """Rewrite joined-string tags as genuine multi-value fields.
+
+    Several tag fields (artist, album artist, genre, composer, writers,
+    producer) can end up holding a metadata_separator-joined string
+    (e.g. "Artist A; Artist B") instead of a true multi-value tag,
+    either because embed_metadata() passed a pre-joined string into
+    ffmpeg's -metadata flag (which only accepts one value per key), or
+    because the value's origin is outside onthespot's own field-writing
+    code entirely (e.g. composer/TCOM has no writer in this codebase but
+    shows up populated in real files -- likely an ffmpeg/librespot
+    pass-through). Rather than depend on the metadata dict passed around
+    at embed time, this re-reads whatever ended up in the file *after*
+    all writing/remuxing is done (including set_music_thumbnail(), which
+    re-muxes through ffmpeg and would otherwise collapse an
+    earlier-written multi-value tag) and splits it apart in place, using
+    each format's native multi-value convention (repeated Vorbis
+    comments for FLAC/Ogg/Opus, a multi-value ID3v2.4 text frame for
+    MP3). Idempotent: a value with no separator, or already split, is
+    left untouched.
+    """
+    separator = config.get('metadata_separator')
+    if not separator:
+        return
+
+    filetype = os.path.splitext(filename)[1].lower()
+    changed = False
+
+    if filetype == '.mp3':
+        try:
+            id3 = ID3(filename)
+        except ID3NoHeaderError:
+            return
+        for frame_id, frame_cls, _vorbis_key in SIMPLE_FIELDS:
+            if frame_id not in id3:
+                continue
+            current = str(id3[frame_id].text[0])
+            parts = split_value(current, separator)
+            if len(parts) > 1:
+                id3.setall(frame_id, [frame_cls(encoding=3, text=parts)])
+                changed = True
+
+        # TIPL (producer): onthespot writes this via a flat
+        # `-metadata TIPL=value` ffmpeg call, which lands as [[value, '']]
+        # pairs -- VALUE FIRST, ROLE EMPTY -- not mutagen's documented
+        # [role, person] order. Confirmed against a real library file
+        # (Alligatoah/MUSIK.mp3: TIPL people == [['Alligatoah; Alexander
+        # Marcus; Siggi5000', '']]) and reproduced synthetically. Get this
+        # unpacking order right or it silently no-ops.
+        if 'TIPL' in id3:
+            people = id3['TIPL'].people
+            new_people = []
+            tipl_changed = False
+            for value, role in people:
+                parts = split_value(value, separator)
+                if len(parts) > 1:
+                    tipl_changed = True
+                    new_people.extend((p, role) for p in parts)
+                else:
+                    new_people.append((value, role))
+            if tipl_changed:
+                id3['TIPL'].people = new_people
+                changed = True
+
+        if changed:
+            id3.save(v2_version=4)
+
+    elif filetype in ('.flac', '.ogg', '.opus'):
+        tagger_cls = {'.flac': FLAC, '.ogg': OggVorbis, '.opus': OggOpus}[filetype]
+        f = tagger_cls(filename)
+        for _frame_id, _frame_cls, vorbis_key in SIMPLE_FIELDS:
+            if vorbis_key not in f:
+                continue
+            current = f[vorbis_key][0]
+            parts = split_value(current, separator)
+            if len(parts) > 1:
+                f[vorbis_key] = parts
+                changed = True
+        if 'producer' in f:
+            current = f['producer'][0]
+            parts = split_value(current, separator)
+            if len(parts) > 1:
+                f['producer'] = parts
+                changed = True
+        if changed:
+            f.save()
+
+    # m4a/mp4/wav intentionally left untouched: MP4 atoms and RIFF INFO
+    # chunks have no comparably well-supported repeated-value convention,
+    # so ffmpeg's joined string is already the least-bad representation
+    # for those containers.
 
 
 def add_to_m3u_file(item, item_metadata):
