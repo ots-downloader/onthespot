@@ -279,8 +279,8 @@ class DownloadWorker:
                     progress_hook(item, 0, item.item_status)
                     requeue_item(item)
                     continue
-                except Exception as exc:
-                    logger.error("Download failed", extra={"item": item, "error": str(exc)})
+                except Exception:
+                    logger.exception("Download failed for: %s", item_id)
                     item.error = f"RuntimeError during download of: {item_id}, see logs."
                     item.item_status = ItemStatus.FAILED
                     progress_hook(item, 0, item.item_status)
