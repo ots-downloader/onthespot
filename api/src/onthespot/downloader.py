@@ -291,7 +291,11 @@ class DownloadWorker:
                 # so we add the extension after the download function returns the effectively downloaded format
                 if temp_file_format != "":
                     new_path_with_ext = temp_file_path + temp_file_format
-                    os.rename(temp_file_path, new_path_with_ext)
+                    if os.path.isfile(new_path_with_ext):
+                        logger.info("File Found")
+                    else:
+                        logger.info("Renaming temp file to original extension")
+                        os.rename(temp_file_path, new_path_with_ext)
                     temp_file_path = new_path_with_ext
 
                 # ---- Post-processing (convert, tag, thumbnail, lyrics, ecc) ------------------------------------------
@@ -534,7 +538,7 @@ class DownloadWorker:
         """
         if service == "spotify":
             default_format, bitrate = download_spotify(
-                item.model_dump(),
+                item,
                 item_id,
                 item_type,
                 token,
@@ -544,7 +548,7 @@ class DownloadWorker:
 
         if service == "deezer":
             default_format, bitrate = download_deezer(
-                item.model_dump(),
+                item,
                 item_id,
                 token,
                 temp_path,
@@ -559,7 +563,7 @@ class DownloadWorker:
 
         if service in ("bandcamp", "qobuz"):
             default_format, bitrate = download_http_stream(
-                item.model_dump(),
+                item,
                 item_metadata,
                 service,
                 item_id,
@@ -570,7 +574,7 @@ class DownloadWorker:
 
         if service == "apple_music":
             default_format, bitrate = download_apple_music(
-                item.model_dump(),
+                item,
                 item_id,
                 token,
                 temp_path,
@@ -579,7 +583,7 @@ class DownloadWorker:
 
         if service == "crunchyroll":
             video_files = download_crunchyroll(
-                item.model_dump(),
+                item,
                 item_metadata,
                 item_id,
                 token,
@@ -589,9 +593,9 @@ class DownloadWorker:
 
         if service == "generic":
             if config.get("v2a_enable", False) is True:
-                item_codec, item_bitrate = download_generic_v2a(item.model_dump(), item_id, temp_path)
+                item_codec, item_bitrate = download_generic_v2a(item, item_id, temp_path)
                 return item_codec, str(item_bitrate), []
-            download_generic(item.model_dump(), item_id, temp_path)
+            download_generic(item, item_id, temp_path)
             return "", "", []
 
         raise ValueError(f"No download handler for service '{service}'")
