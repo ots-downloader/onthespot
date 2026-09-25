@@ -305,8 +305,18 @@ class Config:
         self.__config = self.__template_data
 
 
-    def migration(self):
-        if int(self.get('version').replace('v', '').replace('.', '')) < int(self.__template_data.get('version').replace('v', '').replace('.', '')):
+def migration(self):
+        try:
+            current_version = int(self.get('version').replace('v', '').replace('.', ''))
+        except (ValueError, TypeError):
+            current_version = 0
+
+        try:
+            template_version = int(self.__template_data.get('version').replace('v', '').replace('.', ''))
+        except (ValueError, TypeError):
+            template_version = 999
+
+        if current_version < template_version:
 
             old_config_path = os.path.join(config_dir(), 'config.json')
             if os.path.exists(old_config_path):
@@ -331,7 +341,7 @@ class Config:
             self.set('accounts', cfg_copy)
 
             # Migration (>v1.0.7)
-            if int(self.get('version').replace('v', '').replace('.', '')) < 110:
+            if current_version < 110:
                 updated_keys = [
                     ('active_account_number', 'parsing_acc_sn'),
                     ('thumbnail_size', 'search_thumb_height'),
