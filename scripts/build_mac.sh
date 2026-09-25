@@ -33,14 +33,16 @@ if uname -m | grep -q x86_64; then
 	#    cd ../..
 	fi
 else
-    curl -L -o build/ffmpeg.zip https://github.com/markus-perl/ffmpeg-build-script/archive/refs/heads/master.zip
-    unzip build/ffmpeg.zip -d builder
-    cd builder/ffmpeg-build-script-main
-    ./build-ffmpeg --build --skip-install
-    
-    cp workspace/bin/ffmpeg ../../dist/ffmpeg
+    if ! [ -f "dist/ffmpeg" ]; then
+        curl -L -o build/ffmpeg.zip https://github.com/markus-perl/ffmpeg-build-script/archive/refs/heads/master.zip
+        unzip build/ffmpeg.zip -d builder
+        cd builder/ffmpeg-build-script-main
+        ./build-ffmpeg --build --skip-install
+        
+        cp workspace/bin/ffmpeg ../../dist/ffmpeg
 
-    cd ../..
+        cd ../..
+    fi
 fi
 
 
