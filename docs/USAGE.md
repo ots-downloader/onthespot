@@ -110,6 +110,21 @@ Playlist downloads are expanded before progress is calculated. The Playlist
 progress card shows overall completion and the current/next track; individual
 tracks can be shown or hidden.
 
+### Export failed and unavailable downloads
+
+Click **Export Failed / Unavailable** in **Download queue** to save a UTF-8
+`.txt` file for finding those items later. The button appears when either
+status is present and exports both statuses across the entire queue,
+regardless of the active tab or selected rows. Use the **Unavailable** tab
+to inspect items the service marked as unavailable.
+
+The report groups entries by status and includes the title, artist/band,
+album, service, source link/ID, playlist name/owner/position, queue ID, and
+reported error. Missing metadata is marked as not available; entries with
+no title are still included. Repeated tracks keep their individual playlist
+positions. The file uses the metadata already loaded in the queue and the
+statuses at export time; exporting does not retry, remove, or change items.
+
 ### Download profiles
 
 Create profiles in **Settings → Download Profiles** for combinations such as
