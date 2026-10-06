@@ -69,6 +69,16 @@ logger = get_logger("downloader")
 _MAX_PATH_LENGTH = 260
 
 
+_output_locks: dict[str, threading.Lock] = {}
+_output_locks_guard = threading.Lock()
+
+
+def _output_lock(path):
+    key = os.path.normcase(os.path.abspath(path))
+    with _output_locks_guard:
+        return _output_locks.setdefault(key, threading.Lock())
+
+
 class RetryWorker:
     """Periodically resets failed download-queue items back to *Waiting*.
 
@@ -80,6 +90,7 @@ class RetryWorker:
         super().__init__()
         self.is_running = True
         self.thread = threading.Thread(target=self.run, daemon=True)
+        self._stop_event = threading.Event()
 
     def start(self) -> None:
         logger.info("Starting Retry Worker")
@@ -88,36 +99,26 @@ class RetryWorker:
     def stop(self) -> None:
         logger.info("Stopping Retry Worker")
         self.is_running = False
-        self.thread.join()
+        self._stop_event.set()
+        self.thread.join(timeout=5)
+
+    def retry_failed(self):
+        with download_queue_lock:
+            for local_id, item in list(download_queue.items()):
+                if item.item_status != ItemStatus.FAILED or item.retry_count >= 3:
+                    continue
+                item.item_status = ItemStatus.WAITING
+                item.error = ""
+                item.retry_count += 1
+                del download_queue[local_id]
+                pending.put_nowait(item)
 
     def run(self) -> None:
         """Scan the queue and reset any *Failed* items to *Waiting*."""
         while self.is_running:
-            if download_queue:
-                with download_queue_lock:
-                    found_items = []
-                    for item in download_queue.values():
-                        # Only retry items that actually need a retry. Waiting,
-                        # downloading, and completed playlist entries must stay
-                        # in the visible batch queue.
-                        retryable_statuses = {
-                            ItemStatus.FAILED,
-                        }
-                        if item.item_status not in retryable_statuses:
-                            continue
-
-                        item.item_status = ItemStatus.WAITING
-                        item.error = ""
-                        item.retry_count = item.retry_count + 1
-                        found_items.append(item)
-
-                    for item in found_items:
-                        del download_queue[item.local_id]
-                        pending.put_nowait(item)
-
+            self.retry_failed()
             delay_minutes = config.get("retry_worker_delay")
-            if delay_minutes > 0:
-                time.sleep(delay_minutes * 60)
+            self._stop_event.wait(max(1, delay_minutes * 60))
 
 
 class DownloadWorker:
@@ -139,7 +140,7 @@ class DownloadWorker:
     def stop(self) -> None:
         logger.info("Stopping Download Worker")
         self.is_running = False
-        self.thread.join()
+        self.thread.join(timeout=5)
 
     # ------------------------------------------------------------------
     # Main loop
@@ -156,6 +157,10 @@ class DownloadWorker:
         while self.is_running:
             item = None
             final_file = ""
+            temp_file_path = final_file_path = ""
+            item_metadata = {}
+            file_lock = None
+            new_download = False
             try:
                 # ---- Fetch next item from download queue ----------------------
                 try:
@@ -173,6 +178,10 @@ class DownloadWorker:
                     else:
                         time.sleep(1)
                         continue
+                except IndexError:
+                    # Another worker consumed the last pending item.
+                    time.sleep(1)
+                    continue
                 except (RuntimeError, OSError, StopIteration):
                     logger.exception("error fetching item from download queue")
                     delay = jittered_delay()
@@ -247,6 +256,9 @@ class DownloadWorker:
                 # ---- Resolve download paths and check if file already exists ----------
                 if service != "generic":
                     temp_file_path, final_file_path = self._resolve_paths(item, item_type, file_template_path)
+                    # Duplicate playlist entries can resolve to the same file.
+                    file_lock = _output_lock(final_file_path)
+                    file_lock.acquire()
 
                     if self._handle_existing_file(
                         item,
@@ -262,6 +274,7 @@ class DownloadWorker:
                 self._raise_if_cancelled(item)
 
                 # ---- Download -------------------------------------------------
+                new_download = True
                 try:
                     temp_file_format, temp_file_bitrate, video_files = self._download(
                         item,
@@ -279,12 +292,15 @@ class DownloadWorker:
                     progress_hook(item, 0, item.item_status)
                     requeue_item(item)
                     continue
-                except Exception:
+                except DownloadCancelled:
+                    raise
+                except Exception as exc:
                     logger.exception("Download failed for: %s", item_id)
-                    item.error = f"RuntimeError during download of: {item_id}, see logs."
+                    item.error = f"Download failed: {type(exc).__name__}: {exc}"
                     item.item_status = ItemStatus.FAILED
                     progress_hook(item, 0, item.item_status)
                     requeue_item(item)
+                    time.sleep(jittered_delay())
                     continue
 
                 # The temp file is downloaded extensionless as they depend on availability
@@ -303,18 +319,20 @@ class DownloadWorker:
                     progress_hook(item, 50)
                     item.progress = 50
                     if item_type in ("track", "podcast_episode"):
-                        final_bitrate, final_file = self._finalize_audio(
-                            item,
-                            item_metadata,
-                            service,
-                            item_type,
-                            item_id,
-                            token,
-                            final_file_path,
-                            temp_file_path,
-                            temp_file_format,
-                            temp_file_bitrate,
-                        )
+                        # Album artwork uses a shared cover.png within a folder.
+                        with _output_lock(os.path.dirname(final_file_path)):
+                            final_bitrate, final_file = self._finalize_audio(
+                                item,
+                                item_metadata,
+                                service,
+                                item_type,
+                                item_id,
+                                token,
+                                final_file_path,
+                                temp_file_path,
+                                temp_file_format,
+                                temp_file_bitrate,
+                            )
                     elif item_type in ("movie", "episode"):
                         self._finalize_video(
                             item.model_dump(),
@@ -361,15 +379,24 @@ class DownloadWorker:
                     str(exc),
                 )
                 if item is not None:
+                    # Clean up only output owned by this attempt, before retry.
+                    if new_download:
+                        for path in (temp_file_path, final_file_path, item.file_path, final_file):
+                            if isinstance(path, str) and path and os.path.isfile(path):
+                                try:
+                                    os.remove(path)
+                                except OSError:
+                                    logger.exception("Could not remove failed download output")
                     if item.item_status != ItemStatus.CANCELLED:
+                        item.item_status = ItemStatus.FAILED
+                        item.error = f"{type(exc).__name__}: {exc}"
                         requeue_item(item)
                     progress_hook(item, 0, item.item_status)
                     delay = jittered_delay()
                     time.sleep(delay)
-                    # remove possible trash files
-                    for path in (temp_file_path, final_file_path, item.file_path, final_file):
-                        if isinstance(path, str) and path and os.path.exists(path):
-                            os.remove(path)
+            finally:
+                if file_lock is not None:
+                    file_lock.release()
 
     # ------------------------------------------------------------------
     # Path helpers

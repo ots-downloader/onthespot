@@ -37,7 +37,7 @@ BASE_URL = "https://api.spotify.com/v1"
 _oauth_token_cache = {"access_token": "", "expires_at": 0, "client_id": ""}
 _oauth_token_lock = threading.Lock()
 
-_session_reinit_lock = threading.Lock()
+_session_reinit_lock = threading.RLock()
 _SESSION_REINIT_TIMEOUT = 30
 
 # Spotify Connect discovery is a long-lived service.  The old sign-in flow
@@ -702,18 +702,21 @@ def reinit_spotify_session(token):
 
 
 def spotify_get_token(parsing_index):
-    try:
-        token = account_pool[parsing_index]["login"]["session"]
-    except (OSError, AttributeError, KeyError):
-        token = None
-    if not token or isinstance(token, str):
-        logger.info(
-            "No valid session for %s, attempting to reinit session.",
-            account_pool[parsing_index]["username"],
-        )
-        spotify_re_init_session(account_pool[parsing_index])
-        token = account_pool[parsing_index]["login"]["session"]
-    return token
+    # Recheck under the same lock as session replacement: another downloader
+    # may already have rebuilt the session while this caller was waiting.
+    with _session_reinit_lock:
+        try:
+            token = account_pool[parsing_index]["login"]["session"]
+        except (OSError, AttributeError, KeyError):
+            token = None
+        if not token or isinstance(token, str) or token.client() is None:
+            logger.info(
+                "No valid session for %s, attempting to reinit session.",
+                account_pool[parsing_index]["username"],
+            )
+            spotify_re_init_session(account_pool[parsing_index])
+            token = account_pool[parsing_index]["login"]["session"]
+        return token
 
 
 def spotify_get_artist_album_ids(token, artist_id):

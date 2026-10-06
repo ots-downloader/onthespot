@@ -31,6 +31,7 @@ from .constants import ItemStatus
 from .otsconfig import config
 from .resources.exceptions import DownloadCancelled, TrackUnavailableError
 from .runtimedata import get_logger, progress_hook, wait_for_download_resume, yt_dlp_progress_hook
+from .spotify_transport import SpotifyChunkCondition, bound_spotify_requests, spotify_stream_lock
 from .utils import requeue_item, run_ffmpeg
 from .youtube_auth import is_youtube_url, youtube_ydl_options
 
@@ -80,35 +81,43 @@ def download_spotify(item: QueueItem, item_id, item_type, token, temp_path):
     else:
         audio_key = EpisodeId.from_base62(item_id)
 
-    if item.download_format != "":
-        quality = AudioQuality.HIGH
-        bitrate = "160k"
-    else:
-        if token.get_user_attribute("type") == "premium" and item_type == "track":
-            quality = AudioQuality.VERY_HIGH
-            bitrate = "320k"
+    quality = AudioQuality.HIGH
+    bitrate = "160k"
+    if item.download_format == "" and token.get_user_attribute("type") == "premium" and item_type == "track":
+        quality = AudioQuality.VERY_HIGH
+        bitrate = "320k"
 
-    try:
-        stream = token.content_feeder().load(audio_key, VorbisOnlyAudioQuality(quality), False, None)
-    except RuntimeError as exc:
-        if "alternative track" in str(exc).lower():
-            raise TrackUnavailableError(item_id) from exc
-        reinit_spotify_session(token)
-        raise RuntimeError(f"Spotify session connection lost: {exc}") from exc
-    except queue.Empty as exc:
-        reinit_spotify_session(token)
-        raise RuntimeError(f"Spotify session connection lost: {exc}") from exc
+    with spotify_stream_lock:
+        bound_spotify_requests(token)
+        try:
+            stream = token.content_feeder().load(audio_key, VorbisOnlyAudioQuality(quality), False, None)
+        except RuntimeError as exc:
+            if "alternative track" in str(exc).lower():
+                raise TrackUnavailableError(item_id) from exc
+            # An audio-key/content failure does not invalidate the shared
+            # session. Closing it would abort every other active CDN stream.
+            if token.client() is None or "session isn't authenticated" in str(exc).lower():
+                reinit_spotify_session(token)
+                raise RuntimeError(f"Spotify session connection lost: {exc}") from exc
+            raise
+        except queue.Empty as exc:
+            raise TimeoutError("Spotify stream setup timed out") from exc
 
-    total_size = stream.input_stream.size
+    source = stream.input_stream.stream()
+    source.wait_lock = SpotifyChunkCondition(source)
+    # librespot has already consumed the normalization header.
+    total_size = source.available()
     downloaded = 0
 
-    with open(temp_path, "wb") as audio_file:
-        while downloaded < total_size:
-            if item.item_status == ItemStatus.CANCELLED:
-                raise DownloadCancelled("Download cancelled by user.")
-            chunk = stream.input_stream.stream().read(config.get("download_chunk_size"))
-            downloaded += len(chunk)
-            if chunk:
+    try:
+        with open(temp_path, "wb") as audio_file:
+            while downloaded < total_size:
+                if item.item_status == ItemStatus.CANCELLED:
+                    raise DownloadCancelled("Download cancelled by user.")
+                chunk = source.read(min(config.get("download_chunk_size"), total_size - downloaded))
+                if not chunk:
+                    raise OSError(f"Incomplete Spotify audio: {downloaded}/{total_size} bytes")
+                downloaded += len(chunk)
                 audio_file.write(chunk)
                 progress_hook(
                     item,
@@ -117,11 +126,8 @@ def download_spotify(item: QueueItem, item_id, item_type, token, temp_path):
                     downloaded_bytes=downloaded,
                     total_bytes=total_size,
                 )
-            if not chunk:
-                break
-
-    stream.input_stream.stream().close()
-    del stream.input_stream
+    finally:
+        source.close()
 
     return default_format, bitrate
 

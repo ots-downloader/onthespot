@@ -103,7 +103,7 @@ logger = get_logger("gui")
 # define workers here to allow app to access them
 # but start/stop them on lifespan events
 parsing_worker = ParsingWorker()
-downloadworker = DownloadWorker()
+downloadworkers: list[DownloadWorker] = []
 # spotifymirrorworker = MirrorSpotifyPlayback()
 retryworker = RetryWorker()
 fillaccountpool = FillAccountPool()
@@ -337,7 +337,9 @@ async def lifespan(app: FastAPI):
     """
     logger.info("OnTheSpot Version: %s", config.get("version"))
     parsing_worker.start()
-    downloadworker.start()
+    downloadworkers[:] = [DownloadWorker() for _ in range(max(1, int(config.get("maximum_download_workers") or 1)))]
+    for worker in downloadworkers:
+        worker.start()
     if config.get("enable_retry_worker"):
         retryworker.start()
 
@@ -348,7 +350,10 @@ async def lifespan(app: FastAPI):
     yield
 
     parsing_worker.stop()
-    downloadworker.stop()
+    for worker in downloadworkers:
+        worker.stop()
+    if retryworker.thread.is_alive():
+        retryworker.stop()
 
     fillaccountpool.stop()
     # stop_spotify_connect_service()
@@ -1358,7 +1363,9 @@ async def get_system_diagnostics():
         "backend": {"status": "online", "version": config.get("version")},
         "workers": {
             "parsing": parsing_worker.thread.is_alive(),
-            "downloads": downloadworker.thread.is_alive(),
+            "downloads": any(worker.thread.is_alive() for worker in downloadworkers),
+            "download_workers_running": sum(worker.thread.is_alive() for worker in downloadworkers),
+            "max_download_workers": int(config.get("maximum_download_workers") or 1),
             "accounts": bool(account_pool),
             "retry": retryworker.thread.is_alive() if config.get("enable_retry_worker") else False,
         },

@@ -353,7 +353,25 @@ export async function fetchPendingQueue(): Promise<PendingQueueItem[]> {
   const res = await request("/queue/pending");
   if (!res.ok) throw new Error("Failed to fetch pending queue");
   const data = await res.json();
-  return Array.isArray(data.items) ? data.items : Object.values(data);
+  const items: DownloadQueueItem[] = data.items;
+  return items.map((item) => ({
+    id: String(item.local_id),
+    name: item.name || `Track #${item.playlist_number || item.local_id}`,
+    artist: item.artist || "Metadata will load when downloading",
+    album: item.album,
+    playlist_name: item.playlist_name,
+    thumbnail: item.thumbnail,
+    item_service: item.item_service,
+    item_type: item.item_type,
+    format: item.download_profile.format.toUpperCase(),
+    bitrate: `${item.download_profile.bitrate} kbps`,
+    profile_id: item.download_profile.id,
+    profile_name: item.download_profile.name,
+    url: item.item_url,
+    status: item.item_status === "Waiting" ? "ready" : "error",
+    created_at: "",
+    error: item.error,
+  }));
 }
 
 

@@ -392,11 +392,12 @@ def format_local_id(item_id):
 # Application helpers
 # ---------------------------------------------------------------------------
 def requeue_item(item: QueueItem) -> None:
-    """Move *item* to the back of the queue and mark it available for RetryWorker to re-add to the pending queue If not cancelled."""
+    """Keep a failed item visible until RetryWorker moves it to pending."""
     if item.item_status in [
         ItemStatus.CANCELLED,
         ItemStatus.UNAVAILABLE,
         ItemStatus.DOWNLOADED,
+        ItemStatus.ALREADY_EXISTS,
         ItemStatus.DELETED,
     ] or not config.get("enable_retry_worker", False):
         return
@@ -405,7 +406,7 @@ def requeue_item(item: QueueItem) -> None:
             local_id = item.local_id
             del download_queue[local_id]
             download_queue[local_id] = item
-            download_queue[local_id].item_status = ItemStatus.WAITING
+            download_queue[local_id].item_status = ItemStatus.FAILED
             raw_progress = item.progress
             try:
                 current_progress = int(float(raw_progress or 0))
