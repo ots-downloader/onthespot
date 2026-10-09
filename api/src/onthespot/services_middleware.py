@@ -95,7 +95,14 @@ def download_spotify(item: QueueItem, item_id, item_type, token, temp_path):
             raise TrackUnavailableError(item_id) from exc
         reinit_spotify_session(token)
         raise RuntimeError(f"Spotify session connection lost: {exc}") from exc
-    except queue.Empty as exc:
+    except (queue.Empty, OSError) as exc:
+        if isinstance(exc, OSError) and exc.errno is None:
+            # librespot raises a bare IOError(status) for CDN HTTP errors and
+            # requests carries no errno either; neither says anything about
+            # the session socket, so keep the session.
+            raise
+        # Only an OS-level socket error means the session itself is dead:
+        # librespot's own reconnect failed and left the socket closed (#416).
         reinit_spotify_session(token)
         raise RuntimeError(f"Spotify session connection lost: {exc}") from exc
 

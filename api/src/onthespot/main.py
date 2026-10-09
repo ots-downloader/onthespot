@@ -69,6 +69,7 @@ from .parse_item import search
 from .parsingworker import ParsingWorker
 from .runtimedata import (
     account_pool,
+    adopt_loggers,
     download_paused,
     download_queue,
     download_queue_lock,
@@ -336,6 +337,8 @@ async def lifespan(app: FastAPI):
     :param app: The FastAPI application instance.
     """
     logger.info("OnTheSpot Version: %s", config.get("version"))
+    adopted = adopt_loggers("Librespot:") + adopt_loggers("librespot.")
+    logger.debug("Routing %d librespot loggers into the app log", len(adopted))
     parsing_worker.start()
     downloadworker.start()
     if config.get("enable_retry_worker"):

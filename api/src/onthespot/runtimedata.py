@@ -56,6 +56,25 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
+def adopt_loggers(prefix: str) -> list[str]:
+    """Route existing loggers whose name starts with ``prefix`` into the app log.
+
+    librespot names its loggers ``Librespot:Session``, ``Librespot:MercuryClient``
+    and so on, with no dot hierarchy, so no parent logger can pick them up.
+    Returns the names that were adopted.
+    """
+    adopted = []
+    for name, candidate in list(logging.root.manager.loggerDict.items()):
+        if not name.startswith(prefix) or not isinstance(candidate, logging.Logger):
+            continue
+        for handler in (_file_handler, _stdout_handler):
+            if handler not in candidate.handlers:
+                candidate.addHandler(handler)
+        candidate.setLevel("INFO")
+        adopted.append(name)
+    return adopted
+
+
 _logger = get_logger("runtimedata")
 
 # ---------------------------------------------------------------------------
@@ -71,6 +90,25 @@ def _handle_uncaught_exception(exc_type, exc_value, exc_traceback):
 
 
 sys.excepthook = _handle_uncaught_exception
+
+
+def _handle_thread_exception(args):
+    """Write uncaught worker-thread exceptions to the app log.
+
+    Python prints these to stderr only, so a librespot receiver thread that
+    died on a failed reconnect left no trace in the app log.
+    """
+    if issubclass(args.exc_type, SystemExit):
+        return  # same as Python's default hook: a thread may exit this way
+    thread_name = args.thread.name if args.thread else "<unknown>"
+    _logger.error(
+        "Unhandled exception in thread %s",
+        thread_name,
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+    )
+
+
+threading.excepthook = _handle_thread_exception
 
 # ---------------------------------------------------------------------------
 # Shared queues and pools (written to by multiple threads; always access

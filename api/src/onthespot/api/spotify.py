@@ -460,7 +460,8 @@ class MirrorSpotifyPlayback:
                 logger.info("Session Expired, reinitializing...")
                 parsing_index = config.get("active_account_number")
                 try:
-                    spotify_re_init_session(account_pool[parsing_index])
+                    account = account_pool[parsing_index]
+                    spotify_re_init_session(account, dead_session=account["login"]["session"] or None)
                 except (IndexError, KeyError, TypeError):
                     logger.debug("No Spotify account is available to refresh mirroring")
                 continue
@@ -654,6 +655,11 @@ def spotify_re_init_session(account, dead_session=None):
     session_json_path = os.path.join(cache_dir(), "sessions", f"ots_login_{account['uuid']}.json")
     with _session_reinit_lock:
         old_session = account.get("login", {}).get("session")
+        has_live_session = bool(old_session) and not isinstance(old_session, str)
+        if dead_session is None and has_live_session:
+            # Another worker rebuilt the session while this one waited for the
+            # lock; rebuilding again would close the fresh session.
+            return
         if dead_session is not None and old_session is not dead_session:
             return
         if old_session:
