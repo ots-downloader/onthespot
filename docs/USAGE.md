@@ -141,7 +141,7 @@ If a file path is provided the app will parse each line in the file for urls beg
    | `{album_artist}`  | Name of the album artist(s).                        |
    | `{album_type}`    | Name of the artist type (single, album, etc).       |
    | `{disc_number}`   | Disc number (if applicable).                        |
-   | `{discccount}`    | Total number of discs in the album (if applicable). |
+   | `{disccount}`     | Total number of discs in the album (if applicable). |
    | `{genre}`         | Genre of the song.                                  |
    | `{label}`         | Name of the record label.                           |
    | `{track_number}`  | Track number on the album.                          |
