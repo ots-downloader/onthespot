@@ -156,6 +156,11 @@ class DownloadWorker:
         while self.is_running:
             item = None
             final_file = ""
+            # Generic links never resolve the paths, and the handlers below
+            # must not see an earlier item's values.
+            temp_file_path = final_file_path = ""
+            final_bitrate = 0
+            item_metadata = {}
             try:
                 # ---- Fetch next item from download queue ----------------------
                 try:
