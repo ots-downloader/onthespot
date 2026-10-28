@@ -158,7 +158,7 @@ class DownloadWorker:
             final_file = ""
             # Generic links never resolve the paths, and the handlers below
             # must not see an earlier item's values.
-            temp_file_path = final_file_path = ""
+            temp_file_path = ""
             final_bitrate = 0
             item_metadata = {}
             try:
@@ -188,6 +188,9 @@ class DownloadWorker:
                 item_type = item.item_type
                 item_id = item.item_id
                 item.item_status = ItemStatus.DOWNLOADING
+                # A retried item still holds the path from its last pass, and
+                # the error cleanup below removes item.file_path.
+                item.file_path = ""
 
                 self._get_download_format(item)
                 self._get_target_format(item)
@@ -371,8 +374,10 @@ class DownloadWorker:
                     progress_hook(item, 0, item.item_status)
                     delay = jittered_delay()
                     time.sleep(delay)
-                    # remove possible trash files
-                    for path in (temp_file_path, final_file_path, item.file_path, final_file):
+                    # Remove possible trash files. Not final_file_path: this pass
+                    # writes there only through item.file_path, and it can name a
+                    # file that was on disk before (one with no extension).
+                    for path in (temp_file_path, item.file_path, final_file):
                         if isinstance(path, str) and path and os.path.exists(path):
                             os.remove(path)
 
@@ -464,16 +469,20 @@ class DownloadWorker:
                 if entry_stem != base_stem or entry_ext in subtitle_exts:
                     continue
 
-                # Existing file found
-                item.file_path = os.path.join(file_directory, entry)
+                # Existing file found. Work on a copy: run()'s error cleanup
+                # removes item.file_path, so the item must not point at the
+                # user's file until this step has succeeded.
+                existing_path = os.path.join(file_directory, entry)
+                found = item.model_copy(update={"file_path": existing_path})
 
                 if item_type in ("track", "podcast_episode") and config.get("overwrite_existing_metadata"):
-                    self._overwrite_metadata(item, item_metadata, service, item_id, item_type, token, file_path)
+                    self._overwrite_metadata(found, item_metadata, service, item_id, item_type, token, file_path)
 
                 if config.get("create_m3u_file") and item.parent_category == "playlist":
                     progress_hook(item, 99, ItemStatus.ADDING_TO_M3U)
-                    add_to_m3u_file(item.model_dump(), item_metadata)
+                    add_to_m3u_file(found.model_dump(), item_metadata)
 
+                item.file_path = existing_path
                 item.item_status = ItemStatus.ALREADY_EXISTS
 
                 progress_item = item
