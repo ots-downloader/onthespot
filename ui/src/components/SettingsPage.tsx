@@ -384,7 +384,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
 
               {[
-                { key: "track_path_formatter", label: "Track File Path Formatter", type: "text", description: "Tags: {artist}, {album}, {track_number}, {disc_number}, {title}, {year}, {genre}" },
+                { key: "track_path_formatter", label: "Track File Path Formatter", type: "text", description: "Tags: {artist}, {album}, {track_number}, {disc_number}, {name}, {year}, {genre}" },
                 { key: "playlist_path_formatter", label: "Playlist Path Formatter", type: "text", description: "Layout when 'Use Playlist Path Structure' is enabled." },
               ].map(renderInput)}
 
