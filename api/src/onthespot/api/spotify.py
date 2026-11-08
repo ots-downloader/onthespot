@@ -13,7 +13,7 @@ import uuid
 
 import librespot.zeroconf as librespot_zeroconf
 import requests
-from librespot.core import Session
+from librespot.core import Session, TokenProvider
 from librespot.proto import Playlist4External_pb2
 from librespot.zeroconf import ZeroconfServer
 
@@ -169,9 +169,34 @@ def _patch_librespot_session_attributes() -> bool:
     return True
 
 
+def _patch_librespot_token_provider() -> bool:
+    """Give each librespot ``TokenProvider`` its own login5 token list.
+
+    librespot-python declares ``TokenProvider.__tokens = []`` on the class
+    and ``__init__`` never replaces it, so every session reads and writes one
+    token cache.  Only patch while upstream still keeps the list on the class.
+    """
+    if getattr(TokenProvider, "_onthespot_tokens_patch", False):
+        return True
+    if not isinstance(TokenProvider.__dict__.get("_TokenProvider__tokens"), list):
+        return False
+
+    original_init = TokenProvider.__init__
+
+    def patched_init(self, *args, **kwargs):
+        self._TokenProvider__tokens = []
+        original_init(self, *args, **kwargs)
+
+    TokenProvider.__init__ = patched_init
+    TokenProvider._onthespot_tokens_patch = True
+    return True
+
+
 # Every OnTheSpot session (account logins, re-inits, Spotify Connect pairing)
 # is built through this module, so patching on import covers them all.
 _patch_librespot_session_attributes()
+# Without this, one account's login5 token can serve another account's session.
+_patch_librespot_token_provider()
 
 
 def _spotify_connect_port() -> int:
