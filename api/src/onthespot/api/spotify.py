@@ -588,6 +588,55 @@ def spotify_new_session():
             return add_spotify_zeroconf_login(zeroconf_login, account_uuid=uuid_uniq)
 
 
+_ACCOUNT_TYPE_WAIT = 5.0
+# After a handshake with no account type, wait this long before the next try.
+_MISSING_TYPE_RETRY_DELAY = 60.0
+_PREMIUM_TYPES = {"premium"}
+_FREE_TYPES = {"free", "open"}
+
+
+def _check_premium(session, username) -> tuple[bool, str | None]:
+    """Return ``(accepted, account_type)``; close the session unless it is Premium.
+
+    librespot fills the account type from a packet that can arrive after
+    authenticate() returns, so wait briefly for it.  A missing or unknown type
+    is rejected too.
+    """
+    masked = username[:4] + "****" if username else ""
+    deadline = time.monotonic() + _ACCOUNT_TYPE_WAIT
+    account_type = session.get_user_attribute("type")
+    while account_type is None and time.monotonic() < deadline:
+        time.sleep(0.1)
+        account_type = session.get_user_attribute("type")
+    if account_type in _PREMIUM_TYPES:
+        return True, account_type
+    if account_type in _FREE_TYPES:
+        logger.error("Spotify Premium is required; account '%s' is '%s'.", masked, account_type)
+    elif account_type is None:
+        logger.error("Spotify sent no account type for '%s'; Premium is required.", masked)
+    else:
+        logger.error("Spotify sent unknown account type '%s' for '%s'; Premium is required.", account_type, masked)
+    try:
+        session.close()
+    except Exception as e:
+        logger.debug("Failed to close non-Premium session: %s", str(e))
+    return False, account_type
+
+
+def _mark_not_premium(account, account_type) -> None:
+    account["status"] = "error"
+    account["account_type"] = account_type or "N/A"
+    account["bitrate"] = "N/A"
+    if account_type is None:
+        # A missing type may be a slow packet: try again, but not on every use.
+        account["retry_after"] = time.monotonic() + _MISSING_TYPE_RETRY_DELAY
+    else:
+        # A free or unknown type will not change: do not handshake again on
+        # every use.  Logging in again (relogin, re-adding the account,
+        # restart) rebuilds the account entry and clears this.
+        account["rejected"] = "not_premium"
+
+
 def spotify_login_user(account):
     try:
         # I'd prefer to use 'Session.Builder().stored(credentials).create but
@@ -623,19 +672,29 @@ def spotify_login_user(account):
             time.sleep(3)
             session = Session.Builder(conf=lconfig).stored_file(session_json_path).create()
         logger.debug("Session created")
+        accepted, account_type = _check_premium(session, username)
+        if not accepted:
+            entry = {
+                "uuid": luuid,
+                "username": username,
+                "service": "spotify",
+                "login": {
+                    "session": "",
+                    "session_path": "",
+                },
+            }
+            _mark_not_premium(entry, account_type)
+            account_pool.append(entry)
+            return False
         logger.info("Login successful for user '%s'", username[:4] + "****" if username else "")
-        account_type = session.get_user_attribute("type")
-        bitrate = "160k"
-        if account_type == "premium":
-            bitrate = "320k"
         account_pool.append(
             {
                 "uuid": luuid,
                 "username": username,
                 "service": "spotify",
                 "status": "active",
-                "account_type": account_type,
-                "bitrate": bitrate,
+                "account_type": "premium",
+                "bitrate": "320k",
                 "login": {
                     "session": session,
                     "session_path": session_json_path,
@@ -665,6 +724,9 @@ def spotify_login_user(account):
 def spotify_re_init_session(account, dead_session=None):
     session_json_path = os.path.join(cache_dir(), "sessions", f"ots_login_{account['uuid']}.json")
     with _session_reinit_lock:
+        if account.get("rejected") or time.monotonic() < account.get("retry_after", 0):
+            # Another worker rejected the account while this one waited.
+            return
         old_session = account.get("login", {}).get("session")
         has_live_session = bool(old_session) and not isinstance(old_session, str)
         if dead_session is None and has_live_session:
@@ -686,7 +748,6 @@ def spotify_re_init_session(account, dead_session=None):
                 cfg = Session.Configuration.Builder().set_stored_credential_file(session_json_path).build()
                 session = Session.Builder(conf=cfg).stored_file(session_json_path).create()
                 result["session"] = session
-                result["account_type"] = session.get_user_attribute("type")
             except Exception as e:
                 result["error"] = e
 
@@ -701,12 +762,18 @@ def spotify_re_init_session(account, dead_session=None):
             logger.error("Failed to re init session! %s", str(result.get("error")))
             return
         logger.debug("Session re init done")
-        account_type = result["account_type"]
+        # This can wait up to _ACCOUNT_TYPE_WAIT (5 s) for the account type
+        # while still holding _session_reinit_lock.
+        accepted, account_type = _check_premium(session, account.get("username"))
+        if not accepted:
+            _mark_not_premium(account, account_type)
+            return
         account["login"]["session_path"] = session_json_path
         account["login"]["session"] = session
         account["status"] = "active"
-        account["account_type"] = account_type
-        account["bitrate"] = "320k" if account_type == "premium" else "160k"
+        account["account_type"] = "premium"
+        account["bitrate"] = "320k"
+        account.pop("retry_after", None)
 
 
 def reinit_spotify_session(token):
@@ -724,12 +791,24 @@ def spotify_get_token(parsing_index):
     except (OSError, AttributeError, KeyError):
         token = None
     if not token or isinstance(token, str):
+        account = account_pool[parsing_index]
+        username = account.get("username")
+        masked = username[:4] + "****" if username else ""
+        if account.get("rejected"):
+            logger.debug("Skipping non-Premium Spotify account '%s' until it logs in again.", masked)
+            return False
+        if time.monotonic() < account.get("retry_after", 0):
+            logger.debug("Spotify sent no account type for '%s'; waiting before the next try.", masked)
+            return False
         logger.info(
             "No valid session for %s, attempting to reinit session.",
-            account_pool[parsing_index]["username"],
+            account["username"],
         )
-        spotify_re_init_session(account_pool[parsing_index])
-        token = account_pool[parsing_index]["login"]["session"]
+        spotify_re_init_session(account)
+        token = account.get("login", {}).get("session")
+        # Rejected, cooling down, failed or timed out: callers test for False.
+        if not token or isinstance(token, str):
+            return False
     return token
 
 
