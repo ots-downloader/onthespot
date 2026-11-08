@@ -24,10 +24,8 @@
 </div>
 
 This branch provides OnTheSpot as a single-process web application: FastAPI
-serves both the API and the compiled React UI on port `6767`. It supports
-multi-service search, download profiles and queue controls, a local library,
-Spotify playlist sorting/automation, account workers, themes, diagnostics, and
-portable Docker/Unraid deployment.
+serves both the API and the compiled Web UI on port `6767`. 
+
 
 Quick start with Docker Compose:
 
