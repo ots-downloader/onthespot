@@ -1,5 +1,5 @@
 {
-  "version": "v2.0.2 Beta 4",
+  "version": "v2.0.4",
   "debug_mode": false,
   "language_index": 0,
   "total_downloaded_items": 0,
@@ -57,6 +57,20 @@
       "name": "FLAC · lossless",
       "format": "flac",
       "bitrate": 1411,
+      "download_path": ""
+    },
+    {
+      "id": "m4a",
+      "name": "m4a · 256kbps",
+      "format": "m4a",
+      "bitrate": 256,
+      "download_path": ""
+    },
+    {
+      "id": "opus",
+      "name": "opus · 192kbps",
+      "format": "opus",
+      "bitrate": 192,
       "download_path": ""
     }
   ],
