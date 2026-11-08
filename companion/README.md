@@ -1,5 +1,8 @@
 # OnTheSpot Spotify companion
 
+> [!WARNING]
+> Deprecated: OnTheSpot now signs in to Spotify directly from Accounts → Add account → Spotify (enter a code at spotify.com/pair). This helper and its endpoints still work in this release and will be removed in the next one.
+
 Use this when the OnTheSpot API runs remotely (for example, in Docker on
 Unraid) but Spotify runs on a desktop or phone on the local LAN.
 

@@ -8,7 +8,6 @@ import {
   Disc3,
   Download,
   Film,
-  Globe,
   Headphones,
   Heart,
   Loader2,
@@ -19,31 +18,63 @@ import {
   Trash2,
   Users,
   Waves,
-  Wifi
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  cancelSpotifyDeviceAuth,
   configureYouTubeAuthentication,
-  createSpotifyCompanionPairing,
   fetchYouTubeAuthenticationStatus,
-  getTargetBackendUrl,
+  getSpotifyDeviceAuthStatus,
   reconnectAccounts,
+  startSpotifyDeviceAuth,
   uploadYouTubeCookies,
 } from "../lib/api";
 import {
   SERVICE_OPTIONS,
   getServiceInfo
 } from "../lib/catalogServices";
+import { notify } from "../lib/notifications";
 import {
   AccountHealth,
   AccountItem,
-  SpotifyCompanionPairing,
+  SpotifyDeviceAuthStatus,
   YouTubeAuthenticationStatus,
   YouTubeSetupMode,
 } from "../types";
 
-type SpotifyAccessMode = "local" | "remote";
+const SPOTIFY_AUTH_POLL_MS = 2000;
+// The server refills its account pool in the background after a sign-in, so
+// refresh the list once more after this delay.
+const SPOTIFY_ACCOUNT_RECHECK_MS = 3000;
+
+const spotifyAuthFailureMessage = (status: SpotifyDeviceAuthStatus): string => {
+  if (status.message) return status.message;
+  switch (status.state) {
+    case "denied":
+      return "Sign-in was declined in Spotify. Get a new code to try again.";
+    case "expired":
+      return "The sign-in code expired. Get a new code to try again.";
+    case "cancelled":
+      return "Sign-in was cancelled. Get a new code to try again.";
+    default:
+      break;
+  }
+  switch (status.error_code) {
+    case "not_premium":
+      return "Spotify Premium is required for this account.";
+    case "login_timeout":
+      return "Spotify did not answer in time. Try again.";
+    default:
+      return "Spotify sign-in failed. Try again.";
+  }
+};
+
+const formatCountdown = (seconds: number): string => {
+  const clamped = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(clamped / 60);
+  return `${minutes}:${String(clamped % 60).padStart(2, "0")}`;
+};
 
 interface ServicePresentation {
   label: string;
@@ -203,11 +234,23 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
   const [youtubeStatus, setYoutubeStatus] = useState<YouTubeAuthenticationStatus | null>(null);
   const [youtubeUploadComplete, setYoutubeUploadComplete] = useState(false);
 
-  // Spotify companion state
-  const [spotifyAccessMode, setSpotifyAccessMode] = useState<SpotifyAccessMode>("remote");
-  const [companionPairing, setCompanionPairing] = useState<SpotifyCompanionPairing | null>(null);
-  const [companionWaiting, setCompanionWaiting] = useState(false);
-  const initialSpotifyCount = useRef(0);
+  // Spotify device-code sign-in state
+  const [spotifyAuth, setSpotifyAuth] = useState<SpotifyDeviceAuthStatus | null>(null);
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  const spotifyAuthActive =
+    spotifyAuth?.state === "pending" || spotifyAuth?.state === "authorizing";
+  // Approved but still refreshing the account list before the modal closes.
+  const spotifyAuthFinishing = spotifyAuth?.state === "approved";
+  const activeSpotifyFlowId = spotifyAuthActive ? spotifyAuth.flow_id : null;
+  // Mirror state into refs so async poll results and cancel-on-unmount see the latest flow.
+  const spotifyAuthRef = useRef(spotifyAuth);
+  spotifyAuthRef.current = spotifyAuth;
+  const activeSpotifyFlowRef = useRef<string | null>(null);
+  activeSpotifyFlowRef.current = activeSpotifyFlowId;
+  // App passes a new function on every render; keep the latest without restarting the poll.
+  const refreshAccountsRef = useRef(onRefreshAccounts);
+  refreshAccountsRef.current = onRefreshAccounts;
+  const accountRecheckRef = useRef<number | null>(null);
 
   const selectedService =
     SERVICE_OPTIONS.find((option) => option.value === service) ?? SERVICE_OPTIONS[0];
@@ -218,15 +261,27 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
     )
   );
 
+  const stopSpotifySignIn = () => {
+    const flowId = activeSpotifyFlowRef.current;
+    activeSpotifyFlowRef.current = null;
+    if (flowId) {
+      void cancelSpotifyDeviceAuth(flowId).catch(() => undefined);
+    }
+    setSpotifyAuth(null);
+  };
+
+  const closeModal = () => {
+    stopSpotifySignIn();
+    setShowModal(false);
+  };
+
   const openAddModalForService = (serviceId: string) => {
+    stopSpotifySignIn();
     setService(serviceId);
     setUsername("");
     setToken("");
     setFormError("");
     setSignInStarted("");
-    setSpotifyAccessMode("local");
-    setCompanionPairing(null);
-    setCompanionWaiting(false);
     if (serviceId === "youtube") {
       setYoutubeAuthMode("upload");
       setYoutubeBrowser(configuredYoutubeBrowser || "edge");
@@ -255,62 +310,100 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
     };
   }, [youtubeAuthenticationMode, configuredYoutubeBrowser, configuredYoutubeCookieFile]);
 
-  const createCompanionPairingFlow = async () => {
-    initialSpotifyCount.current = accounts.filter(
-      (account) => account.service.toLowerCase() === "spotify"
-    ).length;
+  const startSpotifySignIn = async () => {
     setLoading(true);
-    const pairing = await createSpotifyCompanionPairing();
-    setLoading(false);
-    if (!pairing) {
-      setFormError("Could not create a companion pairing code.");
-      return;
+    try {
+      const status = await startSpotifyDeviceAuth();
+      setNow(Date.now() / 1000);
+      setSpotifyAuth(status);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Could not start Spotify sign-in.");
+    } finally {
+      setLoading(false);
     }
-    setCompanionPairing(pairing);
-    setCompanionWaiting(true);
-    setSignInStarted(
-      "Pairing code created. Run the command below on the computer where Spotify is open."
-    );
   };
 
-  useEffect(() => {
-    if (!companionWaiting) return undefined;
+  // Cancel a live flow if the page goes away mid sign-in.  The server ignores
+  // this once Spotify has granted the sign-in, and the result is not used.
+  useEffect(
+    () => () => {
+      const flowId = activeSpotifyFlowRef.current;
+      if (flowId) void cancelSpotifyDeviceAuth(flowId).catch(() => undefined);
+      if (accountRecheckRef.current !== null) window.clearTimeout(accountRecheckRef.current);
+    },
+    []
+  );
 
+  // Tick the countdown only while a code is live.
+  useEffect(() => {
+    if (!activeSpotifyFlowId) return undefined;
+    setNow(Date.now() / 1000);
+    const tick = window.setInterval(() => setNow(Date.now() / 1000), 1000);
+    return () => window.clearInterval(tick);
+  }, [activeSpotifyFlowId]);
+
+  // Poll the server until the flow leaves pending/authorizing.
+  useEffect(() => {
+    if (!activeSpotifyFlowId) return undefined;
+    const flowId = activeSpotifyFlowId;
     let cancelled = false;
-    const checkForCompletedPairing = async () => {
-      const freshAccounts = await onRefreshAccounts();
-      if (cancelled) return;
-      const spotifyCount = freshAccounts.filter(
-        (account) => account.service.toLowerCase() === "spotify"
-      ).length;
-      if (spotifyCount > initialSpotifyCount.current) {
-        setCompanionWaiting(false);
-        setCompanionPairing(null);
-        setSignInStarted("Spotify connected successfully!");
-        setShowModal(false);
-        setFormError("");
+    let inFlight = false;
+
+    const poll = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        let status: SpotifyDeviceAuthStatus | null;
+        try {
+          status = await getSpotifyDeviceAuthStatus(flowId);
+        } catch {
+          return; // network blip; try again on the next tick
+        }
+        if (cancelled) return;
+
+        if (!status) {
+          setSpotifyAuth((prev) =>
+            prev && prev.flow_id === flowId ? { ...prev, state: "expired", message: "" } : prev
+          );
+          setFormError("The sign-in code expired. Get a new code to try again.");
+          return;
+        }
+
+        if (status.state === "approved") {
+          // Leaving the active states stops this poll and means a close no longer cancels.
+          setSpotifyAuth(status);
+          await refreshAccountsRef.current().catch(() => undefined);
+          if (accountRecheckRef.current !== null) window.clearTimeout(accountRecheckRef.current);
+          accountRecheckRef.current = window.setTimeout(() => {
+            accountRecheckRef.current = null;
+            void refreshAccountsRef.current().catch(() => undefined);
+          }, SPOTIFY_ACCOUNT_RECHECK_MS);
+          const who = status.username ? ` as ${status.username}` : "";
+          notify({ title: "Spotify connected", message: `Spotify connected${who}.`, status: "success" });
+          // Close only if the user has not already closed or moved on to another flow.
+          if (spotifyAuthRef.current?.flow_id === flowId) {
+            setSpotifyAuth(null);
+            setFormError("");
+            setShowModal(false);
+          }
+          return;
+        }
+
+        setSpotifyAuth(status);
+        if (status.state !== "pending" && status.state !== "authorizing") {
+          setFormError(spotifyAuthFailureMessage(status));
+        }
+      } finally {
+        inFlight = false;
       }
     };
 
-    void checkForCompletedPairing();
-    const interval = window.setInterval(() => void checkForCompletedPairing(), 2000);
-    const timeout = window.setTimeout(() => {
-      if (!cancelled) setCompanionWaiting(false);
-    }, 10 * 60 * 1000);
-
+    const interval = window.setInterval(() => void poll(), SPOTIFY_AUTH_POLL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
-      window.clearTimeout(timeout);
     };
-  }, [companionWaiting, onRefreshAccounts]);
-
-  const backendUrl = getTargetBackendUrl() || window.location.origin;
-  const companionCommand = companionPairing
-    ? `uv run python run.py --server-url "${backendUrl}" --pairing-token "${companionPairing.pairing_token}" --cleanup`
-    : "";
-  const companionCloneCommand = `cd $HOME\ngit clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git onthespot\ncd .\\onthespot\\companion`;
-  const companionSetupCommand = `uv sync`;
+  }, [activeSpotifyFlowId]);
 
   const youtubeExportInstallCommand = `$otsYtDlp = Join-Path $env:TEMP "OnTheSpot-youtube-auth"\npy -m venv $otsYtDlp\n& (Join-Path $otsYtDlp "Scripts\\python.exe") -m pip install --disable-pip-version-check --quiet --upgrade yt-dlp`;
   const youtubeExportCommand = `$otsYtDlp = Join-Path $env:TEMP "OnTheSpot-youtube-auth"\n& (Join-Path $otsYtDlp "Scripts\\python.exe") -m yt_dlp --cookies-from-browser ${youtubeBrowser} --cookies "$HOME\\Downloads\\youtube-cookies.txt"`;
@@ -346,8 +439,8 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
     setFormError("");
     setSignInStarted("");
 
-    if (selectedService.value === "spotify" && spotifyAccessMode === "remote") {
-      await createCompanionPairingFlow();
+    if (selectedService.value === "spotify") {
+      await startSpotifySignIn();
       return;
     }
 
@@ -422,7 +515,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       if (res) {
         if (selectedService.mode === "device") {
           setSignInStarted(
-            "Spotify Connect is waiting. In the Spotify app, open Connect to a device and select OnTheSpot, then refresh Accounts."
+            "Sign-in started. Follow the service's device-link prompt, then refresh Accounts."
           );
           return;
         }
@@ -812,9 +905,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs sm:items-center">
             <div
               className={`relative flex w-full flex-col overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#1c1c1c] text-neutral-900 dark:text-white shadow-2xl ${
-                service === "spotify" && spotifyAccessMode === "remote"
-                  ? "max-h-[calc(100dvh_-_2rem)] max-w-3xl"
-                  : service === "youtube"
+                service === "youtube"
                   ? "max-h-[calc(100dvh_-_2rem)] max-w-2xl"
                   : "max-h-[calc(100dvh_-_2rem)] max-w-lg"
               }`}
@@ -836,11 +927,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setCompanionWaiting(false);
-                    setCompanionPairing(null);
-                    setShowModal(false);
-                  }}
+                  onClick={closeModal}
                   className="rounded-lg p-1.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                   aria-label="Close add account dialog"
                 >
@@ -865,9 +952,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                         setUsername("");
                         setToken("");
                         setYoutubeCookieFile("");
-                        setCompanionPairing(null);
-                        setCompanionWaiting(false);
-                        setSpotifyAccessMode("local");
+                        stopSpotifySignIn();
                       }}
                       className="w-full px-3.5 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#282828] text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                     >
@@ -950,153 +1035,49 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     </div>
                   )}
 
-                  {/* Spotify Mode (Local vs Remote Companion) */}
+                  {/* Spotify device-code sign-in */}
                   {selectedService.value === "spotify" && (
-                    <div className="space-y-3.5 rounded-xl border border-neutral-200 dark:border-[#3a3a3a] bg-neutral-50 dark:bg-[#242424] p-4">
-                      <div>
-                        <p className="text-sm font-semibold text-neutral-900 dark:text-white">
-                          Where is Spotify running?
-                        </p>
-                        <p className="mt-1 text-xs leading-relaxed text-neutral-500 dark:text-[#b3b3b3]">
-                          Choose local if OnTheSpot and Spotify share a network. Choose remote if the server is elsewhere and you can reach it through a private network, VPN, or secure HTTPS address.
-                        </p>
-                      </div>
-
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <button
-                          type="button"
-                          disabled= {true}
-                          aria-pressed={spotifyAccessMode === "local"}
-                          onClick={() => {
-                            setSpotifyAccessMode("local");
-                            setCompanionPairing(null);
-                            setCompanionWaiting(false);
-                            setSignInStarted("");
-                          }}
-                          className={`rounded-lg p-3 text-left transition-all ${
-                            spotifyAccessMode === "local"
-                              ? "border-2 border-emerald-500 bg-emerald-500/10 dark:bg-[#173b25]"
-                              : "border border-neutral-300 dark:border-[#3a3a3a] hover:border-neutral-400 dark:hover:border-[#666]"
-                          }`}
-                        >
-                          <span className="flex items-center gap-2 font-semibold text-neutral-900 dark:text-white text-xs sm:text-sm">
-                            <Wifi className="h-4 w-4 text-emerald-500" /> Local network
-                          </span>
-                          <span className="mt-1 block text-xs text-neutral-500 dark:text-[#b3b3b3]">
-                            Coming Soon.
-                            Use Spotify Connect directly on the same Device.
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          aria-pressed={spotifyAccessMode === "remote"}
-                          onClick={() => {
-                            setSpotifyAccessMode("remote");
-                            setSignInStarted("");
-                          }}
-                          className={`rounded-lg p-3 text-left transition-all ${
-                            spotifyAccessMode === "remote"
-                              ? "border-2 border-amber-500 bg-amber-500/10 dark:bg-[#3b321d]"
-                              : "border border-neutral-300 dark:border-[#3a3a3a] hover:border-neutral-400 dark:hover:border-[#666]"
-                          }`}
-                        >
-                          <span className="flex items-center gap-2 font-semibold text-neutral-900 dark:text-white text-xs sm:text-sm">
-                            <Globe className="h-4 w-4 text-amber-500" /> Remote access
-                          </span>
-                          <span className="mt-1 block text-xs text-neutral-500 dark:text-[#b3b3b3]">
-                            Use the local companion helper over VPN/HTTPs.
-                          </span>
-                        </button>
-                      </div>
-
-                      {spotifyAccessMode === "remote" && (
-                        <div className="rounded-lg border-l-4 border-amber-500 bg-amber-500/10 dark:bg-[#3b321d] p-3 text-xs leading-relaxed text-amber-800 dark:text-[#f6b94a] space-y-3">
-                          <p className="font-semibold text-neutral-900 dark:text-white">
-                            Run this on the computer where Spotify is open.
+                    <div className="space-y-3 rounded-xl border border-neutral-200 dark:border-[#3a3a3a] bg-neutral-50 dark:bg-[#242424] p-4 text-xs sm:text-sm text-neutral-600 dark:text-[#b3b3b3]">
+                      {spotifyAuth?.state === "pending" ? (
+                        <>
+                          <p>
+                            Open the pairing page on any device signed in to Spotify and enter this code.
                           </p>
-                          <p className="text-neutral-700 dark:text-neutral-300">
-                            Spotify and the companion computer must be on the same network\LAN for Spotify Connect discovery. VPN or secure HTTPS reverse proxy should work too.
-                          </p>
-                          <p className="font-semibold text-neutral-900 dark:text-white">Pre-requisites:</p>
-                          <ol className="list-decimal space-y-1 pl-4 text-neutral-700 dark:text-[#b3b3b3]">
-                            <li>Git CLI, you can install from https://git-scm.com/install</li>
-                            <li>uv, you can install from: https://docs.astral.sh/uv/getting-started/installation/</li>
-                          </ol>
-                          <p className="font-semibold text-neutral-900 dark:text-white">Steps:</p>
-                          <ol className="list-decimal space-y-1 pl-4 text-neutral-700 dark:text-[#b3b3b3]">
-                            <li>Download or clone this repository on the Spotify computer.</li>
-                            <li>Open PowerShell in the repository folder.</li>
-                            <li>Run the setup commands below once.</li>
-                            <li>Create a pairing code, run the generated command, then select OnTheSpot Companion in Spotify.</li>
-                          </ol>
-
-                          <p className="text-[11px] text-neutral-600 dark:text-[#b3b3b3]">
-                            This is a one-time helper. The generated command includes automatic cleanup: after successful pairing it exits and removes the <span className="font-semibold text-neutral-900 dark:text-white">OnTheSpot-companion</span> folder.
-                          </p>
-
-                          <div>
-                            <p className="font-semibold text-neutral-900 dark:text-white">Download the repo:</p>
-                            <code className="mt-1 block overflow-x-auto whitespace-pre-wrap rounded-md bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
-                              {companionCloneCommand}
+                          <div className="flex flex-wrap items-center gap-3">
+                            <code className="rounded-lg border border-neutral-300 dark:border-[#3a3a3a] bg-white dark:bg-[#1c1c1c] px-4 py-2 font-mono text-2xl font-bold tracking-[0.2em] text-neutral-900 dark:text-white">
+                              {spotifyAuth.user_code}
                             </code>
                             <button
                               type="button"
-                              onClick={() => void copyText(`${companionCloneCommand}\n`, "Download commands copied. Paste them into PowerShell as one block.")}
-                              className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                              onClick={() => void copyText(spotifyAuth.user_code, "Code copied.")}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
                             >
-                              <Copy className="w-3 h-3" /> Copy download commands
+                              <Copy className="w-3 h-3" /> Copy
                             </button>
                           </div>
-
-                          <div>
-                            <p className="font-semibold text-neutral-900 dark:text-white">One-time Windows setup:</p>
-                            <code className="mt-1 block overflow-x-auto whitespace-pre-wrap rounded-md bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
-                              {companionSetupCommand}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => void copyText(`${companionSetupCommand}\n`, "Setup commands copied. Paste them into PowerShell as one block.")}
-                              className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
-                            >
-                              <Copy className="w-3 h-3" /> Copy setup commands
-                            </button>
-                          </div>
-
-                          <p className="text-[11px] font-semibold text-amber-700 dark:text-[#f6b94a]">
-                            Important: create the pairing code on this same OnTheSpot address ({backendUrl}). Each code expires after ten minutes.
+                          <a
+                            href={spotifyAuth.verification_uri_complete || spotifyAuth.verification_uri}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+                          >
+                            Open spotify.com/pair
+                          </a>
+                          <p className="text-[11px] text-neutral-500">
+                            Code expires in {formatCountdown(spotifyAuth.expires_at - now)}
                           </p>
-
-                          {companionPairing && (
-                            <div className="space-y-2 pt-2 border-t border-amber-500/30">
-                              <p className="font-semibold text-neutral-900 dark:text-white">Final step: copy this into PowerShell</p>
-                              <p className="text-[11px] text-neutral-600 dark:text-neutral-300">
-                                Copy the command, switch to the PowerShell window, and paste the command there.
-                              </p>
-                              <code className="block overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-amber-500/50 bg-black/40 p-2 font-mono text-[11px] text-amber-300">
-                                {companionCommand}
-                              </code>
-                              <div className="flex flex-wrap items-center gap-2 pt-1">
-                                <button
-                                  type="button"
-                                  onClick={() => void copyText(`${companionCommand}\n`, "PowerShell command copied. Paste it into the companion PowerShell window.")}
-                                  className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 hover:bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
-                                >
-                                  <Copy className="w-3 h-3" /> Copy command for PowerShell
-                                </button>
-                                <span className="text-[11px] text-neutral-500">
-                                  Expires in {Math.max(0, Math.ceil((companionPairing.expires_at * 1000 - Date.now()) / 60000))} minutes.
-                                </span>
-                              </div>
-                              {companionWaiting && (
-                                <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 pt-1">
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Waiting for companion to finish. This window will close automatically when the Spotify account connects.
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Waiting for you to approve in Spotify…
+                          </p>
+                        </>
+                      ) : spotifyAuth?.state === "authorizing" || spotifyAuthFinishing ? (
+                        <p className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Signing in…
+                        </p>
+                      ) : (
+                        <p>OnTheSpot signs in through Spotify's pairing page. Spotify Premium is required.</p>
                       )}
                     </div>
                   )}
@@ -1337,11 +1318,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                 <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-neutral-200 dark:border-[#353535] bg-neutral-50 dark:bg-[#1c1c1c] px-6 py-4">
                   <button
                     type="button"
-                    onClick={() => {
-                      setCompanionWaiting(false);
-                      setCompanionPairing(null);
-                      setShowModal(false);
-                    }}
+                    onClick={closeModal}
                     className="px-4 py-2 text-xs font-medium rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                   >
                     Cancel
@@ -1361,17 +1338,19 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                   ) : (
                     <button
                       type="submit"
-                      disabled={loading || companionWaiting}
+                      disabled={loading || spotifyAuthActive || spotifyAuthFinishing}
                       className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-xs transition-colors"
                     >
                       {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       <span>
                         {loading
                           ? "Working…"
-                          : companionWaiting
-                          ? "Waiting for Spotify…"
-                          : selectedService.value === "spotify" && spotifyAccessMode === "remote"
-                          ? "Create pairing code"
+                          : selectedService.value === "spotify"
+                          ? spotifyAuthActive || spotifyAuthFinishing
+                            ? "Waiting for approval…"
+                            : spotifyAuth
+                            ? "Get a new code"
+                            : "Sign in with Spotify"
                           : selectedService.mode === "device"
                           ? "Start sign-in"
                           : selectedService.mode === "youtube"

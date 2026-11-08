@@ -161,7 +161,7 @@ export const SERVICE_OPTIONS: ReadonlyArray<ServiceOption> = [
   { value: "generic", label: "Generic", mode: "none", requirement: "Uses the public generic worker. No sign-in is required." },
   { value: "qobuz", label: "Qobuz", mode: "email-password", requirement: "Use your Qobuz email address and password." },
   { value: "soundcloud", label: "SoundCloud", mode: "token", tokenLabel: "OAuth Token", requirement: "Optional for public content; add a token for account access.", tokenRequired: false },
-  { value: "spotify", label: "Spotify", mode: "device", requirement: "Requires Spotify Premium. Start sign-in, then open Spotify’s Connect to a device menu and select OnTheSpot." },
+  { value: "spotify", label: "Spotify", mode: "device", requirement: "Requires Spotify Premium. Sign in with a code at spotify.com/pair from any device." },
   { value: "tidal", label: "Tidal", mode: "device", requirement: "Starts a Tidal device-link sign-in in your browser." },
   { value: "youtube_music", label: "YouTube Music", mode: "youtube", requirement: "Configure an explicit local YouTube session for videos that require sign-in or add public account" },
 ];

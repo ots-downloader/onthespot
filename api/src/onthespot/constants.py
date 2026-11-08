@@ -56,6 +56,18 @@ class ItemStatus(str, Enum):
     DELETED = "Deleted"
 
 
+class DeviceAuthState(str, Enum):
+    """States of a Spotify device-code sign-in."""
+
+    PENDING = "pending"
+    AUTHORIZING = "authorizing"
+    APPROVED = "approved"
+    DENIED = "denied"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+    ERROR = "error"
+
+
 # Shared connect/read bounds for catalogue and authentication HTTP requests.
 # Service downloads that intentionally stream large media use their own longer
 # timeout in services_middleware.py.

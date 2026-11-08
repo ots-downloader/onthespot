@@ -35,7 +35,7 @@ form changes to show the fields required by the selected service.
 | Generic | None | Uses the generic/yt-dlp worker for supported URLs. |
 | Qobuz?? | Email and password | A valid Qobuz account is required. |
 | SoundCloud | Optional OAuth token | Public content works without a token; add one for account-specific access. |
-| Spotify | Spotify Connect sign-in and Dev API Keys | Requires Spotify Premium and WebAPI Dev Keys. |
+| Spotify | Sign in with Spotify (code at spotify.com/pair) and Dev API Keys | Requires Spotify Premium and WebAPI Dev Keys. |
 | Tidal | Device-link sign-in | Follow the link shown by OnTheSpot. |
 | YouTube Music | Optional cookies | Public videos works without cookies. Sign-in or private videos require a Netscape-format `cookies.txt` file. |
 
@@ -43,13 +43,20 @@ Only use accounts and session data you are authorized to use.
 
 Secrets are stored in and encrypted file inside the root folder, with the encryption key on the side, it's not ideal but better than clean secrets, a password protection will be implemented in the stable 2.0 or 2.1.
 
-### Spotify Connect account
+### Spotify account
 
-To login via connect and your desktop app you'll need to run the companion on the PC running spotify.
+1. Open **Accounts → Add account → Spotify** and choose **Sign in with Spotify**.
+2. OnTheSpot shows a short code and a link.
+3. On any device, open https://spotify.com/pair, enter the code, and approve.
+
+OnTheSpot then stores the account. This works with Docker, Unraid, and remote
+setups. A free account is refused with a message; Spotify Premium is required.
+To replace saved credentials that stopped working, sign in again with the same
+account.
 
 > [!WARNING] Spotify has restriced API calls, be careful of the delay time, also some new accounts report to have basically no API call at all, so results may vary.
 
-More info can be found in the `/companion` folder.
+The companion helper in the `/companion` folder is deprecated and goes away in the next release.
 
 
 ### Spotify Dev WebAPI credentials
@@ -167,8 +174,8 @@ Navigation and some display preferences save immediately in the browser.
 ## Troubleshooting
 
 - A service filter only appears when a matching worker is available.
-- If Spotify Connect is missing, verify Premium access, same-LAN discovery, and
-  local firewall rules; use the companion for a remote server.
+- If the Spotify sign-in fails, check that the account has Premium and that the
+  code was entered before it expired. Start a new sign-in to get a new code.
 - A Spotify account that is not Premium (including one whose Premium lapsed)
   is rejected. The account list does not mark it yet; the server log names the
   account type. Downloads use another Premium account if one is set up. Log in
