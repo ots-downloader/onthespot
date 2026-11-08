@@ -450,8 +450,8 @@ async def query_url(q: str | None = None, filters: dict | None = None):
     :param q: The search url.
     :param filters: Optional dictionary of filters for the search !! Not Implemented Yet.
     :return: True or False depending on the result of the search function.
-    :raises HTTPException: 400 with the reason when the URL is recognised but
-        not supported (Spotify Liked Songs, Your Episodes).
+    :raises HTTPException: 400 with the reason when the URL is a link
+        OnTheSpot recognises but cannot download or route.
     """
     result = None
     if q:

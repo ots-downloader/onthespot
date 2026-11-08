@@ -18,7 +18,15 @@ from .api.registry import (
 )
 from .api.spotify import reinit_spotify_session, spotify_get_playlist
 from .basemodels import DownloadProfile, QueueItem
-from .constants import ItemStatus
+from .constants import (
+    ARTIST_TYPES,
+    COLLECTION_TYPES,
+    PODCAST_TYPES,
+    SHOW_TYPES,
+    SINGLE_ITEM_TYPES,
+    ItemStatus,
+)
+from .resources.exceptions import UnsupportedItemError
 from .runtimedata import config, download_queue, download_queue_lock, get_logger, parsing, pending
 from .utils import format_local_id
 
@@ -103,29 +111,31 @@ class ParsingWorker:
             return
 
         # --- Single downloadable items ---
-        if item_type in ("track", "podcast_episode", "movie", "episode"):
+        if item_type in SINGLE_ITEM_TYPES:
             self._enqueue_single_item(service, item_type, item_id, item_url)
             return
 
         # --- Podcast / audiobook (expand to episodes) ---
-        if item_type in ("podcast", "audiobook"):
+        if item_type in PODCAST_TYPES:
             self._expand_podcast(service, item_type, item_id, token, item_url)  # URL Passed down
             return
 
         # --- Album / playlist / mix (expand to tracks) ---
-        if item_type in ("album", "playlist", "mix"):
+        if item_type in COLLECTION_TYPES:
             self._expand_collection(service, item_type, item_id, token, item_url)
             return
 
         # --- Artist / label (expand to albums, then recurse) ---
-        if item_type in ("artist", "label"):
+        if item_type in ARTIST_TYPES:
             self._expand_artist_or_label(service, item_type, item_id, token, item_url)  # URL Passed down
             return
 
         # --- Crunchyroll show / season ---
-        if item_type in ("show", "season"):
+        if item_type in SHOW_TYPES:
             self._expand_show(service, item_type, item_id, token, item_url)  # URL Passed down
             return
+
+        raise UnsupportedItemError(f"No handler for {service} {item_type}")
 
     # ------------------------------------------------------------------
     # Individual expansion handlers
