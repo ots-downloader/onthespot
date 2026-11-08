@@ -292,11 +292,28 @@ export interface DownloadProfile {
   is_default?: boolean;
 }
 
-export interface SpotifyCompanionPairing {
-  pairing_token: string;
+export type SpotifyDeviceAuthState =
+  | "pending"
+  | "authorizing"
+  | "approved"
+  | "denied"
+  | "expired"
+  | "cancelled"
+  | "error";
+
+export interface SpotifyDeviceAuthStatus {
+  flow_id: string;
+  state: SpotifyDeviceAuthState;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  /** Unix seconds. */
   expires_at: number;
-  expires_in: number;
-  device_name: string;
+  /** Seconds between polls that Spotify asks for. */
+  interval: number;
+  username: string;
+  error_code: string;
+  message: string;
 }
 
 export type YouTubeSetupMode = "upload" | "browser" | "cookie_file" | "none";

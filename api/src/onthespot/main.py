@@ -47,6 +47,11 @@ from .api.spotify import (
     spotify_get_search_results,
     spotify_new_session,
 )
+from .api.spotify_device_auth import (
+    DeviceAuthBusyError,
+    DeviceAuthStartError,
+    device_auth,
+)
 from .api.tidal import tidal_add_account_pt1, tidal_add_account_pt2
 from .api.youtube_music import youtube_music_add_account
 from .basemodels import *
@@ -355,6 +360,7 @@ async def lifespan(app: FastAPI):
     downloadworker.stop()
 
     fillaccountpool.stop()
+    device_auth.cancel_all()
     # stop_spotify_connect_service()
 
     logger.info("Application shutdown")
@@ -1214,9 +1220,10 @@ async def add_account(service: str, item: AccountData | None = None):
         return found
 
 
-@app.post("/accounts/spotify/companion/pair")
+@app.post("/accounts/spotify/companion/pair", deprecated=True)
 async def create_spotify_companion_pairing():
     """Create a short-lived token for a local Spotify companion."""
+    logger.warning("/accounts/spotify/companion/pair is deprecated; use the Spotify sign-in in Accounts")
     now = time.time()
     token = secrets.token_urlsafe(32)
     with _spotify_companion_pairing_lock:
@@ -1230,9 +1237,10 @@ async def create_spotify_companion_pairing():
     }
 
 
-@app.post("/accounts/spotify/companion/complete")
+@app.post("/accounts/spotify/companion/complete", deprecated=True)
 async def complete_spotify_companion_pairing(payload: SpotifyCompanionLogin):
     """Accept one Spotify ZeroConf login from a paired local companion."""
+    logger.warning("/accounts/spotify/companion/complete is deprecated; use the Spotify sign-in in Accounts")
     token = payload.pairing_token.strip()
     with _spotify_companion_pairing_lock:
         expires_at = _spotify_companion_pairings.pop(token, None)
@@ -1251,6 +1259,41 @@ async def complete_spotify_companion_pairing(payload: SpotifyCompanionLogin):
         "The Spotify companion delivered a new account login.",
     )
     return {"success": True}
+
+
+def _on_spotify_device_auth_success(username: str) -> None:
+    """Reload the account pool after a device-code sign-in saves a login."""
+    relogin()
+    notification_hook("Spotify account connected", f"Signed in as {username}.")
+
+
+@app.post("/accounts/spotify/device-auth/start", response_model=SpotifyDeviceAuthStatus)
+async def start_spotify_device_auth():
+    """Start a Spotify sign-in; the user approves the returned code at Spotify."""
+    try:
+        return await run_in_threadpool(device_auth.start, _on_spotify_device_auth_success)
+    except DeviceAuthBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except DeviceAuthStartError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/accounts/spotify/device-auth/status", response_model=SpotifyDeviceAuthStatus)
+async def get_spotify_device_auth_status(flow_id: str):
+    """Return the state of a Spotify sign-in."""
+    flow = device_auth.status(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Unknown or expired sign-in")
+    return flow
+
+
+@app.post("/accounts/spotify/device-auth/cancel")
+async def cancel_spotify_device_auth(flow_id: str):
+    """Stop a Spotify sign-in that still waits for approval.
+
+    A sign-in Spotify already granted runs to the end; ``success`` is then false.
+    """
+    return {"success": device_auth.cancel(flow_id)}
 
 
 @app.post("/accounts/remove")

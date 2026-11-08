@@ -79,11 +79,16 @@ Then run `docker compose up -d --build` and open
 `http://UNRAID-IP:6769`. The default Compose deployment uses bridge networking
 and exposes only the web port.
 
-Spotify Connect discovery does not cross Docker bridge, VPN, or routed-network
-boundaries. To add a Spotify worker when Spotify is running on another
-computer, open **Accounts → Add account → Spotify → Remote access** and follow
-the generated companion instructions. The helper runs beside Spotify for the
-one-time pairing and removes itself when `--cleanup` is used.
+To add a Spotify account, open **Accounts → Add account → Spotify** and choose
+**Sign in with Spotify**. OnTheSpot shows a short code and a link. On any
+device, open https://spotify.com/pair, enter the code, and approve the
+sign-in. OnTheSpot then stores the account. This works in Docker, on Unraid, and
+over Tailscale or any remote setup. It needs no open port and no helper script.
+The account must be Spotify Premium. To replace saved credentials that no
+longer work, sign in again with the same account.
+
+The older "Remote access" companion option is deprecated. It still works in this
+release and goes away in the next one.
 
 Playlist sorting uses Spotify OAuth, which is separate from the download
 worker login. Local installations can use the displayed `127.0.0.1` callback.
@@ -148,7 +153,7 @@ config volumes during startup.
 | --- | --- |
 | Container is unhealthy | `docker compose logs onthespot`; confirm port 6767 is not already in use and the config folder is writable |
 | UI opens but requests fail | Use the same origin that served the page; do not configure a separate API URL for production |
-| Spotify worker is not visible | Use the generated companion when Spotify and Docker are not on the same LAN broadcast domain |
+| Spotify worker is not visible | Use **Sign in with Spotify** in Accounts; enter the code at spotify.com/pair on any device |
 | Playlist OAuth returns elsewhere | Save the exact callback currently shown in Playlist sorting and in the Spotify Developer Dashboard |
 | YouTube asks for sign-in | Upload a fresh Netscape-format `cookies.txt` through the YouTube Music account setup; browser-profile import only works when the browser runs on the API host |
 | Settings disappear after rebuild | Confirm `ONTHESPOT_CONFIG_DIR` is an existing persistent host path mounted at `/root/.config/onthespot` |

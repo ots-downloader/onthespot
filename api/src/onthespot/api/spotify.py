@@ -14,6 +14,7 @@ import uuid
 import librespot.zeroconf as librespot_zeroconf
 import requests
 from librespot.core import Session, TokenProvider
+from librespot.mercury import MercuryRequests
 from librespot.proto import Playlist4External_pb2
 from librespot.zeroconf import ZeroconfServer
 
@@ -256,8 +257,7 @@ def start_spotify_connect_service():
             return _spotify_connect_server
 
         _patch_librespot_zeroconf_runner()
-        client_id = "65b708073fc0480ea92a077233ca87bd"
-        ZeroconfServer._ZeroconfServer__default_get_info_fields["clientID"] = client_id
+        ZeroconfServer._ZeroconfServer__default_get_info_fields["clientID"] = MercuryRequests.keymaster_client_id
         builder = ZeroconfServer.Builder()
         builder.device_name = "OnTheSpot"
         port = _spotify_connect_port()
@@ -329,12 +329,20 @@ def spotify_connect_status() -> dict:
         }
 
 
-def add_spotify_zeroconf_login(zeroconf_login: dict, account_uuid: str | None = None) -> bool:
-    """Persist a Spotify Connect login received locally or from a companion.
+def add_spotify_zeroconf_login(
+    zeroconf_login: dict,
+    account_uuid: str | None = None,
+    replace_existing: bool = False,
+) -> bool:
+    """Persist a Spotify login record from any sign-in path.
 
-    The companion only forwards the same three fields produced by librespot's
-    ZeroConf login file.  Keep the validation and duplicate handling in one
-    place so local and remote sign-in create identical account records.
+    Spotify Connect pairing, the device-code sign-in and the deprecated
+    companion all hand over the same three fields of librespot's stored
+    login file.  Keep the validation and duplicate handling in one place so
+    every path creates identical account records.
+
+    With ``replace_existing``, a login for an account that is already saved
+    replaces that account's stored login and keeps its uuid.
     """
     if not isinstance(zeroconf_login, dict):
         return False
@@ -343,26 +351,34 @@ def add_spotify_zeroconf_login(zeroconf_login: dict, account_uuid: str | None = 
     credential_type = str(zeroconf_login.get("type") or "").strip()
     if not username or not isinstance(credentials, str) or not credentials or not credential_type:
         return False
-    if any(
-        isinstance(account, dict)
-        and account.get("service") == "spotify"
-        and account.get("login", {}).get("username") == username
-        for account in (config.get("accounts", []) or [])
-    ):
-        logger.info("Spotify account already exists")
-        return False
-
+    login = {
+        "username": username,
+        "credentials": credentials,
+        "type": credential_type,
+    }
     cfg_copy = list(config.get("accounts", []) or [])
+    for index, account in enumerate(cfg_copy):
+        if not (
+            isinstance(account, dict)
+            and account.get("service") == "spotify"
+            and (account.get("login") or {}).get("username") == username
+        ):
+            continue
+        if not replace_existing:
+            logger.info("Spotify account already exists")
+            return False
+        cfg_copy[index] = {**account, "active": True, "login": login}
+        config.set("accounts", cfg_copy)
+        config.save()
+        logger.info("Spotify login replaced for %s", username[:4] + "****")
+        return True
+
     cfg_copy.append(
         {
             "uuid": account_uuid or str(uuid.uuid4()),
             "service": "spotify",
             "active": True,
-            "login": {
-                "username": username,
-                "credentials": credentials,
-                "type": credential_type,
-            },
+            "login": login,
         }
     )
     config.set("accounts", cfg_copy)

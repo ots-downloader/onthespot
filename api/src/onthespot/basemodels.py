@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .constants import ItemStatus
+from .constants import DeviceAuthState, ItemStatus
 
 
 # Pydantic schemas of body data
@@ -14,6 +14,19 @@ class AccountData(BaseModel):
 class SpotifyCompanionLogin(BaseModel):
     pairing_token: str
     login: dict[str, Any]
+
+
+class SpotifyDeviceAuthStatus(BaseModel):
+    flow_id: str
+    state: DeviceAuthState
+    user_code: str
+    verification_uri: str
+    verification_uri_complete: str
+    expires_at: int
+    interval: int
+    username: str = ""
+    error_code: str = ""
+    message: str = ""
 
 
 class YouTubeAuthentication(BaseModel):

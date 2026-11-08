@@ -48,14 +48,16 @@ Documentation:
 2. [**Basic Usage Instructions**](docs/USAGE.md)
 3. [**Release Feature Matrix**](docs/FEATURE_MATRIX.md)
 
-### Remote Spotify Connect companion
+### Adding a Spotify account
 
-If the OnTheSpot web/API service runs remotely (for example in Docker on
-Unraid) while Spotify is running on a desktop or phone LAN, use the bundled
-[Spotify Connect companion](companion/README.md). It keeps Spotify's local
-mDNS discovery on the Spotify user's LAN and sends only a short-lived pairing
-payload to the OnTheSpot server over the server URL. Tailscale can carry that
-API request, but it does not extend Spotify's local discovery broadcasts.
+OnTheSpot signs in to Spotify by itself. Open **Accounts → Add account →
+Spotify** and choose **Sign in with Spotify**. OnTheSpot shows a short code and
+a link. On any device, such as your phone or laptop, open
+https://spotify.com/pair, enter the code, and approve the sign-in. This works
+in Docker, on Unraid, and over Tailscale or any other remote setup. It needs no
+open port, no helper script, and no Spotify developer app. The account must be
+Spotify Premium. The [Spotify Connect companion](companion/README.md) is
+deprecated and goes away in the next release.
 
 > [!CAUTION]
 > Currently 1 user has reported having their Spotify account locked, the account was returned to them by emailing support. This notice will be updated if any further cases come to our attention.

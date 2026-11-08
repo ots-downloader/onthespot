@@ -7,7 +7,7 @@ import {
   OTSConfig,
   PendingQueueItem,
   QueueBatchAction,
-  SpotifyCompanionPairing,
+  SpotifyDeviceAuthStatus,
   SystemDiagnostics,
   UpdateInfo,
   YouTubeAuthentication,
@@ -261,9 +261,42 @@ export async function reconnectAccounts(): Promise<boolean> {
   return res.ok;
 }
 
-export async function createSpotifyCompanionPairing(): Promise<SpotifyCompanionPairing | null> {
-  const res = await request("/accounts/spotify/companion/pair", { method: "POST" });
-  if (!res.ok) throw new Error("Failed to create companion pairing");
+async function readErrorDetail(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = await res.json();
+    if (typeof body?.detail === "string" && body.detail) return body.detail;
+  } catch {
+    // body was not JSON; keep the fallback
+  }
+  return fallback;
+}
+
+export async function startSpotifyDeviceAuth(): Promise<SpotifyDeviceAuthStatus> {
+  const res = await request("/accounts/spotify/device-auth/start", { method: "POST" });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Could not get a sign-in code from Spotify."));
+  }
+  return await res.json();
+}
+
+/** Returns null when the server no longer knows the flow (404); treat that as expired. */
+export async function getSpotifyDeviceAuthStatus(
+  flowId: string
+): Promise<SpotifyDeviceAuthStatus | null> {
+  const res = await request(
+    `/accounts/spotify/device-auth/status?flow_id=${encodeURIComponent(flowId)}`
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to check Spotify sign-in status");
+  return await res.json();
+}
+
+export async function cancelSpotifyDeviceAuth(flowId: string): Promise<{ success: boolean }> {
+  const res = await request(
+    `/accounts/spotify/device-auth/cancel?flow_id=${encodeURIComponent(flowId)}`,
+    { method: "POST" }
+  );
+  if (!res.ok) return { success: false };
   return await res.json();
 }
 
