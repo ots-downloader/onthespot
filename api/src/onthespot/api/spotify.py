@@ -145,6 +145,35 @@ def _patch_librespot_zeroconf_runner() -> bool:
     return True
 
 
+def _patch_librespot_session_attributes() -> bool:
+    """Give each librespot ``Session`` its own account attributes.
+
+    librespot-python declares ``Session.__user_attributes = {}`` on the class
+    and every session writes into that one dict, so one account's "type"
+    leaks into every other session and a re-init can read the old session's
+    value.  Only patch while upstream still keeps the dict on the class.
+    """
+    if getattr(Session, "_onthespot_user_attributes_patch", False):
+        return True
+    if not isinstance(Session.__dict__.get("_Session__user_attributes"), dict):
+        return False
+
+    original_init = Session.__init__
+
+    def patched_init(self, *args, **kwargs):
+        self._Session__user_attributes = {}
+        original_init(self, *args, **kwargs)
+
+    Session.__init__ = patched_init
+    Session._onthespot_user_attributes_patch = True
+    return True
+
+
+# Every OnTheSpot session (account logins, re-inits, Spotify Connect pairing)
+# is built through this module, so patching on import covers them all.
+_patch_librespot_session_attributes()
+
+
 def _spotify_connect_port() -> int:
     try:
         return int(
