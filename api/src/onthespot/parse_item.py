@@ -97,6 +97,9 @@ class UrlMatcher:
             return None
         item_id = match.group("id")
         item_type = match.group("type")
+        # Apple Music says "song"; OnTheSpot says "track".
+        if item_type == "song":
+            item_type = "track"
         if match.group("track_id"):
             item_id = match.group("track_id")
             item_type = "track"
