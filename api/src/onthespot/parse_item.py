@@ -17,6 +17,7 @@ import requests
 from .accounts import get_account_token
 from .api.generic import generic_get_track_metadata
 from .api.soundcloud import soundcloud_parse_url
+from .constants import ROUTABLE_ITEM_TYPES
 from .resources.exceptions import UnsupportedItemError
 from .resources.regexes import (
     APPLE_MUSIC_URL_REGEX,
@@ -97,6 +98,9 @@ class UrlMatcher:
             return None
         item_id = match.group("id")
         item_type = match.group("type")
+        # Apple Music says "song"; OnTheSpot says "track".
+        if item_type == "song":
+            item_type = "track"
         if match.group("track_id"):
             item_id = match.group("track_id")
             item_type = "track"
@@ -250,8 +254,9 @@ def parse_url(url: str) -> bool:
     fallback available.
 
     Raises :class:`UnsupportedItemError` for URLs OnTheSpot recognises but
-    cannot download (Spotify Liked Songs and Your Episodes); nothing is
-    enqueued and the message says why.
+    cannot download (Spotify Liked Songs and Your Episodes) or whose item
+    type the parsing worker cannot route; nothing is enqueued and the
+    message says why.
     """
     resolved = _url_matcher.match(url)
 
@@ -261,6 +266,8 @@ def parse_url(url: str) -> bool:
         return True  # handled by generic matcher
 
     service, item_type, item_id = resolved
+    if item_type not in ROUTABLE_ITEM_TYPES:
+        raise UnsupportedItemError(f"{service.replace('_', ' ').title()} {item_type} links are not supported.")
     parsing.put_nowait(
         {
             "item_url": url,
