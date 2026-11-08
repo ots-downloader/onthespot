@@ -169,5 +169,9 @@ Navigation and some display preferences save immediately in the browser.
 - A service filter only appears when a matching worker is available.
 - If Spotify Connect is missing, verify Premium access, same-LAN discovery, and
   local firewall rules; use the companion for a remote server.
+- A Spotify account that is not Premium (including one whose Premium lapsed)
+  is rejected. The account list does not mark it yet; the server log names the
+  account type. Downloads use another Premium account if one is set up. Log in
+  again after you upgrade the account.
 - Use **Diagnostics**, **Notification history**, and **Server logs** for the
   exact backend error before retrying or changing credentials.

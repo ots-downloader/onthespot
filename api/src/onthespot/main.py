@@ -1312,9 +1312,14 @@ async def get_account_health():
         for account in (config.get("accounts", []) or [])
         if isinstance(account, dict) and account.get("active", True)
     ]
-    authenticated_services = {
-        account.get("service") for account in account_pool if isinstance(account, dict) and account.get("active", True)
-    }
+    # A rejected account (e.g. a non-Premium Spotify login) stays listed but
+    # cannot download, so it does not count as authenticated.
+    authenticated = [
+        account
+        for account in account_pool
+        if isinstance(account, dict) and account.get("active", True) and not account.get("rejected")
+    ]
+    authenticated_services = {account.get("service") for account in authenticated}
     configured_services = {account.get("service") for account in configured}
     missing_services = sorted(service for service in configured_services if service not in authenticated_services)
     spotify_online = "spotify" in authenticated_services
@@ -1329,7 +1334,7 @@ async def get_account_health():
             "connect_service": spotify_connect_status(),
         },
         "configured_accounts": len(configured),
-        "authenticated_accounts": len(account_pool),
+        "authenticated_accounts": len(authenticated),
         "missing_services": missing_services,
         "checked_at": time.time(),
     }

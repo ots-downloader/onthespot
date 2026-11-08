@@ -13,6 +13,7 @@ optionally rotating to the next available account.
 """
 
 import threading
+import time
 
 from .api.registry import SERVICE_LOGIN_FUNCTIONS, SERVICE_TOKEN_FUNCTIONS
 from .otsconfig import config
@@ -104,15 +105,31 @@ def get_account_token(service: str, rotate: bool = False):
 
     current_index = int(config.get("active_account_number", 0) or 0) % len(account_pool)
 
+    # A rejected account (e.g. a non-Premium Spotify login) stays in the pool
+    # for display but is never chosen, and neither is one waiting out a
+    # retry_after cooldown.  The token function itself can hold an account
+    # back (e.g. Spotify Premium lapsed); then the next account is tried.
+    def held_back(index):
+        account = account_pool[index]
+        return bool(account.get("rejected")) or time.monotonic() < account.get("retry_after", 0)
+
+    def usable(index):
+        return account_pool[index]["service"] == service and not held_back(index)
+
+    def rejected_now(index, token):
+        return token is False and held_back(index)
+
     # Fast path: current account matches and we don't want to rotate.
-    if account_pool[current_index]["service"] == service and not rotate:
-        return token_fn(current_index)
+    if usable(current_index) and not rotate:
+        token = token_fn(current_index)
+        if not rejected_now(current_index, token):
+            return token
 
     # Scan the pool round-robin for the next matching account.
     pool_size = len(account_pool)
     for offset in range(1, pool_size + 1):
         index = (current_index + offset) % pool_size
-        if account_pool[index]["service"] == service:
+        if usable(index):
             if config.get("rotate_active_account_number"):
                 logger.debug(
                     "Rotating to %s account \n#%s : %s",
@@ -122,6 +139,8 @@ def get_account_token(service: str, rotate: bool = False):
                 )
                 config.set("active_account_number", index)
                 config.save()
-            return token_fn(index)
+            token = token_fn(index)
+            if not rejected_now(index, token):
+                return token
 
     return False
