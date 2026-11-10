@@ -91,8 +91,14 @@ def download_spotify(item: QueueItem, item_id, item_type, token, temp_path):
     try:
         stream = token.content_feeder().load(audio_key, VorbisOnlyAudioQuality(quality), False, None)
     except RuntimeError as exc:
-        if "alternative track" in str(exc).lower():
+        message = str(exc).lower()
+        if "alternative track" in message:
             raise TrackUnavailableError(item_id) from exc
+        if "failed fetching audio key" in message:
+            # librespot raises this only after Spotify answers the key request
+            # with an error code; a silent socket raises queue.Empty instead.
+            # The session is alive, so a reinit cannot help.
+            raise RuntimeError(f"Spotify refused the audio key: {exc}") from exc
         reinit_spotify_session(token)
         raise RuntimeError(f"Spotify session connection lost: {exc}") from exc
     except (queue.Empty, OSError) as exc:
