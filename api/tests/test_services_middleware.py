@@ -62,6 +62,19 @@ class DownloadSpotifyDeadSessionTests(unittest.TestCase):
         self.assertIsInstance(exc, RuntimeError)
         self.assertIn("connection lost", str(exc))
 
+    def test_refused_audio_key_keeps_session(self):
+        error = RuntimeError("Failed fetching audio key! gid: 00, fileId: 00")
+        _token, reinit, exc = _download(error)
+        reinit.assert_not_called()
+        self.assertIsInstance(exc, RuntimeError)
+        self.assertIn("refused the audio key", str(exc))
+        self.assertIs(exc.__cause__, error)
+
+    def test_other_runtime_error_reinits_session(self):
+        token, reinit, exc = _download(RuntimeError("Failed reading packet!"))
+        reinit.assert_called_once_with(token)
+        self.assertIn("connection lost", str(exc))
+
     def test_cdn_http_status_keeps_session(self):
         # librespot raises a bare IOError(status) when the CDN answers non-200.
         error = OSError("403")
