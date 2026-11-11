@@ -21,6 +21,10 @@ from onthespot.runtimedata import parsing
 SOUNDCLOUD_URL = "https://soundcloud.com/discover/sets/x"
 # The real SoundCloud matcher needs an API token, so tests patch its result.
 UNROUTABLE = ("soundcloud", "system-playlist", "1")
+LINK_NOT_RECOGNISED = (
+    "Link not recognised. Paste a full link, starting with https://, "
+    "from a service you have an account for."
+)
 
 
 class AppleMusicUrlTests(unittest.TestCase):
@@ -93,6 +97,59 @@ class UnroutableItemTests(unittest.TestCase):
             "Soundcloud system-playlist links are not supported.",
         )
         self.assertEqual(parsing.get_items(), [])
+
+    def test_query_url_returns_400_when_no_service_handles_the_link(self):
+        client = TestClient(app)
+        accounts = [{"service": "soundcloud"}]
+        with (
+            patch("onthespot.parse_item.account_pool", accounts),
+            patch("onthespot.main.account_pool", accounts),
+        ):
+            response = client.post("/query/url", params={"q": "https://example.com/not-music"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["detail"],
+            LINK_NOT_RECOGNISED,
+        )
+        self.assertEqual(parsing.get_items(), [])
+
+    def test_query_url_returns_400_for_text_that_is_not_a_link(self):
+        client = TestClient(app)
+        accounts = [{"service": "soundcloud"}]
+        with (
+            patch("onthespot.parse_item.account_pool", accounts),
+            patch("onthespot.main.account_pool", accounts),
+        ):
+            response = client.post("/query/url", params={"q": "not a link"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], LINK_NOT_RECOGNISED)
+        self.assertEqual(parsing.get_items(), [])
+
+    def test_query_url_returns_400_when_no_account_is_logged_in(self):
+        client = TestClient(app)
+        with (
+            patch("onthespot.parse_item.account_pool", []),
+            patch("onthespot.main.account_pool", []),
+        ):
+            response = client.post("/query/url", params={"q": SOUNDCLOUD_URL})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "No accounts are logged in. Add or enable an account first.")
+        self.assertEqual(parsing.get_items(), [])
+
+    def test_query_url_queues_a_handled_link(self):
+        client = TestClient(app)
+        with (
+            patch("onthespot.parse_item.account_pool", [{"service": "apple_music"}]),
+            patch.object(parse_item._url_matcher, "match", return_value=("apple_music", "album", "111")),
+        ):
+            response = client.post("/query/url", params={"q": "https://music.apple.com/us/album/x/111"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(response.json(), True)
+        self.assertEqual(len(parsing.get_items()), 1)
 
     def test_dispatch_routes_every_routable_type(self):
         handlers = [name for name in vars(ParsingWorker) if name.startswith("_expand_")]
