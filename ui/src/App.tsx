@@ -84,7 +84,6 @@ export const uuid = Math.random().toString(36).substring(2, 7)
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>("parsing");
   const [themeMode, setThemeMode] = useState<"neutral" | "stone" | "gothic">("neutral");
-  const [mode, setMode] = useState<'light' | 'dark'>('dark');
   const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
   const [hasNewVersion, setHasNewVersion] = useState(false);
 
@@ -411,6 +410,14 @@ export default function App() {
       : themeMode === "gothic"
       ? gothicTheme
       : neutralTheme;
+
+  // Light/dark mode from the "Theme Appearance" setting. Gothic is a dark-only theme.
+  const mode =
+    themeMode === "gothic"
+      ? "dark"
+      : config.theme === "light" || config.theme === "dark"
+      ? config.theme
+      : "system";
 
   // Counts for navigation badges
   const activeDownloadsCount = queue.filter((i) => i.item_status === "Downloading").length;

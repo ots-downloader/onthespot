@@ -7,3 +7,16 @@
 @import "@astryxdesign/theme-gothic/theme.css";
 @import "tailwindcss";
 
+/* dark: follows the Theme Appearance setting. Astryx sets data-theme on <html>
+   for light/dark and removes it for system, which then follows the OS. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme="light"], [data-theme="light"] *)) {
+      @slot;
+    }
+  }
+}
+
