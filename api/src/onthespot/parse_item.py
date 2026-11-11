@@ -209,24 +209,29 @@ class UrlMatcher:
 
         try:
             logger.info("Unable to parse url, falling back to yt-dlp/generic: %s", url)
-            item_metadata = generic_get_track_metadata("", url)
+            item_metadata = generic_get_track_metadata("", url, None)
             # playlist, album or collection
             if isinstance(item_metadata, list):
-                for i in item_metadata:
-                    item_metadata = generic_get_track_metadata("", i)
-                    if item_metadata is None or isinstance(item_metadata, list):
-                        logger.error("Unable to parse url: %s", url)
+                queued = 0
+                for entry_url in item_metadata:
+                    entry_metadata = generic_get_track_metadata("", entry_url, None)
+                    if entry_metadata is None or isinstance(entry_metadata, list):
+                        logger.error("Unable to parse url: %s", entry_url)
                         continue
 
                     parsing.put_nowait(
                         {
-                            "item_url": url,
+                            "item_url": entry_url,
                             "item_service": "generic",
                             "item_type": "track",
-                            "item_id": url,
+                            "item_id": entry_url,
                         }
                     )
-                    logger.info("Handled by generic: %s", url)
+                    queued += 1
+                    logger.info("Handled by generic: %s", entry_url)
+                if not queued:
+                    logger.error("No entry to queue in playlist: %s", url)
+                    return False
                 return True
             # single item
             if isinstance(item_metadata, dict):

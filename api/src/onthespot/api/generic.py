@@ -58,10 +58,20 @@ def generic_get_track_metadata(_, url, item) -> list | dict | None:
                 cf.write(json_output)
 
         if "entries" in info_dict and len(info_dict.get("entries", [])) > 1:
+            url_dict = []
             for entry in info_dict.get("entries", []):
-                logger.debug("Found entry: %s", entry["webpage_url"])
-                url_dict = []
-                url_dict.append(entry["webpage_url"])
+                if not entry:
+                    continue
+                # A flat entry ("_type": "url") keeps its page link in "url".
+                # An inline entry's "url" is a direct media link, so read
+                # its "webpage_url" instead.
+                is_flat = entry.get("_type") in ("url", "url_transparent")
+                entry_url = (entry.get("url") if is_flat else None) or entry.get("webpage_url")
+                # Skip entries that point back at the playlist itself.
+                if not entry_url or entry_url == url or entry_url in url_dict:
+                    continue
+                logger.debug("Found entry: %s", entry_url)
+                url_dict.append(entry_url)
             return url_dict
 
         info = {}
