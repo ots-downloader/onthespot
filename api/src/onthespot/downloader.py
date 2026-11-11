@@ -370,8 +370,11 @@ class DownloadWorker:
                 )
                 if item is not None:
                     if item.item_status != ItemStatus.CANCELLED:
-                        requeue_item(item)
+                        item.error = f"Unexpected error: {type(exc).__name__}: {exc}. See logs."
+                        item.item_status = ItemStatus.FAILED
                     progress_hook(item, 0, item.item_status)
+                    # Returns at once for a cancelled item.
+                    requeue_item(item)
                     delay = jittered_delay()
                     time.sleep(delay)
                     # Remove possible trash files. Not final_file_path: this pass

@@ -41,7 +41,7 @@ class FirstItemTests(unittest.TestCase):
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix="ots-worker-errors-"))
-        values = {"audio_download_path": str(self.root)}
+        self.values = values = {"audio_download_path": str(self.root)}
         real_get = config.get
         self.worker = downloader.DownloadWorker()
         while not pending.empty():
@@ -77,6 +77,19 @@ class FirstItemTests(unittest.TestCase):
             self._run_until_settled([broken, nxt])
 
         self.assertEqual(nxt.item_status, ItemStatus.ALREADY_EXISTS)
+
+    def test_unexpected_error_marks_the_item_failed_with_a_reason(self):
+        self.values["enable_retry_worker"] = False
+        item = queue_item(1, "spotify")
+        with (
+            patch.object(downloader, "format_item_path", side_effect=KeyError("title")),
+            patch.object(downloader, "progress_hook", wraps=downloader.progress_hook) as hook,
+        ):
+            self._run_until_settled([item])
+
+        self.assertEqual(item.item_status, ItemStatus.FAILED)
+        self.assertIn("title", item.error)
+        hook.assert_any_call(item, 0, ItemStatus.FAILED)
 
     def test_worker_survives_a_cancel_before_metadata_on_its_first_item(self):
         cancelled = queue_item(1, "spotify")
