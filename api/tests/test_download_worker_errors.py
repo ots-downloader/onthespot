@@ -115,6 +115,22 @@ class FirstItemTests(unittest.TestCase):
 
         self.assertEqual(item.item_status, ItemStatus.DOWNLOADED)
 
+    def test_generic_audio_extraction_keeps_a_file_already_at_the_target(self):
+        self.values["v2a_enable"] = True
+        existing = self.root / "Some Video.webm"
+        existing.write_bytes(b"already downloaded")
+        item = queue_item(1, "generic")
+
+        def ytdlp_names_the_existing_file(queued, *_):
+            queued.file_path = str(existing)
+            return "mp3", "192"
+
+        with patch.object(downloader, "download_generic_v2a", side_effect=ytdlp_names_the_existing_file):
+            self._run_until_settled([item])
+
+        self.assertTrue(existing.exists())
+        self.assertEqual(item.item_status, ItemStatus.DOWNLOADED)
+
 
 if __name__ == "__main__":
     unittest.main()

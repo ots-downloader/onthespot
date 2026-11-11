@@ -297,7 +297,8 @@ class DownloadWorker:
 
                 # The temp file is downloaded extensionless as they depend on availability
                 # so we add the extension after the download function returns the effectively downloaded format
-                if temp_file_format != "":
+                # Generic items have no temp file: yt-dlp writes the final file itself.
+                if temp_file_format != "" and temp_file_path:
                     new_path_with_ext = temp_file_path + temp_file_format
                     if os.path.isfile(new_path_with_ext):
                         logger.info("File Found")
