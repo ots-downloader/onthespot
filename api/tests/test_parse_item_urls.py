@@ -16,6 +16,7 @@ from onthespot.main import app
 from onthespot.parse_item import parse_url
 from onthespot.parsingworker import ParsingWorker
 from onthespot.resources.exceptions import UnsupportedItemError
+from onthespot.resources.regexes import APPLE_MUSIC_URL_REGEX
 from onthespot.runtimedata import parsing
 
 SOUNDCLOUD_URL = "https://soundcloud.com/discover/sets/x"
@@ -58,6 +59,80 @@ class AppleMusicUrlTests(unittest.TestCase):
         self.assert_queued(
             "https://music.apple.com/us/album/some-album/111", "album", "111"
         )
+
+    def test_language_parameter_is_ignored(self):
+        self.assert_queued(
+            "https://music.apple.com/us/album/some-album/1234567890?l=en-US",
+            "album",
+            "1234567890",
+        )
+
+    def test_link_without_storefront(self):
+        self.assert_queued(
+            "https://music.apple.com/album/some-album/1234567890", "album", "1234567890"
+        )
+
+    def test_geo_host(self):
+        self.assert_queued(
+            "https://geo.music.apple.com/us/album/some-album/1234567890",
+            "album",
+            "1234567890",
+        )
+
+    def test_track_id_in_any_parameter_position(self):
+        for url in (
+            "https://music.apple.com/us/album/some-album/111?l=en-US&i=222",
+            "https://music.apple.com/us/album/some-album/111?i=222&uo=4#top",
+        ):
+            with self.subTest(url=url):
+                parsing.replace_items([])
+                self.assert_queued(url, "track", "222")
+
+    def test_link_without_slug(self):
+        self.assert_queued("https://music.apple.com/us/album/111", "album", "111")
+
+    def test_percent_encoded_playlist_link(self):
+        self.assert_queued(
+            "https://music.apple.com/us/playlist/%E2%80%9Cmix%E2%80%9D/"
+            "pl.a3f7a612412545759582b0c9ac082a0d",
+            "playlist",
+            "pl.a3f7a612412545759582b0c9ac082a0d",
+        )
+
+    def test_other_parameter_ending_in_i_is_not_a_track_id(self):
+        self.assert_queued(
+            "https://music.apple.com/us/album/some-album/111?ui=5", "album", "111"
+        )
+
+    def test_first_track_id_wins(self):
+        self.assert_queued(
+            "https://music.apple.com/us/album/some-album/111?i=1&i=2", "track", "1"
+        )
+
+    def test_album_link_with_other_parameter_only(self):
+        self.assert_queued(
+            "https://music.apple.com/us/album/some-album/111?uo=4", "album", "111"
+        )
+
+    def test_korean_slug(self):
+        for url in (
+            "https://music.apple.com/kr/album/%EB%B0%A4%ED%8E%B8%EC%A7%80/1234567890",
+            "https://music.apple.com/kr/album/밤편지/1234567890",
+        ):
+            with self.subTest(url=url):
+                parsing.replace_items([])
+                self.assert_queued(url, "album", "1234567890")
+
+    def test_unsupported_pages_are_not_queued(self):
+        for url in (
+            "https://music.apple.com/us/artist/name/123/see-all?section=top-songs",
+            "https://music.apple.com/library/playlist/p.AbC123",
+            "https://music.apple.com/us/music-video/name/123",
+        ):
+            with self.subTest(url=url):
+                self.assertIsNone(APPLE_MUSIC_URL_REGEX.search(url))
+                self.assertFalse(parse_url(url))
+                self.assertEqual(parsing.get_items(), [])
 
 
 class UnroutableItemTests(unittest.TestCase):
