@@ -455,9 +455,11 @@ async def query_url(q: str | None = None, filters: dict | None = None):
 
     :param q: The search url.
     :param filters: Optional dictionary of filters for the search !! Not Implemented Yet.
-    :return: True or False depending on the result of the search function.
+    :return: True when the URL was queued; None when ``q`` is missing.
     :raises HTTPException: 400 with the reason when the URL is a link
-        OnTheSpot recognises but cannot download or route.
+        OnTheSpot recognises but cannot download or route, when no
+        logged-in service can handle the input (including text that is not
+        a URL), or when no account is logged in.
     """
     result = None
     if q:
@@ -465,6 +467,10 @@ async def query_url(q: str | None = None, filters: dict | None = None):
             result = search(q)
         except UnsupportedItemError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not result:
+            if not account_pool:
+                raise HTTPException(status_code=400, detail="No accounts are logged in. Add or enable an account first.")
+            raise HTTPException(status_code=400, detail="Link not recognised. Paste a full link, starting with https://, from a service you have an account for.")
     return result
 
 
