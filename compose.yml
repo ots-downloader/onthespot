@@ -1,17 +1,21 @@
 services:
   onthespot:
     container_name: onthespot
-    build:
-      context: .
-      dockerfile: Dockerfile
-    pull_policy: build
-    user: "1000:1000"
+    # Pulls the published image. To build from source instead, add
+    # compose.build.yml (see docs/INSTALLATION.md).
+    image: ${ONTHESPOT_IMAGE:-moddroid94/ots-dl:latest}
     # One FastAPI process serves both the API and compiled React application.
     ports:
       - "${ONTHESPOT_WEB_PORT:-6767}:6767"
     environment:
+      # The app runs as this user and group and must be able to write to
+      # the data folders.
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
       ONTHESPOTDIR: /root/.config/onthespot
       ONTHESPOTCACHEDIR: /root/.config/onthespot/cache
+      # Blank means the bgutil-provider container below.
+      ONTHESPOT_BGUTIL_URL: ${ONTHESPOT_BGUTIL_URL:-}
     volumes:
       - "${ONTHESPOT_MUSIC_DIR:-./otsdata/Music}:/root/Music/OnTheSpot"
       - "${ONTHESPOT_VIDEO_DIR:-./otsdata/Videos}:/root/Videos/OnTheSpot"

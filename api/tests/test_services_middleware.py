@@ -142,5 +142,20 @@ class ThreadExceptionHookTests(unittest.TestCase):
             self._run_thread(leave)
 
 
+class BgutilBaseUrlTests(unittest.TestCase):
+    def test_default_points_at_the_compose_service(self):
+        with patch.dict(os.environ):
+            os.environ.pop("ONTHESPOT_BGUTIL_URL", None)
+            self.assertEqual(services_middleware._bgutil_base_url(), "http://bgutil-provider:4416")
+
+    def test_environment_overrides_the_default(self):
+        with patch.dict(os.environ, {"ONTHESPOT_BGUTIL_URL": " http://127.0.0.1:4416 "}):
+            self.assertEqual(services_middleware._bgutil_base_url(), "http://127.0.0.1:4416")
+
+    def test_blank_value_falls_back_to_the_default(self):
+        with patch.dict(os.environ, {"ONTHESPOT_BGUTIL_URL": "   "}):
+            self.assertEqual(services_middleware._bgutil_base_url(), "http://bgutil-provider:4416")
+
+
 if __name__ == "__main__":
     unittest.main()

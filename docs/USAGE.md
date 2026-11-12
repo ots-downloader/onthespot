@@ -56,7 +56,7 @@ account.
 
 > [!WARNING] Spotify has restriced API calls, be careful of the delay time, also some new accounts report to have basically no API call at all, so results may vary.
 
-The companion helper in the `/companion` folder is deprecated and goes away in the next release.
+The companion helper is deprecated, and its `/companion` folder is no longer in this repository.
 
 
 ### Spotify Dev WebAPI credentials
