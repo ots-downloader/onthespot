@@ -25,6 +25,9 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("COPY --from=ui-builder /ui/dist /app/ui/dist", dockerfile)
         self.assertIn("ONTHESPOT_WEBUI_DIST=/app/ui/dist", dockerfile)
         self.assertIn("HEALTHCHECK", dockerfile)
+        self.assertIn('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]', dockerfile)
+        # The entrypoint drops root itself; a USER line would skip the folder fix.
+        self.assertNotIn("USER appusr", dockerfile)
         self.assertIn(
             'CMD ["/app/.venv/bin/python", "-m", "uvicorn", "onthespot.main:app", "--app-dir", "/app/app", '
             '"--host", "0.0.0.0", "--port", "6767"]',
@@ -40,6 +43,16 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("**/.venv", ignored_entries)
         self.assertNotIn("api/uv.lock", ignored_entries)
         self.assertNotIn("ui/package-lock.json", ignored_entries)
+
+    def test_entrypoint_is_a_posix_script_with_lf_endings(self):
+        # A CRLF shebang ("/bin/sh\r") stops the container from starting.
+        entrypoint = (REPOSITORY_ROOT / "docker" / "entrypoint.sh").read_bytes()
+        attributes = (REPOSITORY_ROOT / ".gitattributes").read_text(encoding="utf-8")
+
+        self.assertTrue(entrypoint.startswith(b"#!/bin/sh\n"))
+        self.assertNotIn(b"\r", entrypoint)
+        self.assertIn(b'exec setpriv --reuid "$PUID" --regid "$PGID" --clear-groups "$@"', entrypoint)
+        self.assertIn("*.sh text eol=lf", attributes.splitlines())
 
 
 if __name__ == "__main__":

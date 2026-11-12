@@ -33,8 +33,6 @@ RUN groupadd -g 1000 appgroup && \
 
 RUN chown -R appusr:appgroup /root
 
-USER appusr
-
 WORKDIR /app
 
 
@@ -49,9 +47,20 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ONTHESPOTDIR=/root/.config/onthespot \
     ONTHESPOTCACHEDIR=/root/.config/onthespot/cache \
     ONTHESPOT_WEBUI_DIST=/app/ui/dist \
-    PATH=/app/.venv/bin:$PATH
+    PATH=/app/.venv/bin:$PATH \
+    HOME=/root
+
+# The entrypoint makes the data folders writable as root, then runs CMD as
+# PUID:PGID (default 1000:1000). See docker/entrypoint.sh.
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 EXPOSE 6767 6768
 
+# The image has no curl, so the healthcheck asks the API with Python. It
+# skips any proxy, so HTTP_PROXY in the container cannot send it elsewhere.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD ["/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:6767/system/rate-limit', timeout=4)"]
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 CMD ["/app/.venv/bin/python", "-m", "uvicorn", "onthespot.main:app", "--app-dir", "/app/app", "--host", "0.0.0.0", "--port", "6767"]
