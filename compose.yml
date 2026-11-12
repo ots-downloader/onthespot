@@ -1,8 +1,8 @@
 services:
   onthespot:
     container_name: onthespot
-    # Pulls the published image. In a clone of the repository,
-    # compose.override.yml is loaded too and builds from source instead.
+    # Pulls the published image. To build from source instead, add
+    # compose.build.yml (see docs/INSTALLATION.md).
     image: ${ONTHESPOT_IMAGE:-moddroid94/ots-dl:latest}
     # One FastAPI process serves both the API and compiled React application.
     ports:

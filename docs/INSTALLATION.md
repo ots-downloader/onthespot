@@ -104,18 +104,21 @@ development build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
 
 ### Build the image from source
 
-A clone of the repository has a `compose.override.yml` file, which Compose
-loads by itself, so the usual command builds the image from your checkout:
+Clone the repository and name `compose.build.yml` together with `compose.yml`:
 
 ```bash
 git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
 cd onthespot
-docker compose up -d --build
+docker compose -f compose.yml -f compose.build.yml up -d --build
 ```
 
-Building needs BuildKit, the default in Docker Engine 23+ and Compose v2. To
-run the published image from a clone instead, use
-`docker compose -f compose.yml up -d`.
+Building needs BuildKit, the default in Docker Engine 23+ and Compose v2.
+
+> [!WARNING]
+> `docker compose up -d --build` with no `-f` flags no longer builds from
+> source. `compose.yml` alone has no build settings, so that command runs the
+> published image and prints no error. If you built from a clone before this
+> change, use the command above from now on.
 
 ## Unraid
 
@@ -206,8 +209,11 @@ If you build from source, pull the branch and rebuild instead:
 
 ```bash
 git pull --ff-only
-docker compose up -d --build
+docker compose -f compose.yml -f compose.build.yml up -d --build
 ```
+
+The two `-f` flags are needed. Without them the command runs the published
+image and does not build your checkout.
 
 The bundled application version replaces stale version values from older
 config volumes during startup.

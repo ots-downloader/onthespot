@@ -1,0 +1,10 @@
+# Builds the image from source. Compose does not load this file by itself;
+# name it together with compose.yml:
+#   docker compose -f compose.yml -f compose.build.yml up -d --build
+services:
+  onthespot:
+    image: onthespot:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: build

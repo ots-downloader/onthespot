@@ -17,7 +17,7 @@ class DeploymentContractTests(unittest.TestCase):
 
     def test_compose_pulls_by_default_and_builds_on_request(self):
         compose = (REPOSITORY_ROOT / "compose.yml").read_text(encoding="utf-8")
-        compose_override = (REPOSITORY_ROOT / "compose.override.yml").read_text(encoding="utf-8")
+        compose_build = (REPOSITORY_ROOT / "compose.build.yml").read_text(encoding="utf-8")
 
         self.assertIn("image: ${ONTHESPOT_IMAGE:-moddroid94/ots-dl:latest}", compose)
         self.assertNotIn("build:", compose)
@@ -25,9 +25,9 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertNotIn("user:", compose)
         self.assertIn("PUID: ${PUID:-1000}", compose)
         self.assertIn("PGID: ${PGID:-1000}", compose)
-        self.assertIn("image: onthespot:local", compose_override)
-        self.assertIn("build:", compose_override)
-        self.assertIn("pull_policy: build", compose_override)
+        self.assertIn("image: onthespot:local", compose_build)
+        self.assertIn("build:", compose_build)
+        self.assertIn("pull_policy: build", compose_build)
 
     def test_image_builds_ui_and_serves_it_from_fastapi(self):
         dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
