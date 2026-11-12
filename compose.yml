@@ -14,7 +14,7 @@ services:
       PGID: ${PGID:-1000}
       ONTHESPOTDIR: /root/.config/onthespot
       ONTHESPOTCACHEDIR: /root/.config/onthespot/cache
-      # Blank means the bgutil-provider service below.
+      # Blank means the bgutil-provider container below.
       ONTHESPOT_BGUTIL_URL: ${ONTHESPOT_BGUTIL_URL:-}
     volumes:
       - "${ONTHESPOT_MUSIC_DIR:-./otsdata/Music}:/root/Music/OnTheSpot"

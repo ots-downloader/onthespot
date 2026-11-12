@@ -75,7 +75,7 @@ Set these in `.env` as well:
 | `PUID` | `1000` | user ID the app runs as; it must be able to write to the data folders |
 | `PGID` | `1000` | group ID the app runs as |
 | `ONTHESPOT_IMAGE` | `moddroid94/ots-dl:latest` | image to run |
-| `ONTHESPOT_BGUTIL_URL` | blank | URL of the bgutil PO token server for YouTube Music; blank means the `bgutil-provider` service in `compose.yml` |
+| `ONTHESPOT_BGUTIL_URL` | blank | URL of the bgutil PO token server for YouTube Music; blank means the `bgutil-provider` container that `compose.yml` starts |
 
 On each start the container checks that the app user (`PUID:PGID`) can write
 to each data folder. A folder it can already write to is left alone. If it
@@ -87,6 +87,10 @@ compose file, or with `docker run --user`, skips this step.
 
 With rootless Docker or Podman, set `PUID=0` and `PGID=0`, because root in the
 container is already your own user.
+
+`docker compose exec onthespot <command>` runs as root. If the command writes
+to the data folders, add `--user 1000:1000` (or your `PUID:PGID`) after `exec`,
+so the app can still change the files it makes.
 
 ### Images
 
