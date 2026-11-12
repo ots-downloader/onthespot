@@ -1145,7 +1145,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
 
                             <div>
                               <p className="font-semibold text-neutral-900 dark:text-white">1. Create a temporary yt-dlp environment</p>
-                              <code className="mt-1 block overflow-x-auto whitespace-pre-wrap rounded-md bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
+                              <code className="mt-1 block overflow-x-auto whitespace-pre-wrap rounded-md bg-neutral-900 dark:bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
                                 {youtubeExportInstallCommand}
                               </code>
                               <button
@@ -1159,7 +1159,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
 
                             <div>
                               <p className="font-semibold text-neutral-900 dark:text-white">2. Export the browser cookies</p>
-                              <code className="mt-1 block overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
+                              <code className="mt-1 block overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-neutral-900 dark:bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
                                 {youtubeExportCommand}
                               </code>
                               <button
@@ -1207,7 +1207,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                               <p className="text-neutral-600 dark:text-neutral-300">
                                 OnTheSpot now has its private filtered copy. Run this in PowerShell to delete the exported cookie file and the temporary yt-dlp environment from your computer.
                               </p>
-                              <code className="block overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
+                              <code className="block overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-neutral-900 dark:bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
                                 {youtubeCleanupCommand}
                               </code>
                               <button
