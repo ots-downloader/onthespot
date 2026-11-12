@@ -30,11 +30,13 @@ serves both the API and the compiled Web UI on port `6767`.
 Quick start with Docker Compose:
 
 ```bash
-git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
+mkdir onthespot
 cd onthespot
-cp .env.example .env
-docker compose up -d --build
+curl -LO https://raw.githubusercontent.com/ots-downloader/onthespot/fastapi-dev/compose.yml
+docker compose up -d
 ```
+
+In Windows PowerShell, type `curl.exe` instead of `curl`.
 
 Open `http://127.0.0.1:6767`, or the mapped address of the Docker/Unraid host.
 See the installation guide before deploying so media, configuration, account
