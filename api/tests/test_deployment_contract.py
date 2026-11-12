@@ -32,7 +32,7 @@ class DeploymentContractTests(unittest.TestCase):
     def test_image_builds_ui_and_serves_it_from_fastapi(self):
         dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-        self.assertIn("FROM node:22-alpine AS ui-builder", dockerfile)
+        self.assertIn("FROM --platform=$BUILDPLATFORM node:22-alpine AS ui-builder", dockerfile)
         self.assertIn("RUN npm install --no-audit --no-fund", dockerfile)
         self.assertIn("RUN npm run build", dockerfile)
         self.assertIn("uv sync --no-install-project --no-dev", dockerfile)

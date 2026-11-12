@@ -1,6 +1,8 @@
 # Build the React application first. Its API base is deliberately relative so
 # a browser always talks to the same host that served the UI (including Unraid).
-FROM node:22-alpine AS ui-builder
+# The output is static files, so build it once on the build machine's own
+# platform rather than again under emulation for each target platform.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS ui-builder
 
 WORKDIR /ui
 COPY ui/package*.json ./

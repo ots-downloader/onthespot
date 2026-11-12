@@ -1,32 +1,84 @@
 name: Docker CI
 
+# Push to fastapi-dev, or a manual run: GHCR :edge only.
+# Published release: the release's own tag on GHCR, and on Docker Hub when
+# the DOCKERHUB_USERNAME variable is set; :latest as well, unless it is a
+# pre-release. Forks without the variable publish to their own GHCR only.
+
 on:
   release:
     types: [published]
+  push:
+    branches: [fastapi-dev]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-ci-${{ github.event_name }}-${{ github.ref }}
+  # A newer push to fastapi-dev cancels an older edge build. A manual run or
+  # a release build is never cancelled once it has started.
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   docker:
     runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_ENABLED: ${{ vars.DOCKERHUB_USERNAME != '' && github.event_name == 'release' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Get version
-        uses: reecetech/version-increment@2024.10.1
-        id: version
-        with:
-          scheme: conventional_commits
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # GHCR image names must be lowercase.
+      - name: Name the GHCR image
+        id: ghcr
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/onthespot" >> "$GITHUB_OUTPUT"
 
       - name: Login to Docker Hub
+        if: env.DOCKERHUB_ENABLED == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ steps.ghcr.outputs.image }}
+            name=moddroid94/ots-dl,enable=${{ env.DOCKERHUB_ENABLED }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=edge,enable=${{ github.event_name != 'release' }}
+            type=raw,value=${{ github.event.release.tag_name }},enable=${{ github.event_name == 'release' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: moddroid94/ots-dl:latest,moddroid94/ots-dl:${{ steps.version.outputs.current-v-version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          # A release runs on a tag ref, and a cache written there is one no
+          # later run can read, so a release only reads the cache.
+          cache-to: ${{ github.event_name != 'release' && 'type=gha,mode=max' || '' }}
