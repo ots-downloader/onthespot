@@ -30,6 +30,7 @@ import {
 import React, { useEffect, useState } from "react";
 import { getTargetBackendUrl } from "../lib/api";
 import { getServiceInfo } from "../lib/catalogServices";
+import { downloadQueueFailures } from "../lib/queueExport";
 import { DownloadProfile, DownloadQueueItem, QueueBatchAction, QueueItemStatus } from "../types";
 import { PageHeader } from "./PageHeader";
 
@@ -95,6 +96,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
     Paused: queue.filter((i) => i.item_status === "Paused").length,
     Downloaded: queue.filter((i) => i.item_status === "Downloaded" || i.item_status === "Already Exists").length,
     Failed: queue.filter((i) => i.item_status === "Failed").length,
+    Unavailable: queue.filter((i) => i.item_status === "Unavailable").length,
     Cancelled: queue.filter((i) => i.item_status === "Cancelled").length,
   };
 
@@ -152,6 +154,8 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
         return <Badge variant="success" label={compact ? "Ready" : status} />;
       case "Failed":
         return <Badge variant="error" label="Failed" />;
+      case "Unavailable":
+        return <Badge variant="warning" label="Unavailable" />;
       case "Paused":
         return <Badge variant="warning" label="Paused" />;
       case "Waiting":
@@ -170,6 +174,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
     { id: "Paused", label: "Paused", count: counts.Paused },
     { id: "Downloaded", label: "Downloaded", count: counts.Downloaded },
     { id: "Failed", label: "Failed", count: counts.Failed },
+    { id: "Unavailable", label: "Unavailable", count: counts.Unavailable },
     { id: "Cancelled", label: "Cancelled", count: counts.Cancelled },
   ];
 
@@ -239,48 +244,62 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
           </>
         }
         bottomContent={
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {/* Astryx TabList for filtering */}
-            <div className="overflow-x-auto h-8">
-              <TabList
-                value={filter}
-                onChange={(val) => setFilter(val)}
-                size="sm"
-              >
-                {filterTabs.map((tab) => (
-                  <Tab
-                    key={tab.id}
-                    value={tab.id}
-                    label={tab.label}
-                    endContent={
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono">
-                        {tab.count}
-                      </span>
-                    }
-                  />
-                ))}
-              </TabList>
-            </div>
+          <>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Astryx TabList for filtering */}
+              <div className="overflow-x-auto h-8">
+                <TabList
+                  value={filter}
+                  onChange={(val) => setFilter(val)}
+                  size="sm"
+                >
+                  {filterTabs.map((tab) => (
+                    <Tab
+                      key={tab.id}
+                      value={tab.id}
+                      label={tab.label}
+                      endContent={
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono">
+                          {tab.count}
+                        </span>
+                      }
+                    />
+                  ))}
+                </TabList>
+              </div>
 
-            {/* Select All toggle button */}
-            {filteredItems.length > 0 && (
-              <button
-                type="button"
-                onClick={toggleSelectAll}
-                className="text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 flex items-center gap-1.5 shrink-0 px-2 py-1 cursor-pointer transition"
-                id="btn-queue-select-all"
-              >
-                {selectedIds.length === filteredItems.length ? (
-                  <CheckSquare className="w-3.5 h-3.5 text-neutral-900 dark:text-neutral-100" />
-                ) : (
-                  <Square className="w-3.5 h-3.5" />
-                )}
-                <span>
-                  {selectedIds.length > 0 ? `${selectedIds.length} Selected` : "Select All"}
-                </span>
-              </button>
+              {/* Select All toggle button */}
+              {filteredItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 flex items-center gap-1.5 shrink-0 px-2 py-1 cursor-pointer transition"
+                  id="btn-queue-select-all"
+                >
+                  {selectedIds.length === filteredItems.length ? (
+                    <CheckSquare className="w-3.5 h-3.5 text-neutral-900 dark:text-neutral-100" />
+                  ) : (
+                    <Square className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {selectedIds.length > 0 ? `${selectedIds.length} Selected` : "Select All"}
+                  </span>
+                </button>
+              )}
+            </div>
+            {counts.Failed + counts.Unavailable > 0 && (
+              <div className="mt-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  label={`Export Failed / Unavailable (${counts.Failed + counts.Unavailable})`}
+                  icon={<FileDown className="w-3.5 h-3.5" />}
+                  onClick={() => downloadQueueFailures(queue)}
+                  id="btn-export-queue-failures"
+                />
+              </div>
             )}
-          </div>
+          </>
         }
       />
 

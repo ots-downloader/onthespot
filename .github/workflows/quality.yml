@@ -86,6 +86,9 @@ jobs:
       - name: Install locked dependencies
         run: npm install
 
+      - name: Test frontend
+        run: npm test
+
       - name: Type-check frontend
         run: npm run lint
 
