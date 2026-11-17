@@ -30,11 +30,13 @@ serves both the API and the compiled Web UI on port `6767`.
 Quick start with Docker Compose:
 
 ```bash
-git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
+mkdir onthespot
 cd onthespot
-cp .env.example .env
-docker compose up -d --build
+curl -LO https://raw.githubusercontent.com/ots-downloader/onthespot/fastapi-dev/compose.yml
+docker compose up -d
 ```
+
+In Windows PowerShell, type `curl.exe` instead of `curl`.
 
 Open `http://127.0.0.1:6767`, or the mapped address of the Docker/Unraid host.
 See the installation guide before deploying so media, configuration, account
@@ -44,7 +46,6 @@ Documentation:
 
 1. [**Installation Guide**](docs/INSTALLATION.md)
 2. [**Basic Usage Instructions**](docs/USAGE.md)
-3. [**Release Feature Matrix**](docs/FEATURE_MATRIX.md)
 
 ### Adding a Spotify account
 
@@ -54,8 +55,8 @@ a link. On any device, such as your phone or laptop, open
 https://spotify.com/pair, enter the code, and approve the sign-in. This works
 in Docker, on Unraid, and over Tailscale or any other remote setup. It needs no
 open port, no helper script, and no Spotify developer app. The account must be
-Spotify Premium. The [Spotify Connect companion](companion/README.md) is
-deprecated and goes away in the next release.
+Spotify Premium. The older Spotify Connect companion is deprecated,
+and its helper script is no longer in this repository.
 
 > [!CAUTION]
 > Currently 1 user has reported having their Spotify account locked, the account was returned to them by emailing support. This notice will be updated if any further cases come to our attention.

@@ -15,16 +15,33 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("ONTHESPOTCACHEDIR: /root/.config/onthespot/cache", compose)
         self.assertNotIn("network_mode: host", compose)
 
+    def test_compose_pulls_by_default_and_builds_on_request(self):
+        compose = (REPOSITORY_ROOT / "compose.yml").read_text(encoding="utf-8")
+        compose_build = (REPOSITORY_ROOT / "compose.build.yml").read_text(encoding="utf-8")
+
+        self.assertIn("image: ${ONTHESPOT_IMAGE:-moddroid94/ots-dl:latest}", compose)
+        self.assertNotIn("build:", compose)
+        # The entrypoint must start as root to make the data folders writable.
+        self.assertNotIn("user:", compose)
+        self.assertIn("PUID: ${PUID:-1000}", compose)
+        self.assertIn("PGID: ${PGID:-1000}", compose)
+        self.assertIn("image: onthespot:local", compose_build)
+        self.assertIn("build:", compose_build)
+        self.assertIn("pull_policy: build", compose_build)
+
     def test_image_builds_ui_and_serves_it_from_fastapi(self):
         dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-        self.assertIn("FROM node:22-alpine AS ui-builder", dockerfile)
+        self.assertIn("FROM --platform=$BUILDPLATFORM node:22-alpine AS ui-builder", dockerfile)
         self.assertIn("RUN npm install --no-audit --no-fund", dockerfile)
         self.assertIn("RUN npm run build", dockerfile)
         self.assertIn("uv sync --no-install-project --no-dev", dockerfile)
         self.assertIn("COPY --from=ui-builder /ui/dist /app/ui/dist", dockerfile)
         self.assertIn("ONTHESPOT_WEBUI_DIST=/app/ui/dist", dockerfile)
         self.assertIn("HEALTHCHECK", dockerfile)
+        self.assertIn('ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]', dockerfile)
+        # The entrypoint drops root itself; a USER line would skip the folder fix.
+        self.assertNotIn("USER appusr", dockerfile)
         self.assertIn(
             'CMD ["/app/.venv/bin/python", "-m", "uvicorn", "onthespot.main:app", "--app-dir", "/app/app", '
             '"--host", "0.0.0.0", "--port", "6767"]',
@@ -40,6 +57,16 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("**/.venv", ignored_entries)
         self.assertNotIn("api/uv.lock", ignored_entries)
         self.assertNotIn("ui/package-lock.json", ignored_entries)
+
+    def test_entrypoint_is_a_posix_script_with_lf_endings(self):
+        # A CRLF shebang ("/bin/sh\r") stops the container from starting.
+        entrypoint = (REPOSITORY_ROOT / "docker" / "entrypoint.sh").read_bytes()
+        attributes = (REPOSITORY_ROOT / ".gitattributes").read_text(encoding="utf-8")
+
+        self.assertTrue(entrypoint.startswith(b"#!/bin/sh\n"))
+        self.assertNotIn(b"\r", entrypoint)
+        self.assertIn(b'exec setpriv --reuid "$PUID" --regid "$PGID" --clear-groups "$@"', entrypoint)
+        self.assertIn("*.sh text eol=lf", attributes.splitlines())
 
 
 if __name__ == "__main__":

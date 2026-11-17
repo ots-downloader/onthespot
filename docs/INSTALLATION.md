@@ -10,25 +10,21 @@ Requirements:
 - Docker Engine or Docker Desktop with Docker Compose v2
 - Enough free space for the selected media and config folders
 
-Clone the repository and select this branch:
+Make a folder, download `compose.yml` into it, and start:
 
 ```bash
-git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
+mkdir onthespot
 cd onthespot
-```
-
-Copy the example environment file, review the paths, then build and start:
-
-> [!WARNING] 
-> You will need to create at least the `otsdata` folder to avoid permission errors
-
-```bash
-cp .env.example .env
-docker compose up -d --build
+curl -LO https://raw.githubusercontent.com/ots-downloader/onthespot/fastapi-dev/compose.yml
+docker compose up -d
 docker compose ps
 ```
 
-PowerShell uses `Copy-Item .env.example .env` instead of `cp`.
+In Windows PowerShell, type `curl.exe` instead of `curl`.
+
+Compose pulls the published image. On first start the container makes the
+`otsdata` folders next to `compose.yml` and makes sure user and group `1000`
+can write to them. A `.env` file is optional; every setting has a default.
 
 Open `http://127.0.0.1:6767` on the Docker host, or
 `http://SERVER-IP:6767` from another device on the same private network. API
@@ -48,10 +44,16 @@ docker compose down
 
 ### Persistent folders
 
-The default `.env.example` stores data under `./otsdata`:
+By default, data is stored under `./otsdata`. To use other folders, create a
+`.env` file next to `compose.yml` and set the paths there.
+[`.env.example`](../.env.example) lists every value. To start from it, download
+it as `.env`:
 
-> [!WARNING] 
-> You will need to create at least the `otsdata` folder to avoid permission errors
+```bash
+curl -L -o .env https://raw.githubusercontent.com/ots-downloader/onthespot/fastapi-dev/.env.example
+```
+
+The folder variables are:
 
 | Variable | Container destination | Contents |
 | --- | --- | --- |
@@ -64,18 +66,77 @@ Back up the configured host folders, especially `ONTHESPOT_CONFIG_DIR`. API
 credentials and account sessions are stored in that private folder, not in the
 Git repository or Docker image.
 
+### Other settings
+
+Set these in `.env` as well:
+
+| Variable | Default | Use |
+| --- | --- | --- |
+| `PUID` | `1000` | user ID the app runs as; it must be able to write to the data folders |
+| `PGID` | `1000` | group ID the app runs as |
+| `ONTHESPOT_IMAGE` | `moddroid94/ots-dl:latest` | image to run |
+| `ONTHESPOT_BGUTIL_URL` | blank | URL of the bgutil PO token server for YouTube Music; blank means the `bgutil-provider` container that `compose.yml` starts |
+
+On each start the container checks that the app user (`PUID:PGID`) can write
+to each data folder. A folder it can already write to is left alone. If it
+cannot, the container changes the owner of the config folder, with its
+contents, and of the top music and video folders only, never the files inside
+your library. If that fails, for example on some network shares, the container
+logs a warning and starts anyway. A container started with `user:` in your own
+compose file, or with `docker run --user`, skips this step.
+
+With rootless Docker or Podman, set `PUID=0` and `PGID=0`, because root in the
+container is already your own user.
+
+`docker compose exec onthespot <command>` runs as root. If the command writes
+to the data folders, add `--user 1000:1000` (or your `PUID:PGID`) after `exec`,
+so the app can still change the files it makes.
+
+### Images
+
+| Image | Tags |
+| --- | --- |
+| `moddroid94/ots-dl` (Docker Hub) | the version on each release; `latest` on each full release (not a pre-release) |
+| `ghcr.io/ots-downloader/onthespot` | the version on each release; `latest` on each full release (not a pre-release); `edge` on each push to `fastapi-dev` |
+
+Both are built for `linux/amd64` and `linux/arm64`. To run the newest
+development build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
+
+### Build the image from source
+
+Clone the repository and name `compose.build.yml` together with `compose.yml`:
+
+```bash
+git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
+cd onthespot
+docker compose -f compose.yml -f compose.build.yml up -d --build
+```
+
+Building needs BuildKit, the default in Docker Engine 23+ and Compose v2.
+
+> [!WARNING]
+> `docker compose up -d --build` with no `-f` flags no longer builds from
+> source. `compose.yml` alone has no build settings, so that command runs the
+> published image and prints no error. If you built from a clone before this
+> change, use the command above from now on.
+
 ## Unraid
 
-Use absolute Unraid paths in `.env`, for example:
+Put `compose.yml` in its own folder as above, and use absolute Unraid paths in
+a `.env` file next to it, for example:
 
 ```dotenv
+PUID=99
+PGID=100
 ONTHESPOT_WEB_PORT=6769
 ONTHESPOT_MUSIC_DIR=/mnt/user/Music/OnTheSpot
 ONTHESPOT_VIDEO_DIR=/mnt/user/Videos/OnTheSpot
 ONTHESPOT_CONFIG_DIR=/mnt/user/appdata/onthespot
 ```
 
-Then run `docker compose up -d --build` and open
+`PUID=99` and `PGID=100` are Unraid's usual `nobody:users`.
+
+Then run `docker compose up -d` and open
 `http://UNRAID-IP:6769`. The default Compose deployment uses bridge networking
 and exposes only the web port.
 
@@ -137,12 +198,22 @@ frontend port.
 
 ## Updating
 
-Preserve the configured volume folders, pull the branch, and rebuild:
+Keep the configured data folders, pull the new image, and restart:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+If you build from source, pull the branch and rebuild instead:
 
 ```bash
 git pull --ff-only
-docker compose up -d --build
+docker compose -f compose.yml -f compose.build.yml up -d --build
 ```
+
+The two `-f` flags are needed. Without them the command runs the published
+image and does not build your checkout.
 
 The bundled application version replaces stale version values from older
 config volumes during startup.
@@ -152,6 +223,7 @@ config volumes during startup.
 | Symptom | Check |
 | --- | --- |
 | Container is unhealthy | `docker compose logs onthespot`; confirm port 6767 is not already in use and the config folder is writable |
+| Permission errors in the data folders | `docker compose logs onthespot` for a "not writable" warning; set `PUID` and `PGID` to the host user that owns the folders |
 | UI opens but requests fail | Use the same origin that served the page; do not configure a separate API URL for production |
 | Spotify worker is not visible | Use **Sign in with Spotify** in Accounts; enter the code at spotify.com/pair on any device |
 | Playlist OAuth returns elsewhere | Save the exact callback currently shown in Playlist sorting and in the Spotify Developer Dashboard |

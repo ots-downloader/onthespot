@@ -36,6 +36,13 @@ from .youtube_auth import is_youtube_url, youtube_ydl_options
 
 logger = get_logger("services_middleware")
 
+DEFAULT_BGUTIL_URL = "http://bgutil-provider:4416"
+
+
+def _bgutil_base_url():
+    """Return the bgutil PO token server URL. ONTHESPOT_BGUTIL_URL overrides the default."""
+    return os.environ.get("ONTHESPOT_BGUTIL_URL", "").strip() or DEFAULT_BGUTIL_URL
+
 
 def _download_http_with_resume(item: QueueItem, url, temp_path, headers=None):
     """Stream a URL into *temp_path*, continuing a partial file when possible."""
@@ -330,7 +337,7 @@ def download_via_ytdlp_audio(item: QueueItem, item_metadata, service, item_id, t
                 "player_client": ["mweb", "tv"],
             },
             "youtubepot-bgutilhttp": {
-                "base_url": ["http://bgutil-provider:4416"],
+                "base_url": [_bgutil_base_url()],
             },
         }
         ydl_opts.update(youtube_ydl_options())
