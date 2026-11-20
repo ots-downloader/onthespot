@@ -1,7 +1,4 @@
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
-import { ProgressBar } from "@astryxdesign/core/ProgressBar";
+import { Badge, Button, Card, ProgressBar } from "./ui";
 import {
   Activity,
   CheckCircle2,
@@ -108,7 +105,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
       {/* Page Header */}
       <PageHeader
         id="diagnostics-page-header"
-        icon={<Activity className="w-5 h-5 text-emerald-500" />}
+        icon={<Activity className="w-5 h-5 text-accent" />}
         title="System Diagnostics & Engine Telemetry"
         badge={{
           label: data?.backend.status === "online" ? "FastAPI Online" : "Disconnected",
@@ -117,7 +114,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
         description="Live status for background thread workers, FFmpeg binary, disk headroom, API rate limits, and memory utilization"
         actions={
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-neutral-400 font-mono hidden sm:inline">
+            <span className="text-[11px] text-fg-muted font-mono hidden sm:inline">
               Updated {lastRefreshed.toLocaleTimeString()}
             </span>
             <Button
@@ -136,24 +133,24 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
       {data && (
         <div className="space-y-6">
           {/* Real-time Subsystem Status Bar */}
-          <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-900/60 p-4">
+          <div className="rounded-xl border border-line bg-sunken p-4">
             <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-xs font-semibold">
                   {wsConnected ? (
-                    <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <span className="flex items-center gap-1.5 text-success-fg">
                       <Wifi className="w-4 h-4" />
                       Daemon Connected
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1.5 text-amber-500">
+                    <span className="flex items-center gap-1.5 text-warning-fg">
                       <WifiOff className="w-4 h-4" />
                       Connecting…
                     </span>
                   )}
                 </div>
-                <span className="text-neutral-300 dark:text-neutral-700">•</span>
-                <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 truncate max-w-xs" title={targetApi}>
+                <span className="text-fg-subtle">•</span>
+                <span className="text-xs font-mono text-fg-muted truncate max-w-xs" title={targetApi}>
                   {targetApi}
                 </span>
               </div>
@@ -161,8 +158,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               {/* Status Chips Row */}
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {/* 1. OnTheSpot Core */}
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 font-medium">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-success/30 bg-success-subtle text-success-fg font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-success-fg" />
                   <span>OTS Core {data.backend.version}</span>
                 </div>
 
@@ -170,10 +167,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <div
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-medium ${
                     data.spotify_api.connected && !data.spotify_api.rate_limited
-                      ? "border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
+                      ? "border-success/30 bg-success-subtle text-success-fg"
                       : data.spotify_api.rate_limited
-                      ? "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300"
-                      : "border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
+                      ? "border-warning/30 bg-warning-subtle text-warning-fg"
+                      : "border-line bg-raised text-fg-muted"
                   }`}
                 >
                   <Wifi className="w-3.5 h-3.5" />
@@ -184,14 +181,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <div
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-medium ${
                     data.spotify_api.connect_service?.running
-                      ? "border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
-                      : "border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"
+                      ? "border-success/30 bg-success-subtle text-success-fg"
+                      : "border-line bg-raised text-fg-muted"
                   }`}
                 >
                   {data.spotify_api.connect_service?.running ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-success-fg" />
                   ) : (
-                    <WifiOff className="w-3.5 h-3.5 text-neutral-400" />
+                    <WifiOff className="w-3.5 h-3.5 text-fg-subtle" />
                   )}
                   <span>
                     Spotify Connect:{" "}
@@ -205,8 +202,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 <div
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-medium ${
                     data.rate_limit?.active || data.spotify_api.rate_limited
-                      ? "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300"
-                      : "border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
+                      ? "border-warning/30 bg-warning-subtle text-warning-fg"
+                      : "border-line bg-raised text-fg-muted"
                   }`}
                 >
                   <span>
@@ -217,7 +214,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 </div>
 
                 {newVersion && (
-                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+                  <span className="flex items-center gap-1 text-success-fg font-bold">
                     <Sparkles className="w-3.5 h-3.5" /> Update Ready
                   </span>
                 )}
@@ -237,8 +234,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               <Card padding={4} elevation="low">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-emerald-500" />
-                    <h4 className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                    <Zap className="w-4 h-4 text-accent" />
+                    <h4 className="text-xs font-semibold text-fg">
                       Download Queue
                     </h4>
                   </div>
@@ -250,20 +247,20 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
 
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Active Streams:</span>
-                    <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                    <span className="text-fg-muted">Active Streams:</span>
+                    <span className="font-mono font-medium text-success-fg">
                       {data.queue.statuses["Downloading"] || 0} downloading
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Pending in Queue:</span>
-                    <span className="font-mono text-neutral-700 dark:text-neutral-300">
+                    <span className="text-fg-muted">Pending in Queue:</span>
+                    <span className="font-mono text-fg">
                       {data.queue.pending ?? (data.queue.statuses["Waiting"] || 0)} pending
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Metadata Parsing:</span>
-                    <span className="font-mono text-neutral-500">
+                    <span className="text-fg-muted">Metadata Parsing:</span>
+                    <span className="font-mono text-fg-muted">
                       {data.queue.parsing ?? 0} parsing
                     </span>
                   </div>
@@ -274,20 +271,20 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               <Card padding={4} elevation="low">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <HardDrive className="w-4 h-4 text-blue-500" />
-                    <h4 className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                    <HardDrive className="w-4 h-4 text-info" />
+                    <h4 className="text-xs font-semibold text-fg">
                       Storage & Disk Free
                     </h4>
                   </div>
-                  <span className="font-mono text-xs font-medium text-neutral-900 dark:text-neutral-100">
+                  <span className="font-mono text-xs font-medium text-fg">
                     {formatBytes(data.disk.free)} free
                   </span>
                 </div>
 
                 <div className="space-y-2 text-xs">
-                  <div className="flex justify-between text-neutral-500">
+                  <div className="flex justify-between text-fg-muted">
                     <span>Capacity:</span>
-                    <span className="font-mono text-neutral-700 dark:text-neutral-300">
+                    <span className="font-mono text-fg">
                       {formatBytes(data.disk.used)} / {formatBytes(data.disk.total)}
                     </span>
                   </div>
@@ -298,9 +295,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     isLabelHidden={true}
                     variant={diskUsedPercent > 90 ? "error" : "accent"}
                   />
-                  <div className="flex justify-between text-neutral-500 pt-0.5">
+                  <div className="flex justify-between text-fg-muted pt-0.5">
                     <span>Disk Headroom:</span>
-                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                    <span className="font-mono text-success-fg">
                       {100 - diskUsedPercent}% available
                     </span>
                   </div>
@@ -311,8 +308,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               <Card padding={4} elevation="low">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Server className="w-4 h-4 text-purple-500" />
-                    <h4 className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                    <Server className="w-4 h-4 text-fg-subtle" />
+                    <h4 className="text-xs font-semibold text-fg">
                       FFmpeg Audio Transcoder
                     </h4>
                   </div>
@@ -324,17 +321,17 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
 
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Binary Path:</span>
+                    <span className="text-fg-muted">Binary Path:</span>
                     <span
-                      className="font-mono text-neutral-700 dark:text-neutral-300 truncate max-w-[140px]"
+                      className="font-mono text-fg-muted truncate max-w-[140px]"
                       title={data.ffmpeg.path}
                     >
                       {data.ffmpeg.path || "/usr/bin/ffmpeg"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Version:</span>
-                    <span className="font-mono text-neutral-500">
+                    <span className="text-fg-muted">Version:</span>
+                    <span className="font-mono text-fg-muted">
                       {data.ffmpeg.version || "nd"}
                     </span>
                   </div>
@@ -346,20 +343,20 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               <Card padding={4} elevation="low">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Cpu className="w-4 h-4 text-amber-500" />
-                    <h4 className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                    <Cpu className="w-4 h-4 text-warning" />
+                    <h4 className="text-xs font-semibold text-fg">
                       Process Memory (RSS)
                     </h4>
                   </div>
-                  <span className="font-mono text-xs font-medium text-neutral-900 dark:text-neutral-100">
+                  <span className="font-mono text-xs font-medium text-fg">
                      MB
                   </span>
                 </div>
 
                 <div className="space-y-2 text-xs">
-                  <div className="flex justify-between text-neutral-500">
+                  <div className="flex justify-between text-fg-muted">
                     <span>Heap Allocation:</span>
-                    <span className="font-mono text-neutral-700 dark:text-neutral-300">
+                    <span className="font-mono text-fg">
                       MB
                     </span>
                   </div>
@@ -370,9 +367,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     isLabelHidden={true}
                     variant={heapPercent > 85 ? "error" : "accent"}
                   />
-                  <div className="flex justify-between text-neutral-500 pt-0.5">
+                  <div className="flex justify-between text-fg-muted pt-0.5">
                     <span>Memory Pressure:</span>
-                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                    <span className="font-mono text-success-fg">
                       {heapPercent < 80 ? "Healthy (< 80%)" : "Elevated"}
                     </span>
                   </div>
@@ -383,8 +380,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               <Card padding={4} elevation="low">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Database className="w-4 h-4 text-emerald-500" />
-                    <h4 className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                    <Database className="w-4 h-4 text-accent" />
+                    <h4 className="text-xs font-semibold text-fg">
                       Metadata & API Cache
                     </h4>
                   </div>
@@ -392,9 +389,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 </div>
 
                 <div className="space-y-2 text-xs">
-                  <div className="flex justify-between text-neutral-500">
+                  <div className="flex justify-between text-fg-muted">
                     <span>Hits vs Misses:</span>
-                    <span className="font-mono text-neutral-700 dark:text-neutral-300">
+                    <span className="font-mono text-fg">
                       
                     </span>
                   </div>
@@ -405,9 +402,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                     isLabelHidden={true}
                     variant="success"
                   />
-                  <div className="flex justify-between text-neutral-500 pt-0.5">
+                  <div className="flex justify-between text-fg-muted pt-0.5">
                     <span>Cache Storage:</span>
-                    <span className="font-mono text-neutral-500">
+                    <span className="font-mono text-fg-muted">
                        MB
                     </span>
                   </div>
@@ -418,8 +415,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               <Card padding={4} elevation="low">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-neutral-500" />
-                    <h4 className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                    <Activity className="w-4 h-4 text-fg-subtle" />
+                    <h4 className="text-xs font-semibold text-fg">
                       Daemon Runtime
                     </h4>
                   </div>
@@ -428,20 +425,20 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
 
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Engine Uptime:</span>
-                    <span className="font-mono font-medium text-neutral-900 dark:text-neutral-100">
+                    <span className="text-fg-muted">Engine Uptime:</span>
+                    <span className="font-mono font-medium text-fg">
                       {formatUptime(data.uptime_seconds)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Rate Limit Status:</span>
-                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                    <span className="text-fg-muted">Rate Limit Status:</span>
+                    <span className="font-mono text-success-fg">
                       {data.rate_limit?.active ? `Throttled (${data.rate_limit.seconds_remaining}s)` : "Normal Throughput"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Target Host:</span>
-                    <span className="font-mono text-neutral-500 truncate max-w-[140px]" title={data.target}>
+                    <span className="text-fg-muted">Target Host:</span>
+                    <span className="font-mono text-fg-muted truncate max-w-[140px]" title={data.target}>
                       {data.target}
                     </span>
                   </div>
@@ -453,16 +450,16 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
           
           {/* Worker Threads & Queue Breakdown Panel */}
           <Card padding={5} elevation="low">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-200 dark:border-neutral-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-accent">
                   Concurrency Runtime
                 </p>
-                <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 mt-0.5">
+                <h3 className="text-sm font-bold text-fg mt-0.5">
                   Worker Threads & Allocation
                 </h3>
               </div>
-              <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 font-mono">
+              <span className="text-xs font-semibold text-fg-muted font-mono">
                 {onlineWorkersCount}/{totalWorkersCount} Threads Active
               </span>
             </div>
@@ -474,14 +471,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                   key={name}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono font-medium transition ${
                     active
-                      ? "border-emerald-300 dark:border-emerald-800/80 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
-                      : "border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500"
+                      ? "border-success/30 bg-success-subtle text-success-fg"
+                      : "border-line bg-raised text-fg-muted"
                   }`}
                 >
                   {active ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
                   ) : (
-                    <XCircle className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                    <XCircle className="w-3.5 h-3.5 text-fg-subtle shrink-0" />
                   )}
                   <span>{name}</span>
                 </div>
@@ -489,18 +486,18 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
             </div>
 
             {/* Queue Breakdown by Status */}
-            <div className="mt-5 border-t border-neutral-200 dark:border-neutral-800 pt-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-2.5">
+            <div className="mt-5 border-t border-line pt-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-fg-muted mb-2.5">
                 Queue Breakdown by Status
               </p>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(data.queue.statuses).map(([status, count]) => (
                   <div
                     key={status}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-800/60 text-xs font-medium text-neutral-600 dark:text-neutral-300"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-line bg-surface text-xs font-medium text-fg-muted"
                   >
                     <span>{status}:</span>
-                    <span className="font-bold font-mono text-neutral-900 dark:text-neutral-100">
+                    <span className="font-bold font-mono text-fg">
                       {count}
                     </span>
                   </div>
