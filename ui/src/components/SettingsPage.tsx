@@ -1,10 +1,14 @@
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
-import { StatusDot } from "@astryxdesign/core/StatusDot";
-import { Switch } from "@astryxdesign/core/Switch";
-import { Tab, TabList } from "@astryxdesign/core/TabList";
-import { TextInput } from "@astryxdesign/core/TextInput";
+import {
+  Badge,
+  Button,
+  Card,
+  Select,
+  StatusDot,
+  Switch,
+  Tab,
+  TabList,
+  TextInput,
+} from "./ui";
 import {
   Cpu,
   Download,
@@ -106,9 +110,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const inputClass =
-    "w-full px-3 py-1.5 text-xs rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-neutral-400";
-
   /* ------------------------------------------------------------------------ */
   /* Unified Dynamic Input Renderer                                           */
   /* ------------------------------------------------------------------------ */
@@ -134,59 +135,44 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       case "number":
         return (
           <div key={field.key}>
-            <label
-              htmlFor={`setting-${field.key}`}
-              className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
-            >
-              {field.label}
-            </label>
-            <input
+            <TextInput
               id={`setting-${field.key}`}
+              label={field.label}
               type="number"
               min={field.min}
               max={field.max}
               step={field.step}
-              value={rawVal ?? field.defaultValue ?? ""}
-              onChange={(e) => {
+              value={String(rawVal ?? field.defaultValue ?? "")}
+              onChange={(val) => {
                 const parsed = field.isFloat
-                  ? parseFloat(e.target.value) || 0
-                  : parseInt(e.target.value, 10) || 0;
+                  ? parseFloat(val) || 0
+                  : parseInt(val, 10) || 0;
                 onUpdateValue(field.key, parsed);
               }}
+              description={field.description}
               placeholder={field.placeholder}
-              className={inputClass}
+              size="sm"
             />
-            {field.description && (
-              <p className="text-[11px] text-neutral-500 mt-1">{field.description}</p>
-            )}
           </div>
         );
 
       case "select":
         return (
           <div key={field.key}>
-            <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1.5">
-              {field.label}
-            </label>
-            <select
-              value={rawVal ?? field.defaultValue ?? ""}
-              onChange={(e) => {
-                const val = field.isNumber
-                  ? parseInt(e.target.value, 10) || 0
-                  : e.target.value;
+            <Select
+              label={field.label}
+              value={String(rawVal ?? field.defaultValue ?? "")}
+              onChange={(next) => {
+                const val = field.isNumber ? parseInt(next, 10) || 0 : next;
                 onUpdateValue(field.key, val);
               }}
-              className={inputClass}
-            >
-              {field.options.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {field.description && (
-              <p className="text-[11px] text-neutral-500 mt-1">{field.description}</p>
-            )}
+              options={field.options.map((opt) => ({
+                value: String(opt.value),
+                label: opt.label,
+              }))}
+              description={field.description}
+              size="sm"
+            />
           </div>
         );
 
@@ -259,7 +245,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </>
         }
         bottomContent={
-          <div className="overflow-x-auto h-8">
+          <div className="min-w-0">
             <TabList
               value={activeTab}
               onChange={(tabId) => setActiveTab(tabId)}
@@ -284,8 +270,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="space-y-4" id="settings-tab-general">
           <Card padding={4} elevation="low">
             <div className="flex items-center gap-2 mb-4">
-              <Cpu className="w-4 h-4 text-neutral-500" />
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              <Cpu className="w-4 h-4 text-fg-subtle" />
+              <h3 className="text-sm font-semibold text-fg">
                 Worker Concurrency & Rate Limiting
               </h3>
             </div>
@@ -305,7 +291,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               ].map(renderInput)}
             </div>
 
-            <div className="mt-5 pt-4 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
+            <div className="mt-5 pt-4 border-t border-line space-y-2">
               {[
                 { key: "rotate_active_account_number", label: "Automatic Worker Account Rotation", type: "switch", description: "Distribute media load across authenticated accounts of the same service." },
                 { key: "enable_retry_worker", label: "Enable Background Retry Worker", type: "switch", description: "Periodically retry enqueued items that timed out or hit rate limits." },
@@ -314,7 +300,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               Application & System Preferences
             </h3>
 
@@ -334,7 +320,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               ].map(renderInput)}
             </div>
 
-            <div className="mt-5 pt-4 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
+            <div className="mt-5 pt-4 border-t border-line space-y-2">
               {[
                 { key: "check_for_updates", label: "Check for Updates Automatically", type: "switch", description: "Query the release repository on launch and intervals." },
                 { key: "windows_10_explorer_thumbnails", label: "Windows 10 Explorer Thumbnail Support", type: "switch", description: "Format cover streams for standard Explorer folder caching." },
@@ -344,7 +330,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               UI Controls & Queue Item Action Buttons
             </h3>
 
@@ -359,7 +345,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               Catalog Search Queries & Filters
             </h3>
 
@@ -372,7 +358,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             <div className="space-y-4">
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-fg-muted mb-2">
                   Universal Search Content Categories
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -399,8 +385,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="space-y-4" id="settings-tab-audio">
           <Card padding={4} elevation="low">
             <div className="flex items-center gap-2 mb-4">
-              <Music className="w-4 h-4 text-neutral-500" />
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              <Music className="w-4 h-4 text-fg-subtle" />
+              <h3 className="text-sm font-semibold text-fg">
                 Audio Storage Paths & Naming Formatters
               </h3>
             </div>
@@ -439,7 +425,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 description: "Space-delimited arguments forwarded directly to the FFmpeg transcoder.",
               })}
 
-              <div className="pt-4 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
+              <div className="pt-4 border-t border-line space-y-2">
                 {[
                   { key: "use_playlist_path", label: "Use Playlist Path Structure", type: "switch", description: "Store playlist tracks inside a dedicated playlist directory." },
                   { key: "use_double_digit_path_numbers", label: "Use Double Digit Numbers", type: "switch", description: "Zero-pad track and disc numbers (01, 02...) in file paths." },
@@ -450,7 +436,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               M3U &amp; M3U8 Playlist Export Options
             </h3>
 
@@ -474,7 +460,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               Audio Bitrate, Lyrics &amp; Artwork
             </h3>
 
@@ -501,8 +487,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="space-y-4" id="settings-tab-video">
           <Card padding={4} elevation="low">
             <div className="flex items-center gap-2 mb-4">
-              <Film className="w-4 h-4 text-neutral-500" />
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              <Film className="w-4 h-4 text-fg-subtle" />
+              <h3 className="text-sm font-semibold text-fg">
                 Video Storage Paths &amp; Quality Parameters
               </h3>
             </div>
@@ -546,7 +532,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 ].map(renderInput)}
               </div>
 
-              <div className="pt-4 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
+              <div className="pt-4 border-t border-line space-y-2">
                 {[
                   { key: "download_subtitles", label: "Download Subtitles", type: "switch", description: "Extract subtitle streams into video containers or .srt files." },
                   { key: "download_chapters", label: "Download Video Chapters", type: "switch", description: "Embed chapter markers into output video containers." },
@@ -558,7 +544,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               Video-to-Audio (V2A) Extraction
             </h3>
 
@@ -588,8 +574,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="space-y-4" id="settings-tab-metadata">
           <Card padding={4} elevation="low">
             <div className="flex items-center gap-2 mb-4">
-              <Tag className="w-4 h-4 text-neutral-500" />
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              <Tag className="w-4 h-4 text-fg-subtle" />
+              <h3 className="text-sm font-semibold text-fg">
                 Metadata Tags &amp; Field Delimiters
               </h3>
             </div>
@@ -612,7 +598,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               iTunes Metadata Lookup (Free, No API Key)
             </h3>
 
@@ -624,7 +610,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               Spotify Specific Catalog Scraping (Needs WebAPI Keys)
             </h3>
 
@@ -639,7 +625,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               ID3 Container Standard Text Fields
             </h3>
 
@@ -670,7 +656,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               Credits &amp; Production Personnel
             </h3>
 
@@ -685,7 +671,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               Artwork, Lyrics &amp; Branding Embedding
             </h3>
 
@@ -709,8 +695,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <Card padding={4} elevation="low">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-neutral-500" />
-                <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                <Globe className="w-4 h-4 text-fg-subtle" />
+                <h3 className="text-sm font-semibold text-fg">
                   Spotify Web API &amp; Connect
                 </h3>
               </div>
@@ -728,7 +714,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+            <h3 className="text-sm font-semibold text-fg mb-4">
               API In-Memory Caching &amp; Expiration TTLs
             </h3>
 
@@ -762,12 +748,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <div className="flex items-center justify-between mb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <Download className="w-4 h-4 text-neutral-500" />
-                  <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                  <Download className="w-4 h-4 text-fg-subtle" />
+                  <h3 className="text-sm font-semibold text-fg">
                     Audio Quality Profiles
                   </h3>
                 </div>
-                <p className="text-xs text-neutral-500 mt-0.5">
+                <p className="text-xs text-fg-muted mt-0.5">
                   Select which quality preset is applied by default when enqueuing new items.
                 </p>
               </div>
@@ -782,12 +768,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                          <h4 className="text-sm font-semibold text-fg">
                             {prof.name}
                           </h4>
                           {isCurrentActive && <Badge variant="success" label="Active Default" />}
                         </div>
-                        <p className="text-xs font-mono text-neutral-500 mt-1">
+                        <p className="text-xs font-mono text-fg-muted mt-1">
                           Format: {prof.format} • Bitrate: {prof.bitrate}
                         </p>
                       </div>
@@ -819,15 +805,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="space-y-4" id="settings-tab-backend">
           <Card padding={4} elevation="low">
             <div className="flex items-center gap-2 mb-4">
-              <Server className="w-4 h-4 text-neutral-500" />
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              <Server className="w-4 h-4 text-fg-subtle" />
+              <h3 className="text-sm font-semibold text-fg">
                 FastAPI Backend Endpoint
               </h3>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1.5">
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">
                   OnTheSpot FastAPI Server URL
                 </label>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -851,7 +837,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     isLoading={isTestingConn}
                   />
                 </div>
-                <p className="text-[11px] text-neutral-500 mt-1">
+                <p className="text-[11px] text-fg-muted mt-1">
                   Point this client UI to your local or remote OnTheSpot daemon instance.
                 </p>
               </div>
@@ -860,8 +846,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <div
                   className={`p-3 rounded-lg border text-xs flex items-center gap-2.5 ${
                     connStatus === "connected"
-                      ? "border-green-300 bg-green-50 dark:bg-green-950/20 text-green-800 dark:text-green-300"
-                      : "border-red-300 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300"
+                      ? "border-success/30 bg-success-subtle text-success-fg"
+                      : "border-danger/30 bg-danger-subtle text-danger-fg"
                   }`}
                 >
                   <StatusDot
@@ -879,35 +865,35 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </Card>
 
           <Card padding={4} elevation="low">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
+            <h3 className="text-sm font-semibold text-fg mb-3">
               Runtime Diagnostics &amp; Statistics
             </h3>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800">
-                <span className="block text-[11px] font-medium text-neutral-500">Daemon Version</span>
-                <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+              <div className="p-3 rounded-lg bg-sunken border border-line">
+                <span className="block text-[11px] font-medium text-fg-muted">Daemon Version</span>
+                <span className="text-sm font-bold text-fg">
                   {config.version || "Unknown"}
                 </span>
               </div>
 
-              <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800">
-                <span className="block text-[11px] font-medium text-neutral-500">Total Items Downloaded</span>
-                <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+              <div className="p-3 rounded-lg bg-sunken border border-line">
+                <span className="block text-[11px] font-medium text-fg-muted">Total Items Downloaded</span>
+                <span className="text-sm font-bold text-fg">
                   {(config.total_downloaded_items ?? 0).toLocaleString()}
                 </span>
               </div>
 
-              <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800">
-                <span className="block text-[11px] font-medium text-neutral-500">Total Data Downloaded</span>
-                <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+              <div className="p-3 rounded-lg bg-sunken border border-line">
+                <span className="block text-[11px] font-medium text-fg-muted">Total Data Downloaded</span>
+                <span className="text-sm font-bold text-fg">
                   {formatBytes(config.total_downloaded_data ?? 0)}
                 </span>
               </div>
 
-              <div className="p-3 rounded-lg bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800">
-                <span className="block text-[11px] font-medium text-neutral-500">Authenticated Accounts</span>
-                <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+              <div className="p-3 rounded-lg bg-sunken border border-line">
+                <span className="block text-[11px] font-medium text-fg-muted">Authenticated Accounts</span>
+                <span className="text-sm font-bold text-fg">
                   {config.accounts?.length ?? 0}
                 </span>
               </div>
