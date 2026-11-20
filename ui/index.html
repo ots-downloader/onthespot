@@ -9,6 +9,17 @@
     <meta property="og:description" content="Web interface for OnTheSpot music and media downloader" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // Apply the saved appearance before first paint. Keep the key and the
+      // values in step with src/lib/theme.ts.
+      try {
+        var saved = localStorage.getItem("ots-theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
