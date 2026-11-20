@@ -180,10 +180,13 @@ account_pool: list = []
 #: Temporary download path override (set when user picks a custom location).
 temp_download_path: list = []
 
+# parsing and pending are unbounded on purpose: a bounded deque silently drops
+# its oldest entry when full, so a playlist with more than ``maxsize`` tracks
+# lost its first tracks without any error.
 #: Items currently being parsed (URL → item dict).
-parsing = ThreadSafeDeque(maxsize=1000)
+parsing = ThreadSafeDeque(maxsize=None)
 #: Items waiting to be moved to the download queue.
-pending = ThreadSafeDeque(maxsize=1000)
+pending = ThreadSafeDeque(maxsize=None)
 
 #: Active download queue (local_id → item dict).
 download_queue: dict[int, QueueItem] = {}
