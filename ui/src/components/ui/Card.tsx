@@ -1,12 +1,12 @@
 import type { ComponentProps } from "react";
 import { cn } from "../../lib/cn";
 
-/** Steps on the 4px scale, as in Astryx: 4 = 16px. */
+/** Steps on the 4px scale: 4 = 16px. */
 export type SpacingStep = 0 | 3 | 4 | 5 | 6;
 export type Elevation = "none" | "low";
 
 // Written out in full so Tailwind finds every class in the source.
-export const paddingClass: Record<SpacingStep, string> = {
+const paddingClass: Record<SpacingStep, string> = {
   0: "p-0",
   3: "p-3",
   4: "p-4",

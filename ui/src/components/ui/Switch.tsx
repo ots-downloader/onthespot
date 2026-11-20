@@ -3,28 +3,20 @@ import { Switch as RadixSwitch } from "radix-ui";
 import { cn } from "../../lib/cn";
 import { focusRing } from "./Button";
 
-export type SwitchLabelPosition = "start" | "end";
-export type SwitchLabelSpacing = "hug" | "spread";
-
 export interface SwitchProps {
   label: string;
   description?: ReactNode;
   value: boolean;
   onChange?: (checked: boolean) => void;
-  /** "start" puts the label before the switch. Default "end". */
-  labelPosition?: SwitchLabelPosition;
-  /** "spread" pushes label and switch to opposite edges. Default "hug". */
-  labelSpacing?: SwitchLabelSpacing;
   className?: string;
 }
 
+/** Label and description on the left, the switch at the right edge. */
 export function Switch({
   label,
   description,
   value,
   onChange,
-  labelPosition = "end",
-  labelSpacing = "hug",
   className,
 }: SwitchProps) {
   const switchId = `switch-${useId()}`;
@@ -61,24 +53,9 @@ export function Switch({
   );
 
   return (
-    <div
-      className={cn(
-        "flex items-start gap-3",
-        labelSpacing === "spread" && "w-full justify-between",
-        className,
-      )}
-    >
-      {labelPosition === "start" ? (
-        <>
-          {text}
-          <div className="pt-0.5">{control}</div>
-        </>
-      ) : (
-        <>
-          <div className="pt-0.5">{control}</div>
-          {text}
-        </>
-      )}
+    <div className={cn("flex items-start gap-3 w-full justify-between", className)}>
+      {text}
+      <div className="pt-0.5">{control}</div>
     </div>
   );
 }

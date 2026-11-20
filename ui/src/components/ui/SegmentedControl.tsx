@@ -1,21 +1,7 @@
-import {
-  createContext,
-  useContext,
-  type ComponentProps,
-  type ReactNode,
-} from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { ToggleGroup } from "radix-ui";
 import { cn } from "../../lib/cn";
 import { focusRing } from "./Button";
-
-export type SegmentedControlSize = "sm" | "md";
-
-const SegmentSizeContext = createContext<SegmentedControlSize>("md");
-
-const sizeClass: Record<SegmentedControlSize, string> = {
-  sm: "h-7 px-2.5 gap-1.5 text-xs",
-  md: "h-8 px-3 gap-1.5 text-sm",
-};
 
 export interface SegmentedControlProps
   extends Omit<
@@ -26,7 +12,6 @@ export interface SegmentedControlProps
   onChange: (value: string) => void;
   /** Accessible name for the group. */
   label: string;
-  size?: SegmentedControlSize;
   children: ReactNode;
 }
 
@@ -34,7 +19,6 @@ export function SegmentedControl({
   value,
   onChange,
   label,
-  size = "md",
   className,
   children,
   ...rest
@@ -54,7 +38,7 @@ export function SegmentedControl({
       )}
       {...rest}
     >
-      <SegmentSizeContext.Provider value={size}>{children}</SegmentSizeContext.Provider>
+      {children}
     </ToggleGroup.Root>
   );
 }
@@ -73,7 +57,6 @@ export function SegmentedControlItem({
   className,
   ...rest
 }: SegmentedControlItemProps) {
-  const size = useContext(SegmentSizeContext);
   return (
     <ToggleGroup.Item
       value={value}
@@ -82,7 +65,7 @@ export function SegmentedControlItem({
         "hover:text-fg data-[state=on]:bg-surface data-[state=on]:text-fg data-[state=on]:shadow-xs",
         "[&_svg]:shrink-0",
         focusRing,
-        sizeClass[size],
+        "h-7 px-2.5 gap-1.5 text-xs",
         className,
       )}
       {...rest}

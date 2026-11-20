@@ -1,27 +1,12 @@
-import {
-  createContext,
-  useContext,
-  type ComponentProps,
-  type ReactNode,
-} from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Tabs as RadixTabs } from "radix-ui";
 import { cn } from "../../lib/cn";
 import { focusRing } from "./Button";
-
-export type TabListSize = "sm" | "md";
-
-const TabSizeContext = createContext<TabListSize>("md");
-
-const sizeClass: Record<TabListSize, string> = {
-  sm: "h-8 px-2.5 gap-1.5 text-xs",
-  md: "h-9 px-3 gap-2 text-sm",
-};
 
 export interface TabListProps
   extends Omit<ComponentProps<"div">, "onChange" | "defaultValue" | "dir"> {
   value: string;
   onChange: (value: string) => void;
-  size?: TabListSize;
   /** Accessible name for the tab list. */
   label?: string;
   children: ReactNode;
@@ -31,7 +16,6 @@ export interface TabListProps
 export function TabList({
   value,
   onChange,
-  size = "md",
   label,
   className,
   children,
@@ -46,7 +30,7 @@ export function TabList({
           className,
         )}
       >
-        <TabSizeContext.Provider value={size}>{children}</TabSizeContext.Provider>
+        {children}
       </RadixTabs.List>
     </RadixTabs.Root>
   );
@@ -68,7 +52,6 @@ export function Tab({
   className,
   ...rest
 }: TabProps) {
-  const size = useContext(TabSizeContext);
   return (
     <RadixTabs.Trigger
       value={value}
@@ -81,7 +64,7 @@ export function Tab({
         "[&_svg]:shrink-0",
         focusRing,
         "focus-visible:ring-inset",
-        sizeClass[size],
+        "h-8 px-2.5 gap-1.5 text-xs",
         className,
       )}
     >

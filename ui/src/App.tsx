@@ -451,9 +451,6 @@ export default function App() {
   return (
     <>
       <AppShell
-        height="fill"
-        contentPadding={4}
-        variant="elevated"
         topNav={
           <TopNav
             label="OnTheSpot Main Navigation"
@@ -507,9 +504,7 @@ export default function App() {
           />
         }
         sideNav={
-          <SideNav
-            collapsible={true}
-          >
+          <SideNav>
             <SideNavSection title="Downloader">
               <SideNavItem
                 label="Parsing & Pending"

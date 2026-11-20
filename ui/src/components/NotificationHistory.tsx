@@ -2,7 +2,7 @@ import { AlertCircle, Bell, CheckCircle2, DownloadCloud, ExternalLink, Info, Tra
 import React, { useState } from "react";
 import { isInAppLink, notificationLinkLabel } from "../lib/notifications";
 import { NotificationBannerItem } from "../types";
-import { Button, Dialog } from "./ui";
+import { Button, Dialog, focusRing } from "./ui";
 
 interface NotificationHistoryProps {
   history: NotificationBannerItem[];
@@ -53,7 +53,7 @@ export const NotificationHistory: React.FC<NotificationHistoryProps> = ({
           type="button"
           id="btn-notification-history-trigger"
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 left-5 z-40 flex items-center gap-2.5 rounded-lg border border-line-strong bg-surface px-3.5 py-2 text-xs font-semibold text-fg-muted shadow-lg transition-all hover:bg-raised cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={`fixed bottom-5 left-5 z-40 flex items-center gap-2.5 rounded-lg border border-line-strong bg-surface px-3.5 py-2 text-xs font-semibold text-fg-muted shadow-lg transition-all hover:bg-raised cursor-pointer ${focusRing}`}
           title="Notification history"
           aria-label="Notification history"
         >

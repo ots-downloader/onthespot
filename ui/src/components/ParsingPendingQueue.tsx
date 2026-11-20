@@ -27,6 +27,7 @@ import {
   IconButton,
   Select,
   TextInput,
+  focusRing,
 } from "./ui";
 
 interface ParsingPendingQueueProps {
@@ -318,7 +319,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                   key={svc}
                   type="button"
                   onClick={() => setSelectedService(svc)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition cursor-pointer shrink-0 ${focusRing} ${
                     selectedService === svc
                       ? "bg-inverse text-fg-on-inverse"
                       : "bg-raised text-fg-muted hover:bg-line-strong"
@@ -363,7 +364,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                   <button
                     type="button"
                     onClick={toggleSelectAll}
-                    className="cursor-pointer text-fg-muted hover:text-fg rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className={`cursor-pointer text-fg-muted hover:text-fg rounded-sm ${focusRing}`}
                     title={allFilteredSelected ? "Deselect All" : "Select All"}
                   >
                     {allFilteredSelected ? (
@@ -402,7 +403,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleSelectItem(item.id)}
-                        className="cursor-pointer text-fg-subtle hover:text-fg-muted shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={`cursor-pointer text-fg-subtle hover:text-fg-muted shrink-0 rounded-sm ${focusRing}`}
                       >
                         {isSelected ? (
                           <CheckSquare className="w-4 h-4 text-accent" />

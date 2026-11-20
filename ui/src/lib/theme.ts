@@ -8,7 +8,7 @@ export type Appearance = "system" | "dark" | "light";
 const STORAGE_KEY = "ots-theme";
 
 /** Old or hand-edited configs can hold any text; treat the unknown as system. */
-export function toAppearance(value: unknown): Appearance {
+function toAppearance(value: unknown): Appearance {
   return value === "dark" || value === "light" ? value : "system";
 }
 

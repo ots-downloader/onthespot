@@ -126,8 +126,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               description={field.description}
               value={Boolean(rawVal)}
               onChange={(checked) => onUpdateValue(field.key, checked)}
-              labelPosition="start"
-              labelSpacing="spread"
             />
           </div>
         );
@@ -249,7 +247,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <TabList
               value={activeTab}
               onChange={(tabId) => setActiveTab(tabId)}
-              size="sm"
             >
               <Tab value="general" label="General & Workers" icon={<Cpu className="w-3.5 h-3.5" />} />
               <Tab value="audio" label="Audio & Output" icon={<Music className="w-3.5 h-3.5" />} />

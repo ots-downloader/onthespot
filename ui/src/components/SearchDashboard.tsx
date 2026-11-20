@@ -23,6 +23,7 @@ import {
   SegmentedControl,
   SegmentedControlItem,
   TextInput,
+  focusRing,
 } from "./ui";
 
 interface SearchDashboardProps {
@@ -124,7 +125,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
             </div>
           </div>
 
-          <Divider variant="subtle" />
+          <Divider />
 
           {/* Filter Bar: Media Types (SegmentedControl) & Services */}
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 pt-0.5">
@@ -135,7 +136,6 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                 label="Media type filter"
                 value={selectedType}
                 onChange={handleTypeChange}
-                size="sm"
               >
                 <SegmentedControlItem
                   value="all"
@@ -175,7 +175,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                     key={srv.id}
                     type="button"
                     onClick={() => toggleService(srv.id)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer border ${focusRing} ${
                       isSelected
                         ? "border-inverse bg-inverse text-fg-on-inverse"
                         : "border-line bg-sunken text-fg-muted hover:border-line-strong"

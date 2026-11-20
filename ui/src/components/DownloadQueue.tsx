@@ -37,6 +37,7 @@ import {
   Tab,
   TabList,
   TextInput,
+  focusRing,
 } from "./ui";
 
 
@@ -248,12 +249,10 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
         }
         bottomContent={
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {/* Astryx TabList for filtering */}
             <div className="min-w-0">
               <TabList
                 value={filter}
                 onChange={(val) => setFilter(val)}
-                size="sm"
               >
                 {filterTabs.map((tab) => (
                   <Tab
@@ -768,7 +767,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                           <button
                             type="button"
                             onClick={() => setShowSidePanel(false)}
-                            className="p-1 rounded-lg hover:bg-raised text-fg-muted hover:text-fg transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex items-center gap-1 text-xs"
+                            className={`p-1 rounded-lg hover:bg-raised text-fg-muted hover:text-fg transition cursor-pointer ${focusRing} flex items-center gap-1 text-xs`}
                             title="Collapse side details view"
                             aria-label="Collapse side details view"
                           >

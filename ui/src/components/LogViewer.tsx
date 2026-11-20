@@ -145,7 +145,6 @@ export const LogViewer: React.FC<LogViewerProps> = ({
                 label="Log level filter"
                 value={levelFilter}
                 onChange={(lvl) => setLevelFilter(lvl)}
-                size="sm"
               >
                 <SegmentedControlItem value="ALL" label="All Levels" />
                 <SegmentedControlItem value="INFO" label="Info" />

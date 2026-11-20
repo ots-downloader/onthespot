@@ -42,7 +42,7 @@ import {
   YouTubeAuthenticationStatus,
   YouTubeSetupMode,
 } from "../types";
-import { Button, Dialog, Select, TextInput } from "./ui";
+import { Button, Dialog, Select, TextInput, focusRing } from "./ui";
 
 const SPOTIFY_AUTH_POLL_MS = 2000;
 // The server refills its account pool in the background after a sign-in, so
@@ -1067,7 +1067,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                     href={spotifyAuth.verification_uri_complete || spotifyAuth.verification_uri}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-md bg-accent hover:bg-accent-hover px-3 py-1.5 text-xs font-semibold text-fg-on-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className={`inline-flex items-center gap-1.5 rounded-md bg-accent hover:bg-accent-hover px-3 py-1.5 text-xs font-semibold text-fg-on-accent transition-colors ${focusRing}`}
                   >
                     Open spotify.com/pair
                   </a>
@@ -1186,7 +1186,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
                         setYoutubeCookieUpload(e.target.files?.[0] || null);
                         setYoutubeUploadComplete(false);
                       }}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-line-strong bg-surface text-fg file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-accent file:text-fg-on-accent file:text-xs file:font-semibold hover:file:bg-accent-hover cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className={`w-full px-3 py-2 text-xs rounded-lg border border-line-strong bg-surface text-fg file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-accent file:text-fg-on-accent file:text-xs file:font-semibold hover:file:bg-accent-hover cursor-pointer ${focusRing}`}
                     />
                     <p className="mt-1 text-[11px] text-fg-muted">
                       The filtered file is stored privately in OnTheSpot app data.{" "}

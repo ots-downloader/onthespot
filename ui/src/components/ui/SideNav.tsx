@@ -14,7 +14,8 @@ import { focusRing } from "./Button";
  * Layout by breakpoint:
  * - below `sm`: a horizontal bar that scrolls sideways, section titles
  *   visually hidden, collapse ignored;
- * - `sm` and up: a vertical column on the left that can collapse to icons.
+ * - `sm` and up: a vertical column on the left with a button that collapses
+ *   it to icons.
  */
 
 const SideNavContext = createContext<{ isCollapsed: boolean }>({
@@ -22,19 +23,11 @@ const SideNavContext = createContext<{ isCollapsed: boolean }>({
 });
 
 export interface SideNavProps extends Omit<ComponentProps<"nav">, "children"> {
-  /** Adds a collapse button (from `sm` up) that shrinks the nav to icons. */
-  collapsible?: boolean;
   children: ReactNode;
 }
 
-export function SideNav({
-  collapsible = false,
-  className,
-  children,
-  ...rest
-}: SideNavProps) {
-  const [innerCollapsed, setInnerCollapsed] = useState(false);
-  const isCollapsed = collapsible && innerCollapsed;
+export function SideNav({ className, children, ...rest }: SideNavProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <SideNavContext.Provider value={{ isCollapsed }}>
@@ -56,32 +49,30 @@ export function SideNav({
         >
           {children}
         </div>
-        {collapsible && (
-          <div
+        <div
+          className={cn(
+            "hidden shrink-0 border-t border-line py-2 sm:flex sm:flex-col sm:gap-2",
+            isCollapsed ? "sm:items-center sm:px-2" : "sm:px-3",
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
+            title={isCollapsed ? "Expand navigation" : "Collapse navigation"}
             className={cn(
-              "hidden shrink-0 border-t border-line py-2 sm:flex sm:flex-col sm:gap-2",
-              isCollapsed ? "sm:items-center sm:px-2" : "sm:px-3",
+              "flex size-8 cursor-pointer items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-raised hover:text-fg",
+              focusRing,
             )}
           >
-            <button
-              type="button"
-              onClick={() => setInnerCollapsed(!isCollapsed)}
-              aria-expanded={!isCollapsed}
-              aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
-              title={isCollapsed ? "Expand navigation" : "Collapse navigation"}
-              className={cn(
-                "flex size-8 cursor-pointer items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-raised hover:text-fg",
-                focusRing,
-              )}
-            >
-              {isCollapsed ? (
-                <PanelLeftOpen aria-hidden="true" className="size-4" />
-              ) : (
-                <PanelLeftClose aria-hidden="true" className="size-4" />
-              )}
-            </button>
-          </div>
-        )}
+            {isCollapsed ? (
+              <PanelLeftOpen aria-hidden="true" className="size-4" />
+            ) : (
+              <PanelLeftClose aria-hidden="true" className="size-4" />
+            )}
+          </button>
+        </div>
       </nav>
     </SideNavContext.Provider>
   );
