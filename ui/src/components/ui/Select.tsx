@@ -61,7 +61,6 @@ export function Select({
 }: SelectProps) {
   const autoId = useId();
   const triggerId = id ?? `select-${autoId}`;
-  const labelId = `${triggerId}-label`;
   const descriptionId = description ? `${triggerId}-description` : undefined;
 
   const hasMatch = options.some((option) => option.value === value);
@@ -71,7 +70,6 @@ export function Select({
   return (
     <div className={cn("w-full", wrapperClassName)}>
       <label
-        id={labelId}
         htmlFor={triggerId}
         className={cn(fieldLabelClass, isLabelHidden && "sr-only")}
       >
@@ -83,7 +81,6 @@ export function Select({
       >
         <RadixSelect.Trigger
           id={triggerId}
-          aria-labelledby={labelId}
           aria-describedby={descriptionId}
           className={cn(
             fieldBoxClass,

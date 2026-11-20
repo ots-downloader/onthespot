@@ -49,8 +49,8 @@ export function SideNav({
       >
         <div
           className={cn(
-            "flex min-w-0 flex-1 flex-row items-center gap-3 overflow-x-auto px-2 py-1.5",
-            "sm:flex-col sm:items-stretch sm:gap-5 sm:overflow-y-auto sm:overflow-x-hidden sm:py-4",
+            "relative flex min-w-0 flex-1 flex-row items-center gap-3 overflow-x-auto px-2 py-1.5 [scrollbar-width:none]",
+            "sm:flex-col sm:items-stretch sm:gap-5 sm:overflow-y-auto sm:overflow-x-hidden sm:py-4 sm:[scrollbar-width:thin]",
             isCollapsed ? "sm:px-2" : "sm:px-3",
           )}
         >

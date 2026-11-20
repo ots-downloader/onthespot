@@ -31,7 +31,7 @@ export function AppShell({
   return (
     <div
       className={cn(
-        "flex w-full flex-col bg-body text-fg",
+        "relative flex w-full flex-col bg-body text-fg",
         fill ? "h-dvh overflow-hidden" : "min-h-dvh",
         className,
       )}

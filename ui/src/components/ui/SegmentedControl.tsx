@@ -49,7 +49,7 @@ export function SegmentedControl({
       }}
       aria-label={label}
       className={cn(
-        "inline-flex max-w-full items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-lg border border-line bg-raised p-0.5",
+        "inline-flex max-w-full items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-lg [scrollbar-width:none] border border-line bg-raised p-0.5",
         className,
       )}
       {...rest}

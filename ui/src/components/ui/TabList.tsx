@@ -42,7 +42,7 @@ export function TabList({
       <RadixTabs.List
         aria-label={label}
         className={cn(
-          "flex max-w-full items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-line",
+          "flex max-w-full items-end gap-1 overflow-x-auto overflow-y-hidden border-b [scrollbar-width:none] border-line",
           className,
         )}
       >
