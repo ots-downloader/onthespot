@@ -392,7 +392,12 @@ def format_local_id(item_id):
 # Application helpers
 # ---------------------------------------------------------------------------
 def requeue_item(item: QueueItem) -> None:
-    """Move *item* to the back of the queue and mark it available for RetryWorker to re-add to the pending queue If not cancelled."""
+    """Move a failed *item* to the back of the download queue for RetryWorker.
+
+    The item keeps its FAILED status: RetryWorker only picks up FAILED items,
+    so an item set to WAITING here would sit in the download queue forever.
+    Cancelled, unavailable, downloaded and deleted items are left alone.
+    """
     if item.item_status in [
         ItemStatus.CANCELLED,
         ItemStatus.UNAVAILABLE,
@@ -405,7 +410,6 @@ def requeue_item(item: QueueItem) -> None:
             local_id = item.local_id
             del download_queue[local_id]
             download_queue[local_id] = item
-            download_queue[local_id].item_status = ItemStatus.WAITING
             raw_progress = item.progress
             try:
                 current_progress = int(float(raw_progress or 0))
