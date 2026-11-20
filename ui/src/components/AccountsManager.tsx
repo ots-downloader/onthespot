@@ -916,6 +916,7 @@ export const AccountsManager: React.FC<AccountsManagerProps> = ({
       <Dialog
         isOpen={showModal}
         onClose={closeModal}
+        dismissible={false}
         title="Add Worker Account"
         description="Authenticate Spotify Librespot, Tidal OAuth, Apple Music, SoundCloud, or other supported services."
         icon={<Server />}

@@ -13,8 +13,10 @@ const sizeClass: Record<DialogSize, string> = {
 
 export interface DialogProps {
   isOpen: boolean;
-  /** Runs on Escape, scrim click and the close button. */
+  /** Runs on the close button and, when dismissible, on Escape and scrim click. */
   onClose: () => void;
+  /** False keeps the dialog open on Escape and scrim click. Default true. */
+  dismissible?: boolean;
   title: ReactNode;
   description?: ReactNode;
   /** Shown in a tile before the title. */
@@ -36,6 +38,7 @@ export interface DialogProps {
 export function Dialog({
   isOpen,
   onClose,
+  dismissible = true,
   title,
   description,
   icon,
@@ -58,6 +61,8 @@ export function Dialog({
         <RadixDialog.Overlay className="fixed inset-0 z-50 bg-scrim backdrop-blur-xs" />
         <RadixDialog.Content
           id={id}
+          onEscapeKeyDown={dismissible ? undefined : (event) => event.preventDefault()}
+          onInteractOutside={dismissible ? undefined : (event) => event.preventDefault()}
           // Without a description Radix warns unless this is set to undefined.
           {...(description ? {} : { "aria-describedby": undefined })}
           className={cn(
