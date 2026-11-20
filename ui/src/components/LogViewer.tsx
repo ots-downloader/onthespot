@@ -1,9 +1,3 @@
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
-import { IconButton } from "@astryxdesign/core/IconButton";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
-import { TextInput } from "@astryxdesign/core/TextInput";
 import {
   Check,
   Copy,
@@ -15,6 +9,15 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import { LogEntry } from "../types";
 import { PageHeader } from "./PageHeader";
+import {
+  Badge,
+  Button,
+  Card,
+  IconButton,
+  SegmentedControl,
+  SegmentedControlItem,
+  TextInput,
+} from "./ui";
 
 interface LogViewerProps {
   logs: LogEntry[];
@@ -96,7 +99,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
               label={copied ? "Copied!" : "Copy All"}
               icon={
                 copied ? (
-                  <Check className="w-3.5 h-3.5 text-green-500" />
+                  <Check className="w-3.5 h-3.5 text-success-fg" />
                 ) : (
                   <Copy className="w-3.5 h-3.5" />
                 )
@@ -114,7 +117,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({
 
             <IconButton
               label="Clear all logs"
-              icon={<Trash2 className="w-3.5 h-3.5 text-red-500" />}
+              icon={<Trash2 className="w-3.5 h-3.5 text-danger-fg" />}
               variant="ghost"
               size="sm"
               onClick={onClear}
@@ -132,12 +135,12 @@ export const LogViewer: React.FC<LogViewerProps> = ({
                 onChange={(val) => setSearch(val)}
                 hasClear={true}
                 size="sm"
-                startIcon={<Search className="w-3.5 h-3.5 text-neutral-400" />}
+                startIcon={<Search className="w-3.5 h-3.5 text-fg-subtle" />}
               />
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-neutral-500">Level:</span>
+              <span className="text-xs font-medium text-fg-muted">Level:</span>
               <SegmentedControl
                 label="Log level filter"
                 value={levelFilter}
@@ -158,26 +161,27 @@ export const LogViewer: React.FC<LogViewerProps> = ({
       <Card padding={0} elevation="low" id="terminal-card">
         <div
           ref={logContainerRef}
-          className="h-[520px] overflow-y-auto p-4 space-y-1.5 bg-neutral-950 text-neutral-100 font-mono text-xs rounded-xl"
+          data-theme="dark"
+          className="h-[520px] overflow-y-auto p-4 space-y-1.5 bg-console text-console-fg font-mono text-xs rounded-xl"
         >
           {filteredLogs.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-neutral-500 text-xs">
+            <div className="h-full flex items-center justify-center text-console-muted text-xs">
               No log messages match the current filter criteria.
             </div>
           ) : (
             filteredLogs.map((log) => (
               <div
                 key={log.id}
-                className="flex items-start gap-2.5 hover:bg-neutral-900/60 p-1 rounded transition"
+                className="flex items-start gap-2.5 hover:bg-console-line/60 p-1 rounded transition"
               >
-                <span className="text-neutral-500 text-[11px] shrink-0 select-none">
+                <span className="text-console-muted text-[11px] shrink-0 select-none">
                   {log.timestamp}
                 </span>
 
                 <div className="shrink-0">{getLevelBadge(log.level)}</div>
 
                 {log.service && (
-                  <span className="text-neutral-400 font-semibold shrink-0">
+                  <span className="text-console-muted font-semibold shrink-0">
                     [{log.service}]
                   </span>
                 )}
@@ -185,10 +189,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({
                 <span
                   className={`break-all leading-relaxed ${
                     log.level === "ERROR"
-                      ? "text-red-400"
+                      ? "text-danger-fg"
                       : log.level === "WARNING"
-                      ? "text-amber-400"
-                      : "text-neutral-300"
+                      ? "text-warning-fg"
+                      : "text-console-fg"
                   }`}
                 >
                   {log.message}
