@@ -1,8 +1,3 @@
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { TextInput } from "@astryxdesign/core/TextInput";
 import {
   CheckCircle2,
   CheckSquare,
@@ -24,6 +19,15 @@ import {
   PendingQueueItem
 } from "../types";
 import { PageHeader } from "./PageHeader";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  IconButton,
+  Select,
+  TextInput,
+} from "./ui";
 
 interface ParsingPendingQueueProps {
   jobs: ParsingJob[];
@@ -150,7 +154,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
       {/* Page Header */}
       <PageHeader
         id="parsing-queue-header"
-        icon={<ListPlus className="w-5 h-5 text-amber-500" />}
+        icon={<ListPlus className="w-5 h-5 text-warning" />}
         title="Parsing & Pending Queue"
         badge={{
           label: `${pendingItems.length} Staged Items`,
@@ -174,7 +178,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                 variant="secondary"
                 size="sm"
                 label="Clear Finished Jobs"
-                icon={<CheckCircle2 className="w-3.5 h-3.5 text-neutral-400" />}
+                icon={<CheckCircle2 className="w-3.5 h-3.5 text-fg-subtle" />}
                 onClick={onClearCompletedJobs}
                 id="btn-clear-jobs"
               />
@@ -188,24 +192,26 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
         <form onSubmit={handleParseSubmit} className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              <Sparkles className="w-4 h-4 text-warning" />
+              <h3 className="text-sm font-semibold text-fg">
                 Parse Media Link or Batch Playlist
               </h3>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-neutral-500">Target Profile:</span>
-              <select
+              <span className="text-xs text-fg-muted">Target Profile:</span>
+              <Select
+                label="Target Profile"
+                isLabelHidden={true}
                 value={selectedProfileId}
-                onChange={(e) => handleProfileChange(e.target.value)}
-                className="text-xs font-medium px-2 py-1 rounded bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 focus:outline-hidden"
-              >
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.format} {p.bitrate})
-                  </option>
-                ))}
-              </select>
+                onChange={handleProfileChange}
+                options={profiles.map((p) => ({
+                  value: p.id,
+                  label: `${p.name} (${p.format} ${p.bitrate})`,
+                }))}
+                size="sm"
+                wrapperClassName="w-auto"
+                className="h-auto gap-1 px-2 py-1 rounded font-medium bg-raised border-line"
+              />
             </div>
           </div>
 
@@ -219,7 +225,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                 onChange={(val) => setInputUrl(val)}
                 hasClear={true}
                 size="md"
-                startIcon={<FileSearch className="w-4 h-4 text-neutral-400" />}
+                startIcon={<FileSearch className="w-4 h-4 text-fg-subtle" />}
               />
             </div>
 
@@ -248,7 +254,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
         <div className="space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              <h3 className="text-sm font-semibold text-fg">
                 Staged Tracks Awaiting Downloader
               </h3>
               <Badge variant="neutral" label={`${filteredPendingItems.length} tracks`} />
@@ -264,14 +270,14 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
             <div className="flex items-center gap-2 flex-wrap">
               {selectedItemIds.size > 0 && (
                 <>
-                  <span className="text-xs font-mono text-neutral-500">
+                  <span className="text-xs font-mono text-fg-muted">
                     {selectedItemIds.size} selected
                   </span>
                   <Button
                     variant="secondary"
                     size="sm"
                     label="Remove"
-                    icon={<Trash2 className="w-3.5 h-3.5 text-neutral-400" />}
+                    icon={<Trash2 className="w-3.5 h-3.5 text-fg-subtle" />}
                     onClick={handleRemoveSelected}
                     id="btn-remove-selected"
                   />
@@ -282,7 +288,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                   variant="secondary"
                   size="sm"
                   label="Clear Staged List"
-                  icon={<Trash2 className="w-3.5 h-3.5 text-neutral-400" />}
+                  icon={<Trash2 className="w-3.5 h-3.5 text-fg-subtle" />}
                   onClick={onClearAllPending}
                   id="btn-clear-all-pending"
                 />
@@ -291,7 +297,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
           </div>
 
           {/* Search and Filters Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2 border-t border-line">
             <div className="flex-1">
               <TextInput
                 label="Filter pending tracks"
@@ -301,7 +307,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                 onChange={(val) => setSearchFilter(val)}
                 hasClear={true}
                 size="sm"
-                startIcon={<Search className="w-3.5 h-3.5 text-neutral-400" />}
+                startIcon={<Search className="w-3.5 h-3.5 text-fg-subtle" />}
               />
             </div>
 
@@ -312,10 +318,10 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                   key={svc}
                   type="button"
                   onClick={() => setSelectedService(svc)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition cursor-pointer shrink-0 ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     selectedService === svc
-                      ? "bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900"
-                      : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200"
+                      ? "bg-inverse text-fg-on-inverse"
+                      : "bg-raised text-fg-muted hover:bg-line-strong"
                   }`}
                 >
                   {svc}
@@ -327,8 +333,8 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
 
         {/* Live Auto-Queue Ingestion Banner */}
         {pendingItems.length > 0 && (
-          <div className="mt-4 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
-            <Clock className="w-4 h-4 text-emerald-500 shrink-0 animate-pulse" />
+          <div className="mt-4 p-3 rounded-lg bg-success-subtle border border-success/30 flex items-center gap-2.5 text-xs text-success-fg">
+            <Clock className="w-4 h-4 text-success shrink-0 animate-pulse" />
             <div className="min-w-0 flex-1">
               <span className="font-semibold">Automatic Ingestion Active:</span> Staged tracks are automatically parsed and digested by the background download worker once metadata is fully resolved. No manual queuing is required.
             </div>
@@ -340,7 +346,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
           {filteredPendingItems.length < 1 ? (
             <div className="py-12 text-center">
               <EmptyState
-                icon={<Clock className="w-8 h-8 text-neutral-400" />}
+                icon={<Clock className="w-8 h-8 text-fg-subtle" />}
                 title="No Pending Items Found"
                 description={
                   searchFilter || selectedService !== "all" || selectedStatus !== "all"
@@ -352,16 +358,16 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
           ) : (
             <div className="space-y-2">
               {/* Table Column Header / Select All Bar */}
-              <div className="flex items-center justify-between px-3 py-2 bg-neutral-100/70 dark:bg-neutral-800/50 rounded-lg text-xs font-semibold text-neutral-500">
+              <div className="flex items-center justify-between px-3 py-2 bg-raised/70 rounded-lg text-xs font-semibold text-fg-muted">
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={toggleSelectAll}
-                    className="cursor-pointer text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
+                    className="cursor-pointer text-fg-muted hover:text-fg rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     title={allFilteredSelected ? "Deselect All" : "Select All"}
                   >
                     {allFilteredSelected ? (
-                      <CheckSquare className="w-4 h-4 text-emerald-500" />
+                      <CheckSquare className="w-4 h-4 text-accent" />
                     ) : (
                       <Square className="w-4 h-4" />
                     )}
@@ -386,8 +392,8 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                     key={item.id}
                     className={`flex items-center justify-between gap-3 p-2.5 rounded-lg border transition ${
                       isSelected
-                        ? "bg-amber-50/40 dark:bg-amber-950/20 border-amber-500/40"
-                        : "bg-white dark:bg-neutral-900/40 border-neutral-200/80 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
+                        ? "bg-accent-subtle border-accent/40"
+                        : "bg-surface border-line hover:border-line-strong"
                     }`}
                     id={`pending-row-${item.id}`}
                   >
@@ -396,17 +402,17 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleSelectItem(item.id)}
-                        className="cursor-pointer text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 shrink-0"
+                        className="cursor-pointer text-fg-subtle hover:text-fg-muted shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-amber-500" />
+                          <CheckSquare className="w-4 h-4 text-accent" />
                         ) : (
                           <Square className="w-4 h-4" />
                         )}
                       </button>
 
                       {/* Thumbnail with service dot */}
-                      <div className="relative w-10 h-10 rounded-md overflow-hidden bg-neutral-200 dark:bg-neutral-800 shrink-0 shadow-xs">
+                      <div className="relative w-10 h-10 rounded-md overflow-hidden bg-raised shrink-0 shadow-xs">
                         {item.thumbnail ? (
                           <img
                             src={item.thumbnail}
@@ -415,7 +421,7 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-neutral-400">
+                          <div className="w-full h-full flex items-center justify-center text-fg-subtle">
                             <Music2 className="w-4 h-4" />
                           </div>
                         )}
@@ -428,27 +434,27 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-semibold text-xs text-neutral-900 dark:text-neutral-100 truncate">
+                          <span className="font-semibold text-xs text-fg truncate">
                             {item.name}
                           </span>
                           {item.explicit && (
-                            <span className="text-[10px] px-1 py-0.2 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 font-bold uppercase shrink-0">
+                            <span className="text-[10px] px-1 py-0.2 rounded bg-raised text-fg-muted font-bold uppercase shrink-0">
                               E
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 truncate mt-0.5">
+                        <div className="flex items-center gap-1.5 text-[11px] text-fg-muted truncate mt-0.5">
                           <span className="truncate">{item.artist}</span>
                           {item.album && (
                             <>
                               <span>•</span>
-                              <span className="truncate text-neutral-400">{item.album}</span>
+                              <span className="truncate text-fg-muted">{item.album}</span>
                             </>
                           )}
                           {item.duration && (
                             <>
                               <span>•</span>
-                              <span className="font-mono text-neutral-400">{item.duration}</span>
+                              <span className="font-mono text-fg-muted">{item.duration}</span>
                             </>
                           )}
                         </div>
@@ -487,14 +493,13 @@ export const ParsingPendingQueue: React.FC<ParsingPendingQueueProps> = ({
 
                       {/* Action buttons */}
                       <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
+                        <IconButton
+                          label="Remove item"
+                          icon={<Trash2 className="w-3.5 h-3.5" />}
                           onClick={() => onRemovePendingItems([item.id])}
-                          className="p-1.5 rounded-md text-neutral-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition cursor-pointer"
-                          title="Remove item"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          size="sm"
+                          className="size-auto p-1.5 rounded-md text-fg-subtle hover:text-danger-fg"
+                        />
                       </div>
                     </div>
                   </div>
