@@ -36,8 +36,10 @@ for (const file of walk(root)) {
   readFileSync(file, "utf8")
     .split(/\r?\n/)
     .forEach((line, index) => {
+      // Comments cite issues ("#448") and links point at anchors ("#top").
+      const code = line.replace(/(?:^|\s)\/\/.*$|^\s*\/?\*.*$/, "").replace(/href="#[^"]*"/g, "");
       for (const [label, pattern] of rules) {
-        const match = line.match(pattern);
+        const match = code.match(pattern);
         if (match) problems.push(`src/${name.split(sep).join("/")}:${index + 1}  ${label}: ${match[0]}`);
       }
     });
