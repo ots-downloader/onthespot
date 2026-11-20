@@ -1,9 +1,3 @@
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { ProgressBar } from "@astryxdesign/core/ProgressBar";
-import { Tab, TabList } from "@astryxdesign/core/TabList";
 import {
   AlertCircle,
   Check,
@@ -33,6 +27,17 @@ import { getTargetBackendUrl } from "../lib/api";
 import { getServiceInfo } from "../lib/catalogServices";
 import { DownloadProfile, DownloadQueueItem, QueueBatchAction, QueueItemStatus } from "../types";
 import { PageHeader } from "./PageHeader";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  IconButton,
+  ProgressBar,
+  Tab,
+  TabList,
+  TextInput,
+} from "./ui";
 
 
 interface DownloadQueueProps {
@@ -244,7 +249,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
         bottomContent={
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {/* Astryx TabList for filtering */}
-            <div className="overflow-x-auto h-8">
+            <div className="min-w-0">
               <TabList
                 value={filter}
                 onChange={(val) => setFilter(val)}
@@ -256,7 +261,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                     value={tab.id}
                     label={tab.label}
                     endContent={
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-raised text-fg-muted font-mono">
                         {tab.count}
                       </span>
                     }
@@ -267,21 +272,21 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
 
             {/* Select All toggle button */}
             {filteredItems.length > 0 && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={toggleSelectAll}
-                className="text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 flex items-center gap-1.5 shrink-0 px-2 py-1 cursor-pointer transition"
+                className="px-2 text-fg-muted hover:text-fg"
                 id="btn-queue-select-all"
-              >
-                {selectedIds.length === filteredItems.length ? (
-                  <CheckSquare className="w-3.5 h-3.5 text-neutral-900 dark:text-neutral-100" />
-                ) : (
-                  <Square className="w-3.5 h-3.5" />
-                )}
-                <span>
-                  {selectedIds.length > 0 ? `${selectedIds.length} Selected` : "Select All"}
-                </span>
-              </button>
+                icon={
+                  selectedIds.length === filteredItems.length ? (
+                    <CheckSquare className="w-3.5 h-3.5 text-fg" />
+                  ) : (
+                    <Square className="w-3.5 h-3.5" />
+                  )
+                }
+                label={selectedIds.length > 0 ? `${selectedIds.length} Selected` : "Select All"}
+              />
             )}
           </div>
         }
@@ -291,8 +296,8 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
       {selectedIds.length > 0 && (
         <Card padding={3} elevation="low" id="queue-batch-bar">
           <div className="flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 font-medium text-neutral-700 dark:text-neutral-300">
-              <CheckSquare className="w-4 h-4 text-neutral-900 dark:text-neutral-100" />
+            <div className="flex items-center gap-2 font-medium text-fg-muted">
+              <CheckSquare className="w-4 h-4 text-fg" />
               <span>{selectedIds.length} items selected in queue</span>
             </div>
 
@@ -343,7 +348,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
             }`}
             id="queue-items-list"
           >
-            <div className="flex items-center justify-between px-1 text-xs text-neutral-500 font-medium">
+            <div className="flex items-center justify-between px-1 text-xs text-fg-muted font-medium">
               <span>Items ({filteredItems.length})</span>
               <span>
                 {showSidePanel
@@ -374,33 +379,33 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                       id={`queue-item-row-${item.local_id}`}
                       className={`group relative flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
                         isFocused
-                          ? "bg-neutral-50 dark:bg-neutral-800/90 border-emerald-500/80 dark:border-emerald-500/80 shadow-xs ring-1 ring-emerald-500/30"
-                          : "bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-600"
+                          ? "bg-sunken border-accent/80 shadow-xs ring-1 ring-accent/30"
+                          : "bg-surface border-line hover:border-line-strong"
                       }`}
                     >
                       {/* Left: Checkbox, Queue Number, Artwork & Grouped Media Info */}
                       <div className="flex items-center gap-3.5 min-w-0 flex-1">
                         {/* Checkbox for batch selection */}
-                        <button
-                          type="button"
+                        <IconButton
                           onClick={(e) => toggleSelectItem(e, item.local_id)}
-                          className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer p-0.5 shrink-0"
-                          aria-label={`Select ${item.name}`}
-                        >
-                          {isSelectedInBatch ? (
-                            <CheckSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                          ) : (
-                            <Square className="w-4 h-4" />
-                          )}
-                        </button>
+                          className="size-auto p-0.5 rounded-sm text-fg-muted hover:text-fg hover:bg-transparent"
+                          label={`Select ${item.name}`}
+                          icon={
+                            isSelectedInBatch ? (
+                              <CheckSquare className="w-4 h-4 text-accent" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )
+                          }
+                        />
 
                         {/* Queue number */}
-                        <span className="text-[11px] font-mono font-medium text-neutral-400 dark:text-neutral-500 w-5 text-right shrink-0">
+                        <span className="text-[11px] font-mono font-medium text-fg-subtle w-5 text-right shrink-0">
                           #{queueNum}
                         </span>
 
                         {/* Artwork with service indicator dot */}
-                        <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-neutral-100 dark:bg-neutral-800 shrink-0 border border-neutral-200/80 dark:border-neutral-700/80 shadow-2xs">
+                        <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-raised shrink-0 border border-line/80 shadow-2xs">
                           <img
                             src={
                               item.thumbnail ||
@@ -416,7 +421,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         <div className="min-w-0 flex-1 space-y-1">
                           {/* Row 1: Track Title + Status Badge */}
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                            <p className="text-sm font-semibold text-fg truncate">
                               {item.name}
                             </p>
                             <div className="shrink-0 scale-95 origin-left">
@@ -425,24 +430,24 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                           </div>
 
                           {/* Row 2: Artist & Album info */}
-                          <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 truncate">
-                            <span className="font-medium text-neutral-700 dark:text-neutral-200 truncate">
+                          <div className="flex items-center gap-1.5 text-xs text-fg-muted truncate">
+                            <span className="font-medium text-fg truncate">
                               {item.artist}
                             </span>
                             {item.album && (
                               <>
-                                <span className="text-neutral-300 dark:text-neutral-600">•</span>
-                                <span className="inline-flex items-center gap-1 truncate text-neutral-500 dark:text-neutral-400">
-                                  <Disc className="w-3 h-3 text-neutral-400 shrink-0" />
+                                <span className="text-fg-subtle">•</span>
+                                <span className="inline-flex items-center gap-1 truncate text-fg-muted">
+                                  <Disc className="w-3 h-3 text-fg-subtle shrink-0" />
                                   <span className="truncate">Part of Album: {item.album}</span>
                                 </span>
                               </>
                             )}
                             {item.playlist_name && (
                               <>
-                                <span className="text-neutral-300 dark:text-neutral-600 hidden sm:inline">•</span>
-                                <span className="hidden sm:inline-flex items-center gap-1 text-neutral-400 truncate max-w-[160px]">
-                                  <Layers className="w-3 h-3 text-neutral-400 shrink-0" />
+                                <span className="text-fg-subtle hidden sm:inline">•</span>
+                                <span className="hidden sm:inline-flex items-center gap-1 text-fg-muted truncate max-w-[160px]">
+                                  <Layers className="w-3 h-3 text-fg-subtle shrink-0" />
                                   <span className="truncate">Part of Playlist: {item.playlist_name}</span>
                                 </span>
                               </>
@@ -452,7 +457,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                           {/* Row 3: Cohesive Badge Group (Source, Format/Bitrate, Size, Profile) */}
                           <div className="flex items-center gap-1.5 flex-wrap pt-0.5 text-[11px]">
                             {/* Service Source Badge */}
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60 text-neutral-700 dark:text-neutral-300 font-medium">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-raised border border-line/60 text-fg-muted font-medium">
                               <span
                                 className="w-1.5 h-1.5 rounded-full"
                                 style={{ backgroundColor: serviceInfo.color }}
@@ -461,20 +466,20 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                             </span>
 
                             {/* Audio Codec & Bitrate */}
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60 text-neutral-700 dark:text-neutral-300 font-mono">
-                              <Sliders className="w-3 h-3 text-neutral-400" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-raised border border-line/60 text-fg-muted font-mono">
+                              <Sliders className="w-3 h-3 text-fg-subtle" />
                               {item.download_format != "" ? `${item.download_format}`:`Best Source`}
                             </span>
 
                             {/* File Size Badge */}
                             {item.file_size && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60 text-neutral-600 dark:text-neutral-400 font-mono">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-raised border border-line/60 text-fg-muted font-mono">
                                 {Math.floor((Number(item.file_size) / 1024) / 1024)} MB
                               </span>
                             )}
 
                             {/* Target Profile */}
-                            <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60 text-neutral-500 dark:text-neutral-400 font-mono">
+                            <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-md bg-raised border border-line/60 text-fg-muted font-mono">
                               {item.download_profile.name || activeProfile}
                             </span>
                           </div>
@@ -487,39 +492,39 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         <div className="flex items-center justify-between text-xs">
                           {isDownloading ? (
                             <>
-                              <span className="font-mono text-xs font-bold text-neutral-800 dark:text-neutral-200">
+                              <span className="font-mono text-xs font-bold text-fg">
                                 {item.progress}%{" "}
                               </span>
                             </>
                           ) : isDownloaded ? (
                             <>
-                              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-xs">
+                              <span className="flex items-center gap-1 text-success-fg font-medium text-xs">
                                 <Check className="w-3.5 h-3.5" /> Ready
                               </span>
-                              <span className="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                              <span className="font-mono text-xs font-semibold text-success-fg">
                                 100%
                               </span>
                             </>
                           ) : isFailed ? (
                             <>
                               <span
-                                className="text-red-500 font-medium text-xs flex items-center gap-1 truncate max-w-[170px]"
+                                className="text-danger-fg font-medium text-xs flex items-center gap-1 truncate max-w-[170px]"
                                 title={item.error || "Download error"}
                               >
                                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                                 {item.error || "Failed"}
                               </span>
-                              <span className="font-mono text-xs font-semibold text-red-500">
+                              <span className="font-mono text-xs font-semibold text-danger-fg">
                                 {item.progress || 0}%
                               </span>
                             </>
                           ) : (
                             <>
-                              <span className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                              <span className="flex items-center gap-1 text-xs text-fg-muted">
                                 <Clock className="w-3.5 h-3.5" />
                                 {item.item_status === "Paused" ? "Paused" : "Queued"}
                               </span>
-                              <span className="font-mono text-xs text-neutral-400">
+                              <span className="font-mono text-xs text-fg-subtle">
                                 {item.item_status === "Paused" ? `${item.progress}%` : "0%"}
                               </span>
                             </>
@@ -527,36 +532,28 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         </div>
 
                         {/* Progress Bar (Always shown) */}
-                        <div className="w-full bg-neutral-200 dark:bg-neutral-800 h-2 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              isDownloading
-                                ? "bg-amber-500 dark:bg-amber-400"
-                                : isDownloaded
-                                ? "bg-emerald-500 dark:bg-emerald-400"
-                                : isFailed
-                                ? "bg-red-500 dark:bg-red-400"
-                                : "bg-neutral-300 dark:bg-neutral-700"
-                            }`}
-                            style={{
-                              width: `${
-                                isDownloaded
-                                  ? 100
-                                  : isFailed
-                                  ? Math.max(item.progress || 0, 15)
-                                  : isDownloading
-                                  ? item.progress
-                                  : item.item_status === "Paused"
-                                  ? item.progress
-                                  : 0
-                              }%`,
-                            }}
-                          />
-                        </div>
+                        <ProgressBar
+                          label={`Progress for ${item.name}`}
+                          isLabelHidden={true}
+                          size="md"
+                          max={100}
+                          value={
+                            isDownloaded
+                              ? 100
+                              : isFailed
+                              ? Math.max(item.progress || 0, 15)
+                              : isDownloading || item.item_status === "Paused"
+                              ? item.progress
+                              : 0
+                          }
+                          variant={
+                            isDownloading ? "info" : isDownloaded ? "success" : isFailed ? "error" : "neutral"
+                          }
+                        />
                       </div>
 
                       {/* Right: Inline Action Buttons */}
-                      <div className="flex items-center gap-2 shrink-0 justify-end pt-2 lg:pt-0 border-t lg:border-t-0 border-neutral-100 dark:border-neutral-800">
+                      <div className="flex items-center gap-2 shrink-0 justify-end pt-2 lg:pt-0 border-t lg:border-t-0 border-line">
                         {isDownloaded && (
                           <Button
                             variant="primary"
@@ -624,18 +621,16 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         />
 
                         {/* Quick Delete */}
-                        <button
-                          type="button"
+                        <IconButton
                           onClick={(e) => {
                             e.stopPropagation();
                             onAction(item.local_id, "delete");
                           }}
-                          className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition cursor-pointer"
+                          className="size-auto p-1.5 text-fg-muted hover:text-danger-fg"
                           title="Remove from queue"
-                          aria-label={`Remove ${item.name} from queue`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          label={`Remove ${item.name} from queue`}
+                          icon={<Trash2 className="w-3.5 h-3.5" />}
+                        />
                       </div>
                     </div>
                   );
@@ -649,31 +644,31 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                     id={`queue-item-row-${item.local_id}`}
                     className={`group relative flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
                       isFocused
-                        ? "bg-neutral-50 dark:bg-neutral-800/90 border-emerald-500/80 dark:border-emerald-500/80 shadow-xs ring-1 ring-emerald-500/30"
-                        : "bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-600"
+                        ? "bg-sunken border-accent/80 shadow-xs ring-1 ring-accent/30"
+                        : "bg-surface border-line hover:border-line-strong"
                     }`}
                   >
                     {/* Checkbox for batch selection */}
-                    <button
-                      type="button"
+                    <IconButton
                       onClick={(e) => toggleSelectItem(e, item.local_id)}
-                      className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer p-0.5 shrink-0"
-                      aria-label={`Select ${item.name}`}
-                    >
-                      {isSelectedInBatch ? (
-                        <CheckSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                    </button>
+                      className="size-auto p-0.5 rounded-sm text-fg-muted hover:text-fg hover:bg-transparent"
+                      label={`Select ${item.name}`}
+                      icon={
+                        isSelectedInBatch ? (
+                          <CheckSquare className="w-4 h-4 text-accent" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )
+                      }
+                    />
 
                     {/* Queue number */}
-                    <span className="text-[11px] font-mono text-neutral-400 dark:text-neutral-500 w-5 text-right shrink-0">
+                    <span className="text-[11px] font-mono text-fg-subtle w-5 text-right shrink-0">
                       #{queueNum}
                     </span>
 
                     {/* Artwork with service indicator dot */}
-                    <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-neutral-100 dark:bg-neutral-800 shrink-0 border border-neutral-200/60 dark:border-neutral-700/60 shadow-2xs">
+                    <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-raised shrink-0 border border-line/60 shadow-2xs">
                       <img
                         src={
                           item.thumbnail ||
@@ -684,7 +679,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         referrerPolicy="no-referrer"
                       />
                       <span
-                        className="absolute top-1 left-1 w-2 h-2 rounded-full ring-1 ring-white/80 dark:ring-black/80"
+                        className="absolute top-1 left-1 w-2 h-2 rounded-full ring-1 ring-surface/80"
                         style={{ backgroundColor: serviceInfo.color }}
                         title={serviceInfo.name}
                       />
@@ -693,7 +688,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                     {/* Title, Artist, Status, Format */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                        <p className="text-xs font-semibold text-fg truncate">
                           {item.name}
                         </p>
                         <div className="shrink-0 scale-90 origin-right">
@@ -701,18 +696,18 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between gap-2 mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400">
+                      <div className="flex items-center justify-between gap-2 mt-0.5 text-[11px] text-fg-muted">
                         <span className="truncate">{item.artist}</span>
                         {isDownloading ? (
-                          <span className="font-mono text-amber-500 font-medium shrink-0">
+                          <span className="font-mono text-info-fg font-medium shrink-0">
                             {item.progress}%
                           </span>
                         ) : isDownloaded ? (
-                          <span className="font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                          <span className="font-mono text-success-fg shrink-0">
                             100%
                           </span>
                         ) : (
-                          <span className="font-mono text-neutral-400 shrink-0">
+                          <span className="font-mono text-fg-subtle shrink-0">
                             {item.target_format || ""}
                           </span>
                         )}
@@ -723,8 +718,8 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                     <ChevronRight
                       className={`w-4 h-4 shrink-0 transition ${
                         isFocused
-                          ? "text-emerald-500 transform translate-x-0.5"
-                          : "text-neutral-300 dark:text-neutral-600 opacity-0 group-hover:opacity-100"
+                          ? "text-accent transform translate-x-0.5"
+                          : "text-fg-subtle opacity-0 group-hover:opacity-100"
                       }`}
                     />
                   </div>
@@ -756,9 +751,9 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                     return (
                       <div className="space-y-5">
                         {/* Header bar of Side Detail Panel with Close / Collapse Button */}
-                        <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-3">
+                        <div className="flex items-center justify-between border-b border-line pb-3">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+                            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-raised text-fg-muted">
                               #{queueNum}
                             </span>
                             {getStatusBadge(selectedItem.item_status)}
@@ -773,7 +768,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                           <button
                             type="button"
                             onClick={() => setShowSidePanel(false)}
-                            className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition cursor-pointer flex items-center gap-1 text-xs"
+                            className="p-1 rounded-lg hover:bg-raised text-fg-muted hover:text-fg transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex items-center gap-1 text-xs"
                             title="Collapse side details view"
                             aria-label="Collapse side details view"
                           >
@@ -784,7 +779,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
 
                         {/* Media Hero: Artwork, Name, Artist, Album */}
                         <div className="flex items-start gap-4">
-                          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-800 shrink-0 border border-neutral-200 dark:border-neutral-700 shadow-sm">
+                          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-raised shrink-0 border border-line shadow-sm">
                             <img
                               src={
                                 selectedItem.thumbnail ||
@@ -798,22 +793,22 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                           </div>
 
                           <div className="min-w-0 flex-1 space-y-1">
-                            <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100 leading-snug">
+                            <h3 className="text-base font-bold text-fg leading-snug">
                               {selectedItem.name}
                             </h3>
-                            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
-                              <User className="w-3.5 h-3.5 text-neutral-400" />
+                            <p className="text-sm font-medium text-fg-muted flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-fg-subtle" />
                               <span>{selectedItem.artist}</span>
                             </p>
                             {selectedItem.album && (
-                              <p className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
-                                <Disc className="w-3.5 h-3.5 text-neutral-400" />
+                              <p className="text-xs text-fg-muted flex items-center gap-1.5">
+                                <Disc className="w-3.5 h-3.5 text-fg-subtle" />
                                 <span>{selectedItem.album}</span>
                               </p>
                             )}
                             {selectedItem.playlist_name && (
-                              <p className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
-                                <Layers className="w-3.5 h-3.5 text-neutral-400" />
+                              <p className="text-xs text-fg-muted flex items-center gap-1.5">
+                                <Layers className="w-3.5 h-3.5 text-fg-subtle" />
                                 <span>Playlist: {selectedItem.playlist_name}</span>
                               </p>
                             )}
@@ -821,12 +816,12 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         </div>
 
                         {/* Download Progress & Transfer Details */}
-                        <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700 space-y-2.5">
+                        <div className="p-3.5 rounded-xl bg-sunken border border-line/80 space-y-2.5">
                           <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+                            <span className="font-semibold text-fg-muted">
                               Download Progress
                             </span>
-                            <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">
+                            <span className="font-mono font-bold text-fg">
                               {selectedItem.progress}%
                             </span>
                           </div>
@@ -836,20 +831,28 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                             value={selectedItem.progress}
                             max={100}
                             isLabelHidden={true}
-                            variant={isFailed ? "error" : isDownloaded ? "success" : "accent"}
+                            variant={
+                              isFailed
+                                ? "error"
+                                : isDownloaded
+                                ? "success"
+                                : isDownloading
+                                ? "info"
+                                : "neutral"
+                            }
                           />
 
-                          <div className="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
+                          <div className="flex items-center justify-between text-[11px] text-fg-muted">
                             {isDownloaded ? (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                              <span className="text-success-fg font-medium flex items-center gap-1">
                                 <Check className="w-3.5 h-3.5" /> File complete and saved to disk
                               </span>
                             ) : isFailed ? (
-                              <span className="text-red-500 font-medium flex items-center gap-1">
+                              <span className="text-danger-fg font-medium flex items-center gap-1">
                                 <AlertCircle className="w-3.5 h-3.5" /> Download stopped due to error
                               </span>
                             ) : (
-                              <span className="flex items-center gap-1 text-neutral-400">
+                              <span className="flex items-center gap-1 text-fg-subtle">
                                 <Clock className="w-3.5 h-3.5" /> {selectedItem.item_status}
                               </span>
                             )}
@@ -861,7 +864,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
 
                           {/* Error message if failed */}
                           {isFailed && selectedItem.error && (
-                            <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/60 text-xs text-red-600 dark:text-red-400 flex items-start gap-2">
+                            <div className="p-2.5 rounded-lg bg-danger-subtle border border-danger/30 text-xs text-danger-fg flex items-start gap-2">
                               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                               <div>
                                 <p className="font-semibold">Download Failure Reason:</p>
@@ -873,63 +876,63 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
 
                         {/* Technical Specifications Grid */}
                         <div className="space-y-2">
-                          <h4 className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
-                            <Sliders className="w-3.5 h-3.5 text-neutral-500" />
+                          <h4 className="text-xs font-semibold text-fg flex items-center gap-1.5">
+                            <Sliders className="w-3.5 h-3.5 text-fg-subtle" />
                             Technical Specs & Profile Information
                           </h4>
 
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                            <div className="p-2.5 rounded-lg bg-neutral-100/70 dark:bg-neutral-800/60 border border-neutral-200/50 dark:border-neutral-700/50">
-                              <span className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider block">
+                            <div className="p-2.5 rounded-lg bg-raised/70 border border-line/50">
+                              <span className="text-[10px] text-fg-muted uppercase font-bold tracking-wider block">
                                 Catalog Service
                               </span>
-                              <span className="font-medium text-neutral-800 dark:text-neutral-200 mt-0.5 block">
+                              <span className="font-medium text-fg mt-0.5 block">
                                 {serviceInfo.name}
                               </span>
                             </div>
 
-                            <div className="p-2.5 rounded-lg bg-neutral-100/70 dark:bg-neutral-800/60 border border-neutral-200/50 dark:border-neutral-700/50">
-                              <span className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider block">
+                            <div className="p-2.5 rounded-lg bg-raised/70 border border-line/50">
+                              <span className="text-[10px] text-fg-muted uppercase font-bold tracking-wider block">
                                 Audio Codec
                               </span>
-                              <span className="font-mono font-medium text-neutral-800 dark:text-neutral-200 mt-0.5 block">
+                              <span className="font-mono font-medium text-fg mt-0.5 block">
                                 {selectedItem.target_format || "FLAC Lossless"}
                               </span>
                             </div>
 
-                            <div className="p-2.5 rounded-lg bg-neutral-100/70 dark:bg-neutral-800/60 border border-neutral-200/50 dark:border-neutral-700/50">
-                              <span className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider block">
+                            <div className="p-2.5 rounded-lg bg-raised/70 border border-line/50">
+                              <span className="text-[10px] text-fg-muted uppercase font-bold tracking-wider block">
                                 Bitrate & Depth
                               </span>
-                              <span className="font-mono font-medium text-neutral-800 dark:text-neutral-200 mt-0.5 block">
+                              <span className="font-mono font-medium text-fg mt-0.5 block">
                                 {selectedItem.bitrate + "kbps"}
                               </span>
                             </div>
 
-                            <div className="p-2.5 rounded-lg bg-neutral-100/70 dark:bg-neutral-800/60 border border-neutral-200/50 dark:border-neutral-700/50">
-                              <span className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider block">
+                            <div className="p-2.5 rounded-lg bg-raised/70 border border-line/50">
+                              <span className="text-[10px] text-fg-muted uppercase font-bold tracking-wider block">
                                 Item Type
                               </span>
-                              <span className="font-medium text-neutral-800 dark:text-neutral-200 mt-0.5 capitalize block">
+                              <span className="font-medium text-fg mt-0.5 capitalize block">
                                 {selectedItem.item_type || "track"}
                               </span>
                             </div>
 
-                            <div className="p-2.5 rounded-lg bg-neutral-100/70 dark:bg-neutral-800/60 border border-neutral-200/50 dark:border-neutral-700/50">
-                              <span className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider block">
+                            <div className="p-2.5 rounded-lg bg-raised/70 border border-line/50">
+                              <span className="text-[10px] text-fg-muted uppercase font-bold tracking-wider block">
                                 Profile Target
                               </span>
-                              <span className="font-medium text-neutral-800 dark:text-neutral-200 mt-0.5 block truncate">
+                              <span className="font-medium text-fg mt-0.5 block truncate">
                                 {selectedItem.download_profile.name || activeProfile}
                               </span>
                             </div>
 
-                            <div className="p-2.5 rounded-lg bg-neutral-100/70 dark:bg-neutral-800/60 border border-neutral-200/50 dark:border-neutral-700/50">
-                              <span className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider block">
+                            <div className="p-2.5 rounded-lg bg-raised/70 border border-line/50">
+                              <span className="text-[10px] text-fg-muted uppercase font-bold tracking-wider block">
                                 Item ID
                               </span>
                               <span
-                                className="font-mono text-[11px] text-neutral-800 dark:text-neutral-200 truncate mt-0.5 block"
+                                className="font-mono text-[11px] text-fg truncate mt-0.5 block"
                                 title={selectedItem.item_id}
                               >
                                 {selectedItem.item_id || selectedItem.local_id}
@@ -941,11 +944,11 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         {/* Destination File Path */}
                         {selectedItem.file_path && (
                           <div className="space-y-1">
-                            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
-                              <Folder className="w-3.5 h-3.5 text-neutral-400" />
+                            <span className="text-xs font-semibold text-fg-muted flex items-center gap-1.5">
+                              <Folder className="w-3.5 h-3.5 text-fg-subtle" />
                               Storage Destination
                             </span>
-                            <div className="p-2 rounded-lg bg-neutral-100/80 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60 font-mono text-[11px] text-neutral-600 dark:text-neutral-300 break-all select-all">
+                            <div className="p-2 rounded-lg bg-raised/80 border border-line/60 font-mono text-[11px] text-fg-muted break-all select-all">
                               {selectedItem.file_path}
                             </div>
                           </div>
@@ -954,16 +957,18 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         {/* URL / Stream Source */}
                         {selectedItem.item_url && (
                           <div className="space-y-1">
-                            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
-                              <ExternalLink className="w-3.5 h-3.5 text-neutral-400" />
+                            <span className="text-xs font-semibold text-fg-muted flex items-center gap-1.5">
+                              <ExternalLink className="w-3.5 h-3.5 text-fg-subtle" />
                               Stream Source URL
                             </span>
                             <div className="flex items-center gap-2">
-                              <input
-                                type="text"
+                              <TextInput
+                                label="Stream Source URL"
+                                isLabelHidden
+                                size="sm"
                                 readOnly
                                 value={selectedItem.item_url}
-                                className="flex-1 px-2.5 py-1.5 rounded-lg bg-neutral-100/80 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 font-mono text-[11px] text-neutral-600 dark:text-neutral-300 truncate"
+                                className="px-2.5 bg-raised/80 border-line font-mono text-[11px] text-fg-muted truncate"
                               />
                               <Button
                                 variant="secondary"
@@ -971,7 +976,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                                 label={copiedId === selectedItem.local_id ? "Copied" : "Copy"}
                                 icon={
                                   copiedId === selectedItem.local_id ? (
-                                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                    <Check className="w-3.5 h-3.5 text-success-fg" />
                                   ) : (
                                     <Copy className="w-3.5 h-3.5" />
                                   )
@@ -983,7 +988,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                         )}
 
                         {/* Actions Footer */}
-                        <div className="flex items-center justify-between gap-2 pt-3 border-t border-neutral-200 dark:border-neutral-800 flex-wrap">
+                        <div className="flex items-center justify-between gap-2 pt-3 border-t border-line flex-wrap">
                           <div className="flex items-center gap-2">
                             {isDownloaded && (
                               <Button
@@ -1048,7 +1053,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                   <EmptyState
                     title="No Item Selected"
                     description="Select a download item from the left panel to inspect full audio specifications, path routing, and actions."
-                    icon={<Info className="w-8 h-8 text-neutral-400" />}
+                    icon={<Info className="w-8 h-8 text-fg-subtle" />}
                   />
                 </Card>
               )}

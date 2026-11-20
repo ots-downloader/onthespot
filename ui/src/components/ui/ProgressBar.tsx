@@ -1,12 +1,14 @@
 import { useId, type ComponentProps } from "react";
 import { cn } from "../../lib/cn";
 
-export type ProgressBarVariant = "accent" | "success" | "error";
+export type ProgressBarVariant = "accent" | "info" | "success" | "error" | "neutral";
 
 const fillClass: Record<ProgressBarVariant, string> = {
   accent: "bg-accent",
+  info: "bg-info",
   success: "bg-success",
   error: "bg-danger",
+  neutral: "bg-line-strong",
 };
 
 export interface ProgressBarProps
@@ -17,6 +19,8 @@ export interface ProgressBarProps
   label: string;
   isLabelHidden?: boolean;
   variant?: ProgressBarVariant;
+  /** Track height: "sm" 6px, "md" 8px. Default "sm". */
+  size?: "sm" | "md";
 }
 
 export function ProgressBar({
@@ -25,6 +29,7 @@ export function ProgressBar({
   label,
   isLabelHidden = false,
   variant = "accent",
+  size = "sm",
   className,
   ...rest
 }: ProgressBarProps) {
@@ -46,7 +51,10 @@ export function ProgressBar({
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={clamped}
-        className="h-1.5 w-full overflow-hidden rounded-full bg-raised"
+        className={cn(
+          "w-full overflow-hidden rounded-full bg-raised",
+          size === "md" ? "h-2" : "h-1.5",
+        )}
       >
         <div
           className={cn("h-full rounded-full transition-[width] duration-300", fillClass[variant])}
