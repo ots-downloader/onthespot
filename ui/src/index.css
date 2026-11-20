@@ -20,3 +20,186 @@
   }
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Colour roles                                                               */
+/*                                                                            */
+/* This file is the only place a colour is defined. Markup uses the role      */
+/* utilities below (bg-surface, text-fg, border-line, ...) and never a raw    */
+/* palette class or a dark: twin. To add a theme, add one more value block.   */
+/* -------------------------------------------------------------------------- */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --ots-body: #fafafa;
+  --ots-surface: #ffffff;
+  --ots-raised: #f5f5f5;
+  --ots-sunken: #fafafa;
+  --ots-overlay: #ffffff;
+  --ots-inverse: #171717;
+  --ots-scrim: rgb(0 0 0 / 0.6);
+
+  --ots-fg: #171717;
+  --ots-fg-muted: #525252;
+  --ots-fg-subtle: #737373;
+  --ots-fg-on-accent: #ffffff;
+  --ots-fg-on-inverse: #ffffff;
+
+  --ots-line: #e5e5e5;
+  --ots-line-strong: #d4d4d4;
+  --ots-ring: #a3a3a3;
+
+  --ots-accent: #047857;
+  --ots-accent-hover: #065f46;
+  --ots-accent-subtle: #ecfdf5;
+
+  --ots-success: #10b981;
+  --ots-success-fg: #047857;
+  --ots-success-subtle: #ecfdf5;
+  --ots-warning: #f59e0b;
+  --ots-warning-fg: #b45309;
+  --ots-warning-subtle: #fffbeb;
+  --ots-danger: #ef4444;
+  --ots-danger-fg: #b91c1c;
+  --ots-danger-subtle: #fef2f2;
+  --ots-info: #0ea5e9;
+  --ots-info-fg: #0369a1;
+  --ots-info-subtle: #f0f9ff;
+
+  /* The log console is dark in both modes. */
+  --ots-console: #0a0a0a;
+  --ots-console-fg: #f5f5f5;
+  --ots-console-muted: #a3a3a3;
+  --ots-console-line: #262626;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ots-body: #0a0a0a;
+  --ots-surface: #171717;
+  --ots-raised: #262626;
+  --ots-sunken: #0f0f0f;
+  --ots-overlay: #1c1c1c;
+  --ots-inverse: #f5f5f5;
+  --ots-scrim: rgb(0 0 0 / 0.7);
+
+  --ots-fg: #f5f5f5;
+  --ots-fg-muted: #a3a3a3;
+  --ots-fg-subtle: #8a8a8a;
+  --ots-fg-on-accent: #052e1c;
+  --ots-fg-on-inverse: #171717;
+
+  --ots-line: #262626;
+  --ots-line-strong: #404040;
+  --ots-ring: #737373;
+
+  --ots-accent: #34d399;
+  --ots-accent-hover: #6ee7b7;
+  --ots-accent-subtle: #0f2e22;
+
+  --ots-success: #10b981;
+  --ots-success-fg: #34d399;
+  --ots-success-subtle: #0f2e22;
+  --ots-warning: #f59e0b;
+  --ots-warning-fg: #fbbf24;
+  --ots-warning-subtle: #33250a;
+  --ots-danger: #ef4444;
+  --ots-danger-fg: #f87171;
+  --ots-danger-subtle: #3a1414;
+  --ots-info: #0ea5e9;
+  --ots-info-fg: #38bdf8;
+  --ots-info-subtle: #0c2a3a;
+}
+
+/* "System": no data-theme on <html>, so follow the OS. Keep in step with the
+   dark block above. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --ots-body: #0a0a0a;
+    --ots-surface: #171717;
+    --ots-raised: #262626;
+    --ots-sunken: #0f0f0f;
+    --ots-overlay: #1c1c1c;
+    --ots-inverse: #f5f5f5;
+    --ots-scrim: rgb(0 0 0 / 0.7);
+
+    --ots-fg: #f5f5f5;
+    --ots-fg-muted: #a3a3a3;
+    --ots-fg-subtle: #8a8a8a;
+    --ots-fg-on-accent: #052e1c;
+    --ots-fg-on-inverse: #171717;
+
+    --ots-line: #262626;
+    --ots-line-strong: #404040;
+    --ots-ring: #737373;
+
+    --ots-accent: #34d399;
+    --ots-accent-hover: #6ee7b7;
+    --ots-accent-subtle: #0f2e22;
+
+    --ots-success-fg: #34d399;
+    --ots-success-subtle: #0f2e22;
+    --ots-warning-fg: #fbbf24;
+    --ots-warning-subtle: #33250a;
+    --ots-danger-fg: #f87171;
+    --ots-danger-subtle: #3a1414;
+    --ots-info-fg: #38bdf8;
+    --ots-info-subtle: #0c2a3a;
+  }
+}
+
+/* `inline` makes each utility read the --ots-* variable where it is used, so
+   the value follows data-theme with no dark: variant. */
+@theme inline {
+  --color-body: var(--ots-body);
+  --color-surface: var(--ots-surface);
+  --color-raised: var(--ots-raised);
+  --color-sunken: var(--ots-sunken);
+  --color-overlay: var(--ots-overlay);
+  --color-inverse: var(--ots-inverse);
+  --color-scrim: var(--ots-scrim);
+
+  --color-fg: var(--ots-fg);
+  --color-fg-muted: var(--ots-fg-muted);
+  --color-fg-subtle: var(--ots-fg-subtle);
+  --color-fg-on-accent: var(--ots-fg-on-accent);
+  --color-fg-on-inverse: var(--ots-fg-on-inverse);
+
+  --color-line: var(--ots-line);
+  --color-line-strong: var(--ots-line-strong);
+  --color-ring: var(--ots-ring);
+
+  --color-accent: var(--ots-accent);
+  --color-accent-hover: var(--ots-accent-hover);
+  --color-accent-subtle: var(--ots-accent-subtle);
+
+  --color-success: var(--ots-success);
+  --color-success-fg: var(--ots-success-fg);
+  --color-success-subtle: var(--ots-success-subtle);
+  --color-warning: var(--ots-warning);
+  --color-warning-fg: var(--ots-warning-fg);
+  --color-warning-subtle: var(--ots-warning-subtle);
+  --color-danger: var(--ots-danger);
+  --color-danger-fg: var(--ots-danger-fg);
+  --color-danger-subtle: var(--ots-danger-subtle);
+  --color-info: var(--ots-info);
+  --color-info-fg: var(--ots-info-fg);
+  --color-info-subtle: var(--ots-info-subtle);
+
+  --color-console: var(--ots-console);
+  --color-console-fg: var(--ots-console-fg);
+  --color-console-muted: var(--ots-console-muted);
+  --color-console-line: var(--ots-console-line);
+}
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+}
