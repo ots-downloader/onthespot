@@ -2,6 +2,7 @@ import { AlertCircle, CheckCircle2, DownloadCloud, Info, X } from "lucide-react"
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { isInAppLink, notificationLinkLabel } from "../lib/notifications";
 import { NotificationBannerItem } from "../types";
+import { IconButton } from "./ui";
 
 interface NotificationBannerProps {
   notifications: NotificationBannerItem[];
@@ -48,17 +49,17 @@ const NotificationItem: React.FC<{
   return (
     <div
       id={`notification-banner-${notif.id}`}
-      className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl shadow-xl border transition-all duration-300 backdrop-blur-md bg-white/95 dark:bg-neutral-900/95 border-neutral-200 dark:border-neutral-800 text-neutral-900 dark:text-neutral-100 ${
+      className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl shadow-xl border transition-all duration-300 backdrop-blur-md bg-surface/95 border-line text-fg ${
         isExiting ? "opacity-0 translate-x-8 scale-95" : "animate-in fade-in slide-in-from-bottom-2 duration-300"
       }`}
     >
       {/* Status Icon */}
       <div className="shrink-0 mt-0.5">
-        {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
-        {isFail && <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />}
-        {isDownloading && <DownloadCloud className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-pulse" />}
+        {isSuccess && <CheckCircle2 className="w-5 h-5 text-success-fg" />}
+        {isFail && <AlertCircle className="w-5 h-5 text-danger-fg" />}
+        {isDownloading && <DownloadCloud className="w-5 h-5 text-info-fg animate-pulse" />}
         {!isSuccess && !isFail && !isDownloading && (
-          <Info className="w-5 h-5 text-neutral-500 dark:text-neutral-400" />
+          <Info className="w-5 h-5 text-fg-subtle" />
         )}
       </div>
 
@@ -67,24 +68,24 @@ const NotificationItem: React.FC<{
         <img
           src={notif.thumbnail}
           alt="Cover art"
-          className="w-10 h-10 rounded-md object-cover shrink-0 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
+          className="w-10 h-10 rounded-md object-cover shrink-0 bg-raised border border-line"
           referrerPolicy="no-referrer"
         />
       )}
 
       {/* Text Content */}
       <div className="flex-1 min-w-0 pr-2">
-        <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate mb-0.5">
+        <p className="text-sm font-semibold text-fg truncate mb-0.5">
           {notif.title}
         </p>
-        <p className="text-xs text-neutral-600 dark:text-neutral-400 line-clamp-2 leading-relaxed">
+        <p className="text-xs text-fg-muted line-clamp-2 leading-relaxed">
           {notif.message}
         </p>
         {notif.url && (
           <a
             href={notif.url}
             {...(isInAppLink(notif.url) ? {} : { target: "_blank", rel: "noopener noreferrer" })}
-            className="text-[11px] text-blue-600 hover:underline dark:text-blue-400 mt-1 block truncate"
+            className="text-[11px] text-info-fg hover:underline mt-1 block truncate"
           >
             {notificationLinkLabel(notif.url)}
           </a>
@@ -92,14 +93,14 @@ const NotificationItem: React.FC<{
       </div>
 
       {/* Dismiss button */}
-      <button
-        type="button"
+      <IconButton
+        label="Dismiss notification"
+        icon={<X className="w-4 h-4" />}
+        variant="ghost"
+        size="sm"
         onClick={handleDismiss}
-        className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 p-1 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer shrink-0"
-        aria-label="Dismiss notification"
-      >
-        <X className="w-4 h-4" />
-      </button>
+        className="size-6 rounded-md text-fg-subtle hover:text-fg"
+      />
     </div>
   );
 };
