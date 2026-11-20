@@ -1,25 +1,4 @@
-@layer base, reset, astryx-base, astryx-theme, utilities;
-
-@import "@astryxdesign/core/reset.css";
-@import "@astryxdesign/core/astryx.css";
-@import "@astryxdesign/theme-neutral/theme.css";
-@import "@astryxdesign/theme-stone/theme.css";
-@import "@astryxdesign/theme-gothic/theme.css";
 @import "tailwindcss";
-
-/* dark: follows the Theme Appearance setting. Astryx sets data-theme on <html>
-   for light/dark and removes it for system, which then follows the OS. */
-@custom-variant dark {
-  &:where([data-theme="dark"], [data-theme="dark"] *) {
-    @slot;
-  }
-  @media (prefers-color-scheme: dark) {
-    &:where(:not([data-theme="light"], [data-theme="light"] *)) {
-      @slot;
-    }
-  }
-}
-
 
 /* -------------------------------------------------------------------------- */
 /* Colour roles                                                               */
@@ -153,6 +132,14 @@
   }
 }
 
+/* Clear Tailwind's default palette, so a raw class such as text-neutral-500
+   produces no CSS. Only the roles below, white and black exist. */
+@theme {
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-black: #000000;
+}
+
 /* `inline` makes each utility read the --ots-* variable where it is used, so
    the value follows data-theme with no dark: variant. */
 @theme inline {
@@ -202,4 +189,11 @@
     "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
     monospace;
+}
+
+@layer base {
+  body {
+    background-color: var(--ots-body);
+    color: var(--ots-fg);
+  }
 }
