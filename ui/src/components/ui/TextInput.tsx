@@ -30,7 +30,8 @@ export interface TextInputProps
   label: string;
   /** Keeps a real <label> for screen readers but hides it on screen. */
   isLabelHidden?: boolean;
-  value: string;
+  /** A number keeps what the user types in a number field ("1.0"). */
+  value: string | number;
   onChange?: (value: string) => void;
   description?: ReactNode;
   startIcon?: ReactNode;
@@ -57,7 +58,7 @@ export function TextInput({
   const inputId = id ?? `text-input-${autoId}`;
   const descriptionId = description ? `${inputId}-description` : undefined;
   const inputRef = useRef<HTMLInputElement>(null);
-  const showClear = hasClear && value.length > 0;
+  const showClear = hasClear && String(value).length > 0;
 
   return (
     <div className="w-full">

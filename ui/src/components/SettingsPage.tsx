@@ -140,7 +140,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               min={field.min}
               max={field.max}
               step={field.step}
-              value={String(rawVal ?? field.defaultValue ?? "")}
+              value={rawVal ?? field.defaultValue ?? ""}
               onChange={(val) => {
                 const parsed = field.isFloat
                   ? parseFloat(val) || 0
