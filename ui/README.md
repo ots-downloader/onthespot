@@ -11,7 +11,7 @@ npm run build   # production build into dist/
 
 ## Theming
 
-Every colour is defined once, in `src/index.css`, as a role: `surface`, `fg`, `line`, `accent`, `danger` and so on. Each role has a light value and a dark value. Tailwind turns each role into utilities, so markup says what a colour is for, not which colour it is:
+Every colour is defined once, in `src/index.css`, as a role: `surface`, `fg`, `line`, `accent`, `danger` and so on. Each role has a light value and, where it differs, a dark value. Tailwind turns each role into utilities, so markup says what a colour is for, not which colour it is:
 
 ```tsx
 <div className="bg-surface text-fg border border-line">
@@ -27,6 +27,6 @@ Rules:
 
 To add a role: add the variable to the light block, the dark block and the system (`prefers-color-scheme`) block in `src/index.css`, then map it in the `@theme inline` block.
 
-To add a theme: add one more block of values under a new `[data-theme="..."]` selector. No component changes.
+To add a theme: add one more block of values under a new `[data-theme="..."]` selector, after the existing blocks. Then let the new name through in four places: the `theme` type in `api/src/onthespot/basemodels.py`, `src/lib/theme.ts`, the first-paint script in `index.html`, and the "Theme Appearance" options in `src/components/SettingsPage.tsx`. Components need no colour changes.
 
 The user's choice (`system`, `light` or `dark`) is the `theme` setting in the backend config. `src/lib/theme.ts` applies it by setting `data-theme` on `<html>`, and keeps a copy in `localStorage` so the page paints in the right mode before the config loads.
