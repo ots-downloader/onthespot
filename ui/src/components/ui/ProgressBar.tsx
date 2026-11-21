@@ -34,8 +34,9 @@ export function ProgressBar({
   ...rest
 }: ProgressBarProps) {
   const labelId = `progress-${useId()}`;
-  const clamped = Math.min(Math.max(Number.isFinite(value) ? value : 0, 0), max);
-  const percent = (clamped / max) * 100;
+  const top = Number.isFinite(max) && max > 0 ? max : 100;
+  const clamped = Math.min(Math.max(Number.isFinite(value) ? value : 0, 0), top);
+  const percent = (clamped / top) * 100;
 
   return (
     <div className={cn("w-full", className)} {...rest}>
@@ -49,7 +50,7 @@ export function ProgressBar({
         role="progressbar"
         aria-labelledby={labelId}
         aria-valuemin={0}
-        aria-valuemax={max}
+        aria-valuemax={top}
         aria-valuenow={clamped}
         className={cn(
           "w-full overflow-hidden rounded-full bg-raised",

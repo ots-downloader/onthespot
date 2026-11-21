@@ -72,7 +72,6 @@ export const NotificationHistory: React.FC<NotificationHistoryProps> = ({
         isOpen={open}
         onClose={() => setOpen(false)}
         closeLabel="Close notification history"
-        className="max-h-[80vh]"
         bodyClassName="p-0 sm:p-0 divide-y divide-line"
         title={
           <>

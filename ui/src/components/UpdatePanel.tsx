@@ -126,7 +126,7 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion }) => {
                   href={assetUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line-strong bg-surface text-fg text-xs font-medium hover:bg-raised transition ${focusRing}`}
+                  className={`flex h-8 items-center gap-1.5 px-3 rounded-lg border border-line-strong bg-surface text-fg text-xs font-medium hover:bg-raised transition ${focusRing}`}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   {status.install_supported ? "Release Details" : "Download Update"}

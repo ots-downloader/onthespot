@@ -47,8 +47,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  const refreshDiagnostics = async () => {
-    setIsLoading(true);
+  // The 4s poll stays quiet; only a click shows the loading state.
+  const refreshDiagnostics = async (isManual = false) => {
+    if (isManual) setIsLoading(true);
     try {
       const res = await fetchSystemDiagnostics();
       setData(res);
@@ -57,13 +58,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
         await onCheckVersion();
       }
     } finally {
-      setIsLoading(false);
+      if (isManual) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    refreshDiagnostics();
-    const timer = setInterval(refreshDiagnostics, 4000);
+    refreshDiagnostics(true);
+    const timer = setInterval(() => refreshDiagnostics(), 4000);
     return () => clearInterval(timer);
   }, []);
 
@@ -121,8 +122,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
               variant="secondary"
               size="sm"
               label="Refresh Telemetry"
-              icon={<RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />}
-              onClick={refreshDiagnostics}
+              icon={<RefreshCw className="w-3.5 h-3.5" />}
+              onClick={() => refreshDiagnostics(true)}
               isLoading={isLoading}
               id="btn-refresh-diagnostics"
             />
@@ -494,7 +495,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 {Object.entries(data.queue.statuses).map(([status, count]) => (
                   <div
                     key={status}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-line bg-surface text-xs font-medium text-fg-muted"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-line bg-raised text-xs font-medium text-fg-muted"
                   >
                     <span>{status}:</span>
                     <span className="font-bold font-mono text-fg">
