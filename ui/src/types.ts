@@ -45,6 +45,7 @@ export interface OTSConfig {
   download_chunk_size: number;
   maximum_queue_workers: number;
   maximum_download_workers: number;
+  max_queue_size: number;
   enable_retry_worker: boolean;
   retry_worker_delay: number;
   api_retry_max_attempts: number;

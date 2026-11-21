@@ -27,7 +27,15 @@ from .constants import (
     ItemStatus,
 )
 from .resources.exceptions import UnsupportedItemError
-from .runtimedata import config, download_queue, download_queue_lock, get_logger, parsing, pending
+from .runtimedata import (
+    config,
+    download_queue,
+    download_queue_lock,
+    get_logger,
+    parsing,
+    pending,
+    queue_new_item,
+)
 from .utils import format_local_id
 
 logger = get_logger("ParsingWorker")
@@ -168,7 +176,7 @@ class ParsingWorker:
             item_status=ItemStatus.WAITING,
             download_profile=self._get_active_profile(),
         )
-        pending.put_nowait(item)
+        queue_new_item(pending, item)
 
     def _expand_spotify_playlist(self, token, playlist_id, item_url):
         try:
@@ -191,21 +199,21 @@ class ParsingWorker:
         profile = self._get_active_profile()
         for position, item_type, item_id in entries:
             kind = "episode" if item_type == "podcast_episode" else "track"
-            pending.put_nowait(
-                QueueItem(
-                    local_id=format_local_id(item_id),
-                    item_service="spotify",
-                    item_type=item_type,
-                    item_id=item_id,
-                    item_url=f"https://open.spotify.com/{kind}/{item_id}",
-                    parent_category="playlist",
-                    playlist_name=playlist_name,
-                    playlist_by=playlist_by,
-                    playlist_number=str(position),
-                    item_status=ItemStatus.WAITING,
-                    download_profile=profile,
-                )
+            item = QueueItem(
+                local_id=format_local_id(item_id),
+                item_service="spotify",
+                item_type=item_type,
+                item_id=item_id,
+                item_url=f"https://open.spotify.com/{kind}/{item_id}",
+                parent_category="playlist",
+                playlist_name=playlist_name,
+                playlist_by=playlist_by,
+                playlist_number=str(position),
+                item_status=ItemStatus.WAITING,
+                download_profile=profile,
             )
+            if not queue_new_item(pending, item):
+                break
 
     def _expand_youtube_music_channel(
         self, token, item_id, service, item_url
@@ -225,7 +233,8 @@ class ParsingWorker:
                 item_status=ItemStatus.WAITING,
                 download_profile=self._get_active_profile(),
             )
-            pending.put_nowait(item)
+            if not queue_new_item(pending, item):
+                break
 
     def _expand_podcast(self, service, item_type, item_id, token, item_url):  # Added item_url
         get_episode_ids = SERVICE_PODCAST_EPISODE_ID_FUNCTIONS.get(service)
@@ -243,7 +252,8 @@ class ParsingWorker:
                 item_status=ItemStatus.WAITING,
                 download_profile=self._get_active_profile(),
             )
-            pending.put_nowait(item)
+            if not queue_new_item(pending, item):
+                break
 
     def _expand_collection(self, service, item_type, item_id, token, item_url):
         """Expand an album, playlist, or mix into individual track entries. (No change needed as URL was already passed in)."""
@@ -288,7 +298,8 @@ class ParsingWorker:
                 item_status=ItemStatus.WAITING,
                 download_profile=self._get_active_profile(),
             )
-            pending.put_nowait(item)
+            if not queue_new_item(pending, item):
+                break
 
     def _expand_artist_or_label(self, service, item_type, item_id, token, item_url):  # Added item_url
         """Expand an artist or label into their albums (which are then re-parsed)."""
@@ -309,7 +320,8 @@ class ParsingWorker:
                 "item_type": "album",
                 "item_id": album_id,
             }
-            parsing.put_nowait(new_item)
+            if not queue_new_item(parsing, new_item):
+                break
 
     def _expand_show(self, service, item_type, item_id, token, item_url):  # Added item_url
         get_episode_ids = SERVICE_EPISODE_ID_FUNCTIONS.get(service)
@@ -327,7 +339,8 @@ class ParsingWorker:
                 item_status=ItemStatus.WAITING,
                 download_profile=self._get_active_profile(),
             )
-            pending.put_nowait(item)
+            if not queue_new_item(pending, item):
+                break
 
     # ------------------------------------------------------------------
     # Error helpers (No changes required here as they don't dispatch further items)

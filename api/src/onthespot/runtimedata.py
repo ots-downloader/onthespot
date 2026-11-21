@@ -138,6 +138,19 @@ class ThreadSafeDeque:
                 return []
             return list(self._deque)
 
+    def put_limited(self, item, limit: int | None) -> bool:
+        """Append *item* unless the queue already holds *limit* entries.
+
+        A full queue keeps the entries it has and refuses the new one, so the
+        caller can tell the user. ``put_nowait`` on a deque built with
+        ``maxsize`` would instead drop the oldest entry without a trace.
+        """
+        with self._lock:
+            if limit is not None and len(self._deque) >= limit:
+                return False
+            self._deque.append(item)
+            return True
+
     def remove(self, item):
         with self._lock:
             self._deque.remove(item)
@@ -180,13 +193,62 @@ account_pool: list = []
 #: Temporary download path override (set when user picks a custom location).
 temp_download_path: list = []
 
-# parsing and pending are unbounded on purpose: a bounded deque silently drops
+# parsing and pending are not bounded deques: a bounded deque silently drops
 # its oldest entry when full, so a playlist with more than ``maxsize`` tracks
-# lost its first tracks without any error.
+# lost its first tracks without any error. New items from the parser go
+# through :func:`queue_new_item` instead, which enforces ``max_queue_size``
+# by refusing the new item and telling the user. Items that are already
+# known (retries, requeues) use ``put_nowait`` and are never refused.
 #: Items currently being parsed (URL → item dict).
 parsing = ThreadSafeDeque(maxsize=None)
 #: Items waiting to be moved to the download queue.
 pending = ThreadSafeDeque(maxsize=None)
+
+#: Default for the ``max_queue_size`` setting.
+DEFAULT_MAX_QUEUE_SIZE = 3000
+#: In-app link to the ``max_queue_size`` field on the settings page.
+MAX_QUEUE_SIZE_SETTING_URL = "#settings/max_queue_size"
+
+_queue_limit_lock = Lock()
+_queue_limit_notified = False
+
+
+def get_max_queue_size() -> int:
+    """Return the configured ``max_queue_size``, or the default if it is invalid."""
+    try:
+        value = int(config.get("max_queue_size", DEFAULT_MAX_QUEUE_SIZE))
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_QUEUE_SIZE
+    return value if value > 0 else DEFAULT_MAX_QUEUE_SIZE
+
+
+def queue_new_item(queue: ThreadSafeDeque, item) -> bool:
+    """Add a newly parsed item to ``parsing`` or ``pending``.
+
+    The limit guards against a runaway parser. When the queue is full the
+    item is refused and ``False`` is returned, so callers expanding a list
+    should stop. The first refusal after a successful add logs a warning
+    and sends one notification that links to the setting.
+    """
+    global _queue_limit_notified
+    limit = get_max_queue_size()
+    if queue.put_limited(item, limit):
+        with _queue_limit_lock:
+            _queue_limit_notified = False
+        return True
+
+    with _queue_limit_lock:
+        first_refusal = not _queue_limit_notified
+        _queue_limit_notified = True
+    if first_refusal:
+        _logger.warning("Queue limit of %s items reached, new items are not added (max_queue_size).", limit)
+        notification_hook(
+            "Queue limit reached",
+            f"The queue holds at most {limit} items, so the rest of this list was not added. "
+            "To queue larger lists, increase Max Queue Size in the settings.",
+            MAX_QUEUE_SIZE_SETTING_URL,
+        )
+    return False
 
 #: Active download queue (local_id → item dict).
 download_queue: dict[int, QueueItem] = {}

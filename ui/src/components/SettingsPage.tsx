@@ -19,7 +19,7 @@ import {
   Sliders,
   Tag
 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { getTargetBackendUrl, setTargetBackendUrl, testBackendConnection } from "../lib/api";
 import { DownloadProfile, OTSConfig } from "../types";
 import { PageHeader } from "./PageHeader";
@@ -39,7 +39,15 @@ interface SettingsPageProps {
   onActivateProfile: (profileId: string) => Promise<void>;
   onSaveProfile: (profile: DownloadProfile) => Promise<DownloadProfile>;
   onDeleteProfile: (profileId: string) => Promise<boolean>;
+  /** Setting key to scroll to and focus, e.g. from a notification link. */
+  focusField?: string;
+  onFocusHandled?: () => void;
 }
+
+/** Settings tab that holds a field which in-app links can point to. */
+const FOCUSABLE_FIELD_TABS: Record<string, string> = {
+  max_queue_size: "general",
+};
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({
   config,
@@ -49,8 +57,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onSave,
   onReset,
   onActivateProfile,
+  focusField,
+  onFocusHandled,
 }) => {
   const [activeTab, setActiveTab] = useState("general");
+
+  useEffect(() => {
+    if (!focusField) return;
+    const tab = FOCUSABLE_FIELD_TABS[focusField];
+    if (tab) setActiveTab(tab);
+    // Defer until the tab is rendered before looking up the field.
+    const timer = window.setTimeout(() => {
+      const input = document.getElementById(`setting-${focusField}`);
+      input?.scrollIntoView({ behavior: "smooth", block: "center" });
+      input?.focus({ preventScroll: true });
+      onFocusHandled?.();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusField]);
   const [localBackendUrl, setLocalBackendUrl] = useState(getTargetBackendUrl());
   const [isSavedNotice, setIsSavedNotice] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -110,10 +134,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       case "number":
         return (
           <div key={field.key}>
-            <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1.5">
+            <label
+              htmlFor={`setting-${field.key}`}
+              className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1.5"
+            >
               {field.label}
             </label>
             <input
+              id={`setting-${field.key}`}
               type="number"
               min={field.min}
               max={field.max}
@@ -266,6 +294,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               {[
                 { key: "maximum_download_workers", label: "Maximum Download Workers", type: "number", min: 1, max: 16, defaultValue: 2, description: "Simultaneous stream download threads." },
                 { key: "maximum_queue_workers", label: "Queue Polling Workers", type: "number", min: 1, max: 16, defaultValue: 4, description: "Tracks parsing and catalog gathering threads." },
+                { key: "max_queue_size", label: "Max Queue Size", type: "number", min: 100, max: 100000, defaultValue: 3000, description: "Most items waiting in the queue. Larger lists stop here with a notice." },
                 { key: "download_delay", label: "Download Delay (Seconds)", type: "number", step: "0.1", min: 0, isFloat: true, defaultValue: 1.5, description: "Simulates organic playback requests." },
                 { key: "download_delay_variance", label: "Delay Variance (Seconds)", type: "number", step: "0.1", min: 0, isFloat: true, defaultValue: 0.5, description: "Random jitter window (± seconds)." },
                 { key: "api_request_delay", label: "API Request Delay (Seconds)", type: "number", step: "0.05", min: 0, isFloat: true, defaultValue: 0, description: "Pacing interval between catalog queries." },

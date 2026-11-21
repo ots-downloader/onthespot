@@ -86,6 +86,23 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<"neutral" | "stone" | "gothic">("neutral");
   const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
   const [hasNewVersion, setHasNewVersion] = useState(false);
+  const [settingsFocusField, setSettingsFocusField] = useState<string | undefined>(undefined);
+
+  // In-app links such as "#settings/max_queue_size" (sent with backend
+  // notifications) open the settings page and jump to that field.
+  useEffect(() => {
+    const openSettingsFromHash = () => {
+      const match = window.location.hash.match(/^#settings(?:\/([\w-]+))?$/);
+      if (!match) return;
+      setActiveTab("settings");
+      setSettingsFocusField(match[1]);
+      // Clear the hash so the same link works again on the next click.
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    };
+    openSettingsFromHash();
+    window.addEventListener("hashchange", openSettingsFromHash);
+    return () => window.removeEventListener("hashchange", openSettingsFromHash);
+  }, []);
 
   // Real-time Notification Banner & History Hook
   const {
@@ -632,6 +649,8 @@ export default function App() {
               onActivateProfile={handleActivateProfile}
               onSaveProfile={handleSaveProfile}
               onDeleteProfile={handleDeleteProfile}
+              focusField={settingsFocusField}
+              onFocusHandled={() => setSettingsFocusField(undefined)}
             />
           )}
 

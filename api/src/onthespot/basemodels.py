@@ -168,6 +168,7 @@ class AppSettings(BaseModel):
     download_chunk_size: int = 50000
     maximum_queue_workers: int = 1
     maximum_download_workers: int = 1
+    max_queue_size: int = 3000
     enable_retry_worker: bool = False
     retry_worker_delay: int = 5
     api_retry_max_attempts: int = 3

@@ -14,3 +14,7 @@ class SpotifyAPIUnavailableError(Exception):
 
 class UnsupportedItemError(Exception):
     """Raised when a recognised URL points to something OnTheSpot cannot download."""
+
+
+class QueueFullError(Exception):
+    """Raised when a new item is refused because the queue reached max_queue_size."""

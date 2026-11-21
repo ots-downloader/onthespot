@@ -98,6 +98,7 @@
   "download_chunk_size": 50000,
   "maximum_queue_workers": 1,
   "maximum_download_workers": 1,
+  "max_queue_size": 3000,
   "enable_retry_worker": false,
   "retry_worker_delay": 5,
   "api_retry_max_attempts": 3,
