@@ -66,7 +66,7 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion }) => {
             Keep OnTheSpot Current
           </h3>
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-            Running version <span className="font-mono font-medium text-neutral-700 dark:text-neutral-300">v{currentVersion || "0.8.2-fastapi"}</span>. Background checks occur periodically.
+            Running version <span className="font-mono font-medium text-neutral-700 dark:text-neutral-300">{currentVersion || "unknown"}</span>. Background checks occur periodically.
           </p>
         </div>
         <button
@@ -96,7 +96,7 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion }) => {
             <div>
               <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
                 <Download className="h-4 w-4" />
-                New Version Available: v{status.latest_version}
+                New Version Available: {status.latest_version}
               </p>
               <p className="mt-0.5 text-[11px] text-neutral-600 dark:text-neutral-400">
                 {status.release_name}

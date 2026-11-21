@@ -109,7 +109,7 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [downloadsPaused, setDownloadsPaused] = useState(false);
   const [serverStatus, setServerStatus] = useState<"online" | "offline">("online");
-  const [serverVersion, setServerVersion] = useState("0.8.2-fastapi");
+  const [serverVersion, setServerVersion] = useState("");
 
   // Load initial data
   useEffect(() => {
@@ -443,7 +443,7 @@ export default function App() {
                     <span className="font-semibold text-sm tracking-tight text-neutral-900 dark:text-neutral-100">
                       OnTheSpot
                     </span>
-                    <Badge variant="neutral" label={serverVersion} />
+                    {serverVersion && <Badge variant="neutral" label={serverVersion} />}
                   </div>
                 </div>
               </div>

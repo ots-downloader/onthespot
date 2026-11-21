@@ -163,7 +163,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                 {/* 1. OnTheSpot Core */}
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 font-medium">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>OTS Core v{data.backend.version}</span>
+                  <span>OTS Core {data.backend.version}</span>
                 </div>
 
                 {/* 2. Spotify API */}

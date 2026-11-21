@@ -76,7 +76,7 @@ export async function checkServerHealth(): Promise<{
       const res = await fetch(`${target}/config/get`, { signal: AbortSignal.timeout(2000) });
       if (res.ok) {
         const data = await res.json();
-        return { status: "online", version: data.version || "FastAPI Engine", target };
+        return { status: "online", version: data.version || "", target };
       }
     } catch {
       // Offline
