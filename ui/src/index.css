@@ -5,7 +5,7 @@
 /*                                                                            */
 /* This file is the only place a colour is defined. Markup uses the role      */
 /* utilities below (bg-surface, text-fg, border-line, ...) and never a raw    */
-/* palette class or a dark: twin. To add a theme, add one more value block.   */
+/* palette class or a dark: twin. To add a theme, see README.md.              */
 /* -------------------------------------------------------------------------- */
 
 :root,
@@ -28,7 +28,7 @@
 
   --ots-line: #e5e5e5;
   --ots-line-strong: #d4d4d4;
-  --ots-ring: #a3a3a3;
+  --ots-ring: #737373;
 
   --ots-accent: #047857;
   --ots-accent-hover: #065f46;
@@ -40,7 +40,8 @@
   --ots-warning: #f59e0b;
   --ots-warning-fg: #b45309;
   --ots-warning-subtle: #fffbeb;
-  --ots-danger: #ef4444;
+  --ots-danger: #dc2626;
+  --ots-danger-hover: #b91c1c;
   --ots-danger-fg: #b91c1c;
   --ots-danger-subtle: #fef2f2;
   --ots-info: #0ea5e9;
@@ -85,7 +86,7 @@
   --ots-warning: #f59e0b;
   --ots-warning-fg: #fbbf24;
   --ots-warning-subtle: #33250a;
-  --ots-danger: #ef4444;
+  --ots-danger: #dc2626;
   --ots-danger-fg: #f87171;
   --ots-danger-subtle: #3a1414;
   --ots-info: #0ea5e9;
@@ -172,6 +173,7 @@
   --color-warning-fg: var(--ots-warning-fg);
   --color-warning-subtle: var(--ots-warning-subtle);
   --color-danger: var(--ots-danger);
+  --color-danger-hover: var(--ots-danger-hover);
   --color-danger-fg: var(--ots-danger-fg);
   --color-danger-subtle: var(--ots-danger-subtle);
   --color-info: var(--ots-info);
@@ -195,5 +197,7 @@
   body {
     background-color: var(--ots-body);
     color: var(--ots-fg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }

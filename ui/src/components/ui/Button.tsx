@@ -11,14 +11,14 @@ export type ButtonVariant =
 export type ButtonSize = "sm" | "md";
 
 export const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
 export const buttonVariantClass: Record<ButtonVariant, string> = {
   primary: "bg-inverse text-fg-on-inverse hover:bg-inverse/85",
   accent: "bg-accent text-fg-on-accent hover:bg-accent-hover",
   secondary: "bg-surface border border-line-strong text-fg hover:bg-raised",
   ghost: "bg-transparent text-fg hover:bg-raised",
-  destructive: "bg-danger text-white hover:bg-danger/85",
+  destructive: "bg-danger text-white hover:bg-danger-hover",
 };
 
 const sizeClass: Record<ButtonSize, string> = {

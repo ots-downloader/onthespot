@@ -8,7 +8,7 @@ import {
   Terminal,
   Users
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 import {
   activateProfile,
@@ -130,8 +130,8 @@ export default function App() {
   const [serverStatus, setServerStatus] = useState<"online" | "offline">("online");
   const [serverVersion, setServerVersion] = useState("");
 
-  // Light/dark mode follows the "Theme Appearance" setting.
-  useEffect(() => {
+  // Light/dark mode follows the "Theme Appearance" setting. Runs before paint.
+  useLayoutEffect(() => {
     applyAppearance(config.theme);
   }, [config.theme]);
 
@@ -453,7 +453,7 @@ export default function App() {
       <AppShell
         topNav={
           <TopNav
-            label="OnTheSpot Main Navigation"
+            label="OnTheSpot"
             heading={
               <div className="flex items-center gap-2.5 py-1">
                 <div className="w-8 h-8 rounded-lg bg-inverse flex items-center justify-center text-fg-on-inverse shadow-xs">

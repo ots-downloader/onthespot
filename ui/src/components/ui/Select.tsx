@@ -109,7 +109,7 @@ export function Select({
                   key={option.value}
                   value={encode(option.value)}
                   className={cn(
-                    "relative flex cursor-pointer select-none items-center rounded-md py-1.5 pl-7 pr-3 outline-none",
+                    "relative flex cursor-pointer select-none items-center rounded-md py-1.5 pl-7 pr-3 outline-none data-[highlighted]:outline-hidden",
                     size === "sm" ? "text-xs" : "text-sm",
                     "data-[highlighted]:bg-raised data-[state=checked]:font-medium",
                   )}

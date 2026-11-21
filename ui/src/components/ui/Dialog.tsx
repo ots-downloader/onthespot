@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Dialog as RadixDialog } from "radix-ui";
 import { X } from "lucide-react";
 import { cn } from "../../lib/cn";
@@ -50,6 +50,9 @@ export function Dialog({
   className,
   bodyClassName,
 }: DialogProps) {
+  // The dialog has no Radix trigger, so it hands focus back itself on close.
+  const openerRef = useRef<HTMLElement | null>(null);
+
   return (
     <RadixDialog.Root
       open={isOpen}
@@ -61,6 +64,15 @@ export function Dialog({
         <RadixDialog.Overlay className="fixed inset-0 z-50 bg-scrim backdrop-blur-xs" />
         <RadixDialog.Content
           id={id}
+          onOpenAutoFocus={() => {
+            openerRef.current =
+              document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            if (!openerRef.current?.isConnected) return;
+            event.preventDefault();
+            openerRef.current.focus();
+          }}
           onEscapeKeyDown={dismissible ? undefined : (event) => event.preventDefault()}
           onInteractOutside={dismissible ? undefined : (event) => event.preventDefault()}
           // Without a description Radix warns unless this is set to undefined.
