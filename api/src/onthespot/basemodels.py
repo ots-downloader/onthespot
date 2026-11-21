@@ -124,7 +124,7 @@ class Account(BaseModel):
 
 
 class AppSettings(BaseModel):
-    version: str = "v2.0.2 beta 3"
+    version: str = ""
     debug_mode: bool = False
     language_index: int = 0
     total_downloaded_items: int = 0
