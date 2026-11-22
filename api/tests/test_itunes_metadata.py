@@ -5,7 +5,12 @@ from unittest.mock import patch
 
 from _support import TEST_ROOT  # noqa: F401
 
-from onthespot.api.itunes import itunes_get_metadata  # noqa: E402
+from onthespot.api.itunes import (  # noqa: E402
+    fetch_itunes_artwork,
+    itunes_get_metadata,
+    itunes_result_to_library_changes,
+    itunes_search_candidates,
+)
 from onthespot.api.metadata_enrichment import enrich_metadata  # noqa: E402
 
 ITUNES_SONG = {
@@ -177,6 +182,78 @@ class ItunesMetadataTests(unittest.TestCase):
     def test_unsupported_input_warns_and_returns_unchanged(self):
         with self.assertLogs("api.itunes", level="WARNING"):
             self.assertIsNone(itunes_get_metadata(None))
+
+
+class ItunesManualSearchTests(unittest.TestCase):
+    def test_candidates_are_ranked_without_a_confidence_cutoff(self):
+        unrelated = dict(ITUNES_SONG, trackId="2", trackName="Totally Different Song", artistName="Somebody Else")
+        response = {"results": [unrelated, dict(ITUNES_SONG, trackId="1", trackTimeMillis=224000)]}
+        with patch("onthespot.api.itunes.make_call", return_value=response):
+            candidates = itunes_search_candidates(
+                "Harder Better Faster Stronger",
+                "Daft Punk",
+                "Discovery",
+                length="224693",
+            )
+
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(candidates[0]["track_id"], "1")
+        self.assertGreater(candidates[0]["score"], candidates[1]["score"])
+
+    def test_candidates_include_path_formatter_fields(self):
+        with patch("onthespot.api.itunes.make_call", return_value={"results": [dict(ITUNES_SONG, trackId="7")]}):
+            candidates = itunes_search_candidates("Harder Better Faster Stronger", "Daft Punk")
+
+        candidate = candidates[0]
+        self.assertEqual(candidate["track_number"], 4)
+        self.assertEqual(candidate["total_tracks"], 14)
+        self.assertEqual(candidate["disc_number"], 1)
+        self.assertEqual(candidate["total_discs"], 1)
+        self.assertEqual(candidate["release_year"], "2001")
+
+    def test_library_changes_accept_candidate_shaped_dicts(self):
+        candidate = {
+            "title": "Harder Better Faster Stronger",
+            "artist": "Daft Punk",
+            "album": "Discovery",
+            "album_artist": "Daft Punk",
+            "genre": "Dance",
+            "release_year": "2001",
+            "track_number": 4,
+            "disc_number": 1,
+            "image_url": "https://example.com/art.jpg",
+        }
+        self.assertEqual(
+            itunes_result_to_library_changes(candidate),
+            {
+                "title": "Harder Better Faster Stronger",
+                "artist": "Daft Punk",
+                "album": "Discovery",
+                "album_artist": "Daft Punk",
+                "genre": "Dance",
+                "year": "2001",
+                "track_number": 4,
+                "disc_number": 1,
+            },
+        )
+
+    def test_artwork_fetch_only_allows_apples_cdn(self):
+        with patch("onthespot.api.itunes.requests.get") as mock_get:
+            with self.assertRaises(ValueError):
+                fetch_itunes_artwork("http://localhost/admin")
+            mock_get.assert_not_called()
+
+            response = mock_get.return_value
+            response.content = b"image-bytes"
+            data = fetch_itunes_artwork("https://is1-ssl.mzstatic.com/image/thumb/art.jpg")
+            self.assertEqual(data, b"image-bytes")
+            self.assertEqual(mock_get.call_args.kwargs["timeout"], 10.0)
+            self.assertFalse(mock_get.call_args.kwargs["allow_redirects"])
+
+    def test_artwork_fetch_failure_raises_value_error(self):
+        with patch("onthespot.api.itunes.requests.get", side_effect=OSError("offline")):
+            with self.assertRaises(ValueError):
+                fetch_itunes_artwork("https://is1-ssl.mzstatic.com/image/thumb/art.jpg")
 
 
 if __name__ == "__main__":

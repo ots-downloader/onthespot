@@ -3,6 +3,10 @@ import {
   AccountItem,
   DownloadProfile,
   DownloadQueueItem,
+  IdentifyApplyRequest,
+  IdentifyApplyResponse,
+  IdentifySearchRequest,
+  IdentifySearchResponse,
   LogEntry,
   OTSConfig,
   PendingQueueItem,
@@ -155,6 +159,34 @@ export async function fetchDownloadQueue(): Promise<DownloadQueueItem[]> {
   if (!res.ok) throw new Error("Failed to fetch download queue");
   const data = await res.json();
   return Array.isArray(data) ? data : Object.values(data);
+}
+
+async function identifyError(res: Response, fallback: string): Promise<Error> {
+  try {
+    const data = await res.json();
+    if (typeof data?.detail === "string" && data.detail) return new Error(data.detail);
+  } catch {
+    // Use the fallback message when the backend did not return JSON.
+  }
+  return new Error(fallback);
+}
+
+export async function searchItunesMatches(payload: IdentifySearchRequest): Promise<IdentifySearchResponse> {
+  const res = await request("/metadata/identify/search", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw await identifyError(res, "iTunes search failed");
+  return await res.json();
+}
+
+export async function applyItunesMatch(payload: IdentifyApplyRequest): Promise<IdentifyApplyResponse> {
+  const res = await request("/metadata/identify/apply", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw await identifyError(res, "Could not apply the selected match");
+  return await res.json();
 }
 
 export async function addToQueue(

@@ -286,6 +286,54 @@ export type QueueItemStatus =
     }
 
 
+export interface IdentifyCandidate {
+    track_id: string;
+    title: string;
+    artist: string;
+    album: string;
+    album_artist: string;
+    genre: string;
+    release_year: string;
+    track_number: number | null;
+    total_tracks: number | null;
+    disc_number: number | null;
+    total_discs: number | null;
+    image_url: string;
+    length: string;
+    score: number;
+  }
+
+export interface IdentifySearchRequest {
+    local_id: number;
+    title?: string | null;
+    artist?: string | null;
+    album?: string | null;
+    country?: string | null;
+    limit?: number;
+  }
+
+export interface IdentifySearchResponse {
+    query: { title: string; artist: string; album: string };
+    country: string;
+    candidates: IdentifyCandidate[];
+  }
+
+export interface IdentifyApplyRequest {
+    local_id: number;
+    candidate: IdentifyCandidate;
+    embed_artwork?: boolean;
+  }
+
+export interface IdentifyApplyResponse {
+    original_path: string;
+    file_path: string;
+    queue_updated: boolean;
+    item: DownloadQueueItem;
+    metadata: Record<string, unknown>;
+    warnings: string[];
+  }
+
+
 export interface DownloadProfile {
   id: string;
   name: string;

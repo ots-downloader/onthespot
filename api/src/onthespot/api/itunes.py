@@ -16,6 +16,9 @@ import re
 import unicodedata
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import urlparse
+
+import requests
 
 from ..runtimedata import get_logger
 from ..utils import make_call
@@ -42,6 +45,153 @@ _WEAK_ARTISTS = {
 
 _PUNCTUATION_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _BRACKETED_RE = re.compile(r"[\(\[][^\)\]]*[\)\]]")
+
+# Artwork URLs in iTunes responses are served from Apple's CDN.  Only fetch
+# from that host so a client-supplied candidate cannot be used for SSRF.
+_TRUSTED_ARTWORK_HOSTS = {"mzstatic.com", "itunes.apple.com"}
+
+
+def _storefront(country: Any, context: str = "lookup") -> str:
+    """Return a usable two-letter storefront, warning and falling back if not."""
+    storefront = _text(country).upper()
+    if len(storefront) == 2 and storefront.isalpha():
+        return storefront
+    logger.warning("Invalid iTunes country %r for %s; falling back to %s", country, context, DEFAULT_COUNTRY)
+    return DEFAULT_COUNTRY
+
+
+def _run_itunes_search(query: str, country: str, limit: int) -> list[dict]:
+    """Call the search endpoint and return usable song results, never raising."""
+    params = {"term": query, "entity": "song", "limit": limit, "country": country}
+    try:
+        response = make_call(ITUNES_SEARCH_URL, params=params)
+    except Exception as exc:
+        logger.warning("iTunes metadata lookup failed for query %r: %s", query, exc)
+        return []
+
+    if not isinstance(response, Mapping):
+        logger.warning("iTunes metadata lookup returned no usable response for query %r", query)
+        return []
+    results = response.get("results")
+    if not isinstance(results, list):
+        logger.warning("iTunes metadata lookup returned malformed results for query %r", query)
+        return []
+    return [result for result in results if isinstance(result, Mapping)]
+
+
+def itunes_search_candidates(
+    title: Any = "",
+    artist: Any = "",
+    album: Any = "",
+    *,
+    country: str = DEFAULT_COUNTRY,
+    limit: int = SEARCH_LIMIT,
+    length: Any = None,
+) -> list[dict]:
+    """Return ranked iTunes song candidates for manual selection.
+
+    Unlike :func:`itunes_get_metadata`, no confidence cutoff is applied: the
+    user decides which result is correct.  Network and response errors are
+    logged as warnings and produce an empty list.
+    """
+    title_text = _text(title)
+    artist_text = _primary_name(_text(artist))
+    if artist_text.casefold() in _WEAK_ARTISTS:
+        artist_text = ""
+    album_text = _text(album)
+
+    if not title_text:
+        logger.warning("iTunes candidate search skipped: no usable track title")
+        return []
+
+    storefront = _storefront(country, "candidate search")
+    terms = [title_text]
+    if artist_text:
+        terms.append(artist_text)
+    if album_text:
+        terms.append(album_text)
+    query = " ".join(terms)
+    length_ms = _duration_ms(length)
+
+    results = _run_itunes_search(query, storefront, max(1, min(int(limit or SEARCH_LIMIT), 20)))
+    candidates = []
+    for result in results:
+        if result.get("kind") not in (None, "song"):
+            continue
+        mapped = _map_result(result)
+        candidates.append(
+            {
+                "track_id": _text(result.get("trackId")),
+                "title": mapped.get("title", ""),
+                "artist": mapped.get("artists", ""),
+                "album": mapped.get("album_name", ""),
+                "album_artist": mapped.get("album_artists", ""),
+                "genre": mapped.get("genre", ""),
+                "release_year": mapped.get("release_year", ""),
+                "track_number": mapped.get("track_number"),
+                "total_tracks": mapped.get("total_tracks"),
+                "disc_number": mapped.get("disc_number"),
+                "total_discs": mapped.get("total_discs"),
+                "image_url": mapped.get("image_url", ""),
+                "length": mapped.get("length", ""),
+                "score": round(_score_candidate(result, title_text, artist_text, album_text, length_ms), 2),
+            }
+        )
+
+    candidates.sort(key=lambda entry: entry["score"], reverse=True)
+    return candidates
+
+
+def itunes_result_to_library_changes(result: Mapping) -> dict:
+    """Map an iTunes result (or candidate dict) to ``library.update_metadata`` keys."""
+    raw_keys = {"trackName", "artistName", "collectionName", "artworkUrl100"}
+    mapped = _map_result(result) if raw_keys.intersection(result) else dict(result)
+
+    changes: dict[str, Any] = {}
+    field_map = {
+        "title": ("title",),
+        "artist": ("artist", "artists"),
+        "album": ("album", "album_name"),
+        "album_artist": ("album_artist", "album_artists"),
+        "genre": ("genre",),
+        "year": ("release_year", "year"),
+        "track_number": ("track_number",),
+        "disc_number": ("disc_number",),
+    }
+    for target_key, source_keys in field_map.items():
+        for source_key in source_keys:
+            value = mapped.get(source_key)
+            if not _is_missing(value):
+                changes[target_key] = value
+                break
+    return changes
+
+
+def fetch_itunes_artwork(url: Any, *, timeout: float = 10.0) -> bytes:
+    """Download artwork from Apple's CDN, raising only on unusable responses."""
+    artwork_url = _text(url)
+    if not artwork_url:
+        raise ValueError("The selected match has no artwork URL")
+
+    parsed = urlparse(artwork_url)
+    host = (parsed.hostname or "").casefold()
+    allowed_host = host in _TRUSTED_ARTWORK_HOSTS or host.endswith(".mzstatic.com")
+    if parsed.scheme != "https" or not allowed_host:
+        raise ValueError("Refusing to fetch artwork from an untrusted host")
+
+    try:
+        # Do not follow redirects: the initial URL is the only host that was
+        # validated above, and a redirect could otherwise reach an internal host.
+        response = requests.get(artwork_url, timeout=timeout, allow_redirects=False)
+        response.raise_for_status()
+        data = bytes(response.content or b"")
+    except Exception as exc:
+        logger.warning("Could not download iTunes artwork from %s: %s", artwork_url, exc)
+        raise ValueError("Could not download iTunes artwork") from exc
+
+    if not data:
+        raise ValueError("iTunes artwork response was empty")
+    return data
 
 
 def _as_mapping(value: Any, label: str) -> dict | None:
@@ -244,10 +394,7 @@ def itunes_get_metadata(track, item=None, *, overwrite: bool = False, country: s
         logger.warning("iTunes metadata lookup skipped for %s: no usable track title", context)
         return track
 
-    storefront = _text(country).upper()
-    if len(storefront) != 2 or not storefront.isalpha():
-        logger.warning("Invalid iTunes country %r for %s; falling back to %s", country, context, DEFAULT_COUNTRY)
-        storefront = DEFAULT_COUNTRY
+    storefront = _storefront(country, context)
 
     terms = [title]
     if artist:
@@ -255,23 +402,8 @@ def itunes_get_metadata(track, item=None, *, overwrite: bool = False, country: s
     if album:
         terms.append(album)
     query = " ".join(terms)
-    params = {"term": query, "entity": "song", "limit": SEARCH_LIMIT, "country": storefront}
 
-    try:
-        response = make_call(ITUNES_SEARCH_URL, params=params)
-    except Exception as exc:
-        logger.warning("iTunes metadata lookup failed for %s (%s): %s", context, query, exc)
-        return track
-
-    if not isinstance(response, Mapping):
-        logger.warning("iTunes metadata lookup returned no usable response for %s (%s)", context, query)
-        return track
-
-    results = response.get("results")
-    if not isinstance(results, list):
-        logger.warning("iTunes metadata lookup returned malformed results for %s (%s)", context, query)
-        return track
-
+    results = _run_itunes_search(query, storefront, SEARCH_LIMIT)
     length_ms = _duration_ms(track_data.get("length"))
     best_result = None
     best_score = 0.0

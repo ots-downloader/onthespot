@@ -107,6 +107,39 @@ class LibraryOpen(BaseModel):
     action: str = "folder"
 
 
+## Manual Identification Models
+class IdentifySearchRequest(BaseModel):
+    local_id: int
+    title: str | None = Field(default=None, max_length=300)
+    artist: str | None = Field(default=None, max_length=300)
+    album: str | None = Field(default=None, max_length=300)
+    country: str | None = Field(default=None, pattern=r"^[A-Za-z]{2}$")
+    limit: int = Field(default=10, ge=1, le=20)
+
+
+class IdentifyCandidate(BaseModel):
+    track_id: str = Field(default="", max_length=64)
+    title: str = Field(default="", max_length=300)
+    artist: str = Field(default="", max_length=300)
+    album: str = Field(default="", max_length=300)
+    album_artist: str = Field(default="", max_length=300)
+    genre: str = Field(default="", max_length=120)
+    release_year: str = Field(default="", max_length=4)
+    track_number: int | None = Field(default=None, ge=1, le=9999)
+    total_tracks: int | None = Field(default=None, ge=1, le=9999)
+    disc_number: int | None = Field(default=None, ge=1, le=999)
+    total_discs: int | None = Field(default=None, ge=1, le=999)
+    image_url: str = Field(default="", max_length=1000)
+    length: str = Field(default="", max_length=32)
+    score: float = Field(default=0.0, ge=0.0, le=20.0)
+
+
+class IdentifyApplyRequest(BaseModel):
+    local_id: int
+    candidate: IdentifyCandidate
+    embed_artwork: bool = True
+
+
 ## Config Models
 
 

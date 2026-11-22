@@ -55,6 +55,7 @@ from .api.spotify_device_auth import (
 from .api.tidal import tidal_add_account_pt1, tidal_add_account_pt2
 from .api.youtube_music import youtube_music_add_account
 from .basemodels import *
+from .basemodels import IdentifyApplyRequest, IdentifySearchRequest
 from .constants import _SEARCH_FILTER_TYPES, _SEARCH_SERVICE_FILTER_KEYS, ItemStatus
 from .downloader import DownloadWorker, RetryWorker
 from .export_locations import (
@@ -69,6 +70,7 @@ from .library import (
     import_index,
     verify_file,
 )
+from .metadata_identify import apply_manual_match, search_manual_matches
 from .otsconfig import config
 from .parse_item import search
 from .parsingworker import ParsingWorker
@@ -826,6 +828,39 @@ async def queue_action(lid: str, action: str):
     if result_status == ItemStatus.DELETED:
         return {"success": True, "action": action, "status": result_status}
     return {"success": False, "error": "Queue item not found."}
+
+
+## MANUAL TRACK IDENTIFICATION
+@app.post("/metadata/identify/search")
+async def identify_search(request: IdentifySearchRequest):
+    """Search iTunes for matches for a finished queue item."""
+    try:
+        return search_manual_matches(request)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Manual iTunes search failed")
+        raise HTTPException(status_code=500, detail="Manual iTunes search failed") from exc
+
+
+@app.post("/metadata/identify/apply")
+async def identify_apply(request: IdentifyApplyRequest):
+    """Write the selected match to a new tagged copy of the downloaded file."""
+    try:
+        return await run_in_threadpool(apply_manual_match, request)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Manual iTunes apply failed")
+        raise HTTPException(status_code=500, detail="Manual iTunes apply failed") from exc
 
 
 @app.get("/queue/downloads/retryfailed")

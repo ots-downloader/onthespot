@@ -14,6 +14,7 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -568,6 +569,29 @@ def rename_file(path: str, new_name: str) -> dict[str, Any]:
         index[_path_key(target)] = {**previous, **_read_file(target)}
         _save_index(index)
     return _read_file(target)
+
+
+def copy_library_file(source: str, target: str) -> str:
+    """Copy *source* to *target* without ever overwriting or removing a file.
+
+    Both paths must stay inside the configured music roots. The caller is
+    responsible for choosing a target name that does not already exist; this
+    function still refuses to overwrite in case of a race.
+    """
+    source_path = _absolute(source)
+    target_path = _absolute(target)
+    if not is_allowed_path(source_path):
+        raise ValueError("Source file is outside the configured music library")
+    if not is_allowed_path(target_path, allow_missing=True):
+        raise ValueError("Target file is outside the configured music library")
+    if _path_key(source_path) == _path_key(target_path):
+        raise ValueError("Source and target paths must be different")
+    if os.path.exists(target_path):
+        raise FileExistsError("A file with that name already exists")
+
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    shutil.copy2(source_path, target_path)
+    return target_path
 
 
 def update_metadata(path: str, changes: dict[str, Any]) -> dict[str, Any]:
