@@ -125,7 +125,10 @@ def itunes_search_candidates(
                 "title": mapped.get("title", ""),
                 "artist": mapped.get("artists", ""),
                 "album": mapped.get("album_name", ""),
-                "album_artist": mapped.get("album_artists", ""),
+                # iTunes often omits collectionArtistName for singles. Fall back
+                # to the track artist so path formatters using {album_artist}
+                # still produce Artist/Album/... instead of a top-level album.
+                "album_artist": mapped.get("album_artists") or mapped.get("artists") or "",
                 "genre": mapped.get("genre", ""),
                 "release_year": mapped.get("release_year", ""),
                 "track_number": mapped.get("track_number"),
@@ -152,7 +155,7 @@ def itunes_result_to_library_changes(result: Mapping) -> dict:
         "title": ("title",),
         "artist": ("artist", "artists"),
         "album": ("album", "album_name"),
-        "album_artist": ("album_artist", "album_artists"),
+        "album_artist": ("album_artist", "album_artists", "artist", "artists"),
         "genre": ("genre",),
         "year": ("release_year", "year"),
         "track_number": ("track_number",),

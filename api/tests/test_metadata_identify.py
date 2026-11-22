@@ -168,6 +168,33 @@ class ManualIdentifyTests(unittest.TestCase):
         self.assertEqual(download_queue[42].file_path, str(expected))
         self.assertEqual(download_queue[42].name, "Correct Title")
 
+    def test_default_formatter_nests_album_inside_artist_when_album_artist_missing(self):
+        self._add_item()
+        candidate = self._candidate(album_artist="")
+
+        def formatter_settings(key, default=None):
+            if key == "track_path_formatter":
+                return "Tracks/{album_artist}/{year} {album}/{name}"
+            return self.settings(key, default)
+
+        with patch("onthespot.utils.config.get", side_effect=formatter_settings):
+            result, update, _, _, _ = self._run_apply(candidate=candidate)
+
+        expected = self.root / "Tracks" / "Correct Artist" / "2001 Correct Album" / "Correct Title.mp3"
+        self.assertEqual(result["file_path"], str(expected))
+        self.assertTrue(expected.is_file())
+        self.assertEqual(update.call_args.args[1]["album_artist"], "Correct Artist")
+
+    def test_extension_is_kept_when_title_contains_a_dot(self):
+        self._add_item()
+        candidate = self._candidate(title="Song feat. Guest")
+
+        result, _, _, _, _ = self._run_apply(candidate=candidate)
+
+        expected = self.root / "Correct Artist" / "Song feat. Guest.mp3"
+        self.assertEqual(result["file_path"], str(expected))
+        self.assertTrue(expected.is_file())
+
     def test_existing_target_gets_a_numeric_suffix_without_overwrite(self):
         self._add_item()
         existing = self.root / "Correct Artist" / "Correct Title.mp3"

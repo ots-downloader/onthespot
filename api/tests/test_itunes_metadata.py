@@ -205,6 +205,7 @@ class ItunesManualSearchTests(unittest.TestCase):
             candidates = itunes_search_candidates("Harder Better Faster Stronger", "Daft Punk")
 
         candidate = candidates[0]
+        self.assertEqual(candidate["album_artist"], "Daft Punk")
         self.assertEqual(candidate["track_number"], 4)
         self.assertEqual(candidate["total_tracks"], 14)
         self.assertEqual(candidate["disc_number"], 1)

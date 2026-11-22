@@ -122,7 +122,11 @@ def _candidate_metadata(snapshot: dict[str, Any], candidate: Mapping) -> dict[st
         "title": _text(candidate.get("title")) or _text(snapshot.get("name")),
         "artists": _text(candidate.get("artist")) or _text(snapshot.get("artist")),
         "album_name": _text(candidate.get("album")) or _text(snapshot.get("album")),
-        "album_artists": _text(candidate.get("album_artist")),
+        "album_artists": (
+            _text(candidate.get("album_artist"))
+            or _text(candidate.get("artist"))
+            or _text(snapshot.get("artist"))
+        ),
         "release_year": _text(candidate.get("release_year")),
         "genre": _text(candidate.get("genre")),
         "track_number": candidate.get("track_number") or 1,
@@ -147,10 +151,12 @@ def _target_path(source: str, snapshot: dict[str, Any], metadata: dict[str, Any]
         queue_item = QueueItem.model_validate(snapshot)
         relative = format_item_path(queue_item, metadata)
         # Download formatters intentionally omit the extension; the downloader
-        # appends it after conversion, so mirror that for the tagged copy.
-        base, extension = os.path.splitext(relative)
-        if not extension:
-            relative = base + os.path.splitext(source)[1]
+        # appends it after conversion, so mirror that for the tagged copy. Do
+        # not use splitext() here: a dot in a title like "Song feat. Guest"
+        # would be mistaken for an extension and no real suffix would be added.
+        extension = os.path.splitext(source)[1]
+        if extension and not relative.lower().endswith(extension.lower()):
+            relative = relative + extension
         return os.path.join(os.path.expanduser(root), relative)
     except (ValidationError, TypeError, ValueError, KeyError, AttributeError) as exc:
         logger.warning("Could not apply the configured path formatter; using a simple name: %s", exc)
