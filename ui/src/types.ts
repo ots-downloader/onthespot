@@ -65,6 +65,9 @@ export interface OTSConfig {
   fetch_extended_album_metadata: boolean;
   fetch_audio_features: boolean;
   fetch_track_credits: boolean;
+  enable_itunes_metadata: boolean;
+  itunes_metadata_overwrite: boolean;
+  itunes_metadata_country: string;
   enable_search_tracks: boolean;
   enable_search_albums: boolean;
   enable_search_playlists: boolean;

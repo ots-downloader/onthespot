@@ -584,6 +584,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
           <Card padding={4} elevation="low">
             <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+              iTunes Metadata Lookup (Free, No API Key)
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              {[
+                { key: "itunes_metadata_country", label: "Storefront Country Code", type: "text", description: "Two-letter iTunes store code, e.g. US, GB, DE." },
+              ].map(renderInput)}
+            </div>
+
+            <div className="space-y-2 pt-2">
+              {[
+                { key: "enable_itunes_metadata", label: "Enable iTunes Metadata", type: "switch", description: "Fill missing track tags from Apple's free catalog. Downloads are unaffected if a lookup fails." },
+                { key: "itunes_metadata_overwrite", label: "Overwrite With iTunes Metadata", type: "switch", description: "Replace existing service tags with iTunes values when a confident match is found." },
+              ].map(renderInput)}
+            </div>
+          </Card>
+
+          <Card padding={4} elevation="low">
+            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
               Spotify Specific Catalog Scraping (Needs WebAPI Keys)
             </h3>
 

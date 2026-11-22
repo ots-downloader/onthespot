@@ -23,6 +23,7 @@ import threading
 import time
 
 from .accounts import get_account_token
+from .api.metadata_enrichment import enrich_metadata
 from .api.registry import (
     SERVICE_LYRICS_FUNCTIONS,
     get_metadata_function,
@@ -236,6 +237,9 @@ class DownloadWorker:
                     progress_hook(item, 0, item.item_status)
                     requeue_item(item)
                     continue
+
+                # ---- Optional service-agnostic metadata enrichment -------------
+                item_metadata = enrich_metadata(item_metadata, item.model_dump(), item_type=item_type)
 
                 # ---- Emit progress metadata ------------------------------------
                 try:
