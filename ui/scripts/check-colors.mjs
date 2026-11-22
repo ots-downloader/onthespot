@@ -35,13 +35,14 @@ for (const file of walk(root)) {
   if (exempt.has(name)) continue;
   readFileSync(file, "utf8")
     // Comments cite issues ("#448") and links point at anchors ("#top").
-    // A block comment counts only at the start of a line or after "{" (JSX), so
-    // "image/*" in a string does not open one. It is blanked in place so line
-    // numbers hold. A "//" comment counts only when it is the whole line.
-    .replace(/(^[ \t]*|\{)(\/\*[\s\S]*?\*\/)/gm, (_, before, comment) => before + comment.replace(/[^\n]/g, " "))
+    // A block comment counts only at the start of a line or after a space or
+    // "{" (JSX), so "image/*" in a string does not open one. It is blanked in
+    // place so line numbers hold. A "//" comment counts when it is the whole
+    // line, or when it ends a line and no quote follows it.
+    .replace(/(^|[ \t{])(\/\*[\s\S]*?\*\/)/gm, (_, before, comment) => before + comment.replace(/[^\n]/g, " "))
     .split(/\r?\n/)
     .forEach((line, index) => {
-      const code = line.replace(/^\s*\/\/.*$/, "").replace(/href="#[^"]*"/g, "");
+      const code = line.replace(/(?:^|\s)\/\/(?![^"'`]*["'`]).*$/, "").replace(/href="#[^"]*"/g, "");
       for (const [label, pattern] of rules) {
         const match = code.match(pattern);
         if (match) problems.push(`src/${name.split(sep).join("/")}:${index + 1}  ${label}: ${match[0]}`);

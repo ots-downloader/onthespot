@@ -47,9 +47,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  // The 4s poll stays quiet; only a click shows the loading state.
-  const refreshDiagnostics = async (isManual = false) => {
-    if (isManual) setIsLoading(true);
+  // The 4s poll stays quiet; the first load and a click show the loading state.
+  const refreshDiagnostics = async (showLoading = false) => {
+    if (showLoading) setIsLoading(true);
     try {
       const res = await fetchSystemDiagnostics();
       setData(res);
@@ -58,7 +58,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
         await onCheckVersion();
       }
     } finally {
-      if (isManual) setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 

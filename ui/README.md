@@ -25,7 +25,7 @@ Rules:
 - Service brand colours are data, not theme. They live in `src/lib/catalogServices.ts` and go on with inline `style`.
 - Reach for a component in `src/components/ui/` before you style a raw `<button>`, `<input>` or `<select>`.
 
-To add a role: add the variable to the light block, the dark block and the system (`prefers-color-scheme`) block in `src/index.css`, then map it in the `@theme inline` block.
+To add a role: add the variable to the light block in `src/index.css`, and to the dark block and the system (`prefers-color-scheme`) block if its dark value differs, then map it in the `@theme inline` block.
 
 To add a theme: add one more block of values under a new `[data-theme="..."]` selector, after the existing blocks. Then let the new name through in four places: the `theme` type in `api/src/onthespot/basemodels.py`, `src/lib/theme.ts`, the first-paint script in `index.html`, and the "Theme Appearance" options in `src/components/SettingsPage.tsx`. Components need no colour changes.
 

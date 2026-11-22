@@ -2,7 +2,9 @@ import { CheckCircle2, Download, ExternalLink, Loader2, RefreshCw, Sparkles } fr
 import React, { useCallback, useEffect, useState } from "react";
 import { fetchUpdateInfo } from "../lib/api";
 import { UpdateInfo } from "../types";
-import { Button, focusRing } from "./ui";
+import { cn } from "../lib/cn";
+import { Button } from "./ui";
+import { buttonBaseClass, buttonVariantClass, focusRing } from "./ui/Button";
 
 interface UpdatePanelProps {
   currentVersion: string;
@@ -126,7 +128,7 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion }) => {
                   href={assetUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`flex h-8 items-center gap-1.5 px-3 rounded-lg border border-line-strong bg-surface text-fg text-xs font-medium hover:bg-raised transition ${focusRing}`}
+                  className={cn(buttonBaseClass, focusRing, buttonVariantClass.secondary, "h-8 gap-1.5 px-3 text-xs")}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   {status.install_supported ? "Release Details" : "Download Update"}
