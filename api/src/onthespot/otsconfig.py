@@ -87,6 +87,14 @@ class Config:
             print(f"Failed to load default config file: {self.__default_cfg_path}, using empty template")
             self.__template_data = {}
 
+        # The build sets ONTHESPOT_VERSION to the release tag, or git describe
+        # output for edge images; source runs keep the template's "dev".
+        # Setting it on the template covers start-up, a fresh config and a
+        # settings reset.
+        build_version = os.environ.get("ONTHESPOT_VERSION", "").strip()
+        if build_version:
+            self.__template_data["version"] = build_version
+
         # Load or create user config
         if os.path.isfile(self.__cfg_path):
             try:

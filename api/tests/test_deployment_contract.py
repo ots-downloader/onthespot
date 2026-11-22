@@ -48,6 +48,16 @@ class DeploymentContractTests(unittest.TestCase):
             dockerfile,
         )
 
+    def test_image_version_comes_from_the_build(self):
+        dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "docker-ci.yml").read_text(encoding="utf-8")
+
+        self.assertIn("ARG ONTHESPOT_VERSION=dev", dockerfile)
+        self.assertIn("ENV ONTHESPOT_VERSION=$ONTHESPOT_VERSION", dockerfile)
+        self.assertIn("ONTHESPOT_VERSION=${{ steps.version.outputs.version }}", workflow)
+        self.assertIn('git describe --tags --match "v[0-9]*" --abbrev=7', workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+
     def test_private_runtime_data_is_excluded_from_image_context(self):
         dockerignore = (REPOSITORY_ROOT / ".dockerignore").read_text(encoding="utf-8")
 

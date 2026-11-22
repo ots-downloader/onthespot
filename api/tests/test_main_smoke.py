@@ -5,6 +5,7 @@ from _support import TEST_ROOT  # noqa: F401
 
 from fastapi.testclient import TestClient  # noqa: E402
 from onthespot.main import app, search_service_catalogs  # noqa: E402
+from onthespot.otsconfig import config
 from onthespot.playlist_automation import (  # noqa: E402
     PlaylistAutomationError,
     normalize_playlist_redirect_uri,
@@ -23,7 +24,7 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         document = response.json()
         self.assertEqual(document["info"]["title"], "OnTheSpot API")
-        self.assertIn("2.0.0", document["info"]["version"])
+        self.assertEqual(document["info"]["version"], config.get("version"))
         self.assertGreaterEqual(len(document["paths"]), 80)
 
     def test_core_read_endpoints_respond(self):

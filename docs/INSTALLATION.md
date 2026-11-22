@@ -100,7 +100,7 @@ so the app can still change the files it makes.
 | `ghcr.io/ots-downloader/onthespot` | the version on each release; `latest` on each full release (not a pre-release); `edge` on each push to `fastapi-dev` |
 
 Both are built for `linux/amd64` and `linux/arm64`. To run the newest
-development build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
+unreleased build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
 
 ### Build the image from source
 
@@ -215,8 +215,11 @@ docker compose -f compose.yml -f compose.build.yml up -d --build
 The two `-f` flags are needed. Without them the command runs the published
 image and does not build your checkout.
 
-The bundled application version replaces stale version values from older
-config volumes during startup.
+Published images take their version from the release tag. `:edge` images
+report the newest tag plus the commits since it, such as `v2.0.5-4-g14eda2c`,
+and are offered the next release like any other image. A local build or a
+source run reports `dev` and is never offered updates. The version replaces
+any version saved in an older config volume at startup.
 
 ## Troubleshooting
 

@@ -63,6 +63,12 @@ EXPOSE 6767 6768
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD ["/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:6767/system/rate-limit', timeout=4)"]
 
+# CI passes the release tag, or git describe output for :edge; a local
+# build says "dev".
+# Kept last so a new version reuses every cached layer above.
+ARG ONTHESPOT_VERSION=dev
+ENV ONTHESPOT_VERSION=$ONTHESPOT_VERSION
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 CMD ["/app/.venv/bin/python", "-m", "uvicorn", "onthespot.main:app", "--app-dir", "/app/app", "--host", "0.0.0.0", "--port", "6767"]

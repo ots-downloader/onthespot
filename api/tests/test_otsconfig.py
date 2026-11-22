@@ -47,6 +47,23 @@ class ConfigPathTests(unittest.TestCase):
         self.assertEqual(json.loads(config_file.read_text(encoding="utf-8"))["release_readiness_probe"], "saved")
         self.assertTrue(cache_root.is_dir())
 
+    def test_build_version_replaces_the_saved_version(self):
+        config_root = TEST_ROOT / "build-version-config"
+        config_root.mkdir(parents=True, exist_ok=True)
+        (config_root / "otsconfig.json").write_text(json.dumps({"version": "v2.0.2 Beta 4"}), encoding="utf-8")
+        env = {"ONTHESPOTDIR": str(config_root), "ONTHESPOTCACHEDIR": str(TEST_ROOT / "build-version-cache")}
+
+        with patch.dict(os.environ, {**env, "ONTHESPOT_VERSION": "v2.0.6"}):
+            instance = Config()
+            self.assertEqual(instance.get("version"), "v2.0.6")
+            instance.reset()
+            self.assertEqual(instance.get("version"), "v2.0.6")
+        with patch.dict(os.environ, {**env, "ONTHESPOT_VERSION": "  "}):
+            self.assertEqual(Config().get("version"), DEFAULT_CONFIG["version"])
+        with patch.dict(os.environ, env):
+            os.environ.pop("ONTHESPOT_VERSION", None)
+            self.assertEqual(Config().get("version"), DEFAULT_CONFIG["version"])
+
     def test_public_snapshot_is_flat_detached_and_redacts_secrets(self):
         config_root = TEST_ROOT / "public-snapshot-config"
         cache_root = TEST_ROOT / "public-snapshot-cache"
