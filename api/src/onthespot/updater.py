@@ -64,11 +64,21 @@ def _version_key(value: str | None) -> tuple[int, int, int, int, int]:
     suffix = text[match.end() :]
     if not suffix:
         return (major, minor, patch, 3, 0)
+    # git describe form of an edge build, e.g. v2.0.5-4-g14eda2c: newer than
+    # v2.0.5 itself, older than the next release.
+    commits_since_tag = re.fullmatch(r"-(\d+)-g[0-9a-f]+", suffix)
+    if commits_since_tag:
+        return (major, minor, patch, 4, int(commits_since_tag.group(1)))
     prerelease = re.search(r"(alpha|beta|rc|preview|dev)[.\-\s]?(\d*)", suffix)
     if not prerelease:
         return (major, minor, patch, 2, 0)
     rank = {"dev": 0, "alpha": 0, "beta": 1, "preview": 2, "rc": 2}[prerelease.group(1)]
     return (major, minor, patch, rank, int(prerelease.group(2) or 0))
+
+
+def is_development_build(value: str | None) -> bool:
+    """True for ``dev``: local builds and source runs, which have no release to compare."""
+    return str(value or "").strip().lower() in ("", "dev")
 
 
 def _normalise_release(payload: dict[str, Any], current_version: str) -> dict[str, Any]:
@@ -88,11 +98,14 @@ def _normalise_release(payload: dict[str, Any], current_version: str) -> dict[st
             }
         )
     latest_version = str(payload.get("tag_name") or payload.get("name") or "").strip()
+    development_build = is_development_build(current_version)
     return {
         "repository": _repository(),
         "current_version": current_version,
         "latest_version": latest_version,
-        "update_available": _version_key(latest_version) > _version_key(current_version),
+        "update_available": not development_build
+        and _version_key(latest_version) > _version_key(current_version),
+        "development_build": development_build,
         "release_name": str(payload.get("name") or latest_version),
         "release_url": str(payload.get("html_url") or f"https://github.com/{_repository()}/releases/latest"),
         "release_notes": str(payload.get("body") or ""),
@@ -110,7 +123,7 @@ def check_for_updates(force: bool = False) -> dict[str, Any] | None:
 
     """
     with _check_lock:
-        current_version = str(config.get("version") or "v0.0.0")
+        current_version = str(config.get("version") or "dev")
         result: dict[str, Any]
         try:
             response = requests.get(

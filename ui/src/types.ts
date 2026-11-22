@@ -385,6 +385,7 @@ export interface UpdateInfo {
   current_version: string;
   latest_version: string;
   update_available: boolean;
+  development_build?: boolean;
   release_name: string;
   release_url?: string;
   recommended_asset?: UpdateAsset;

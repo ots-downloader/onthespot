@@ -91,6 +91,11 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion }) => {
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             {status.error} You can inspect the release repository directly below.
           </p>
+        ) : status?.development_build ? (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Development build: no update prompts.
+            {status.latest_version ? ` The latest release is ${status.latest_version}.` : ""}
+          </p>
         ) : status?.update_available ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3">
             <div>
