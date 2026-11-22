@@ -220,8 +220,6 @@ class AppSettings(BaseModel):
     fetch_extended_album_metadata: bool = False
     fetch_audio_features: bool = False
     fetch_track_credits: bool = False
-    enable_itunes_metadata: bool = False
-    itunes_metadata_overwrite: bool = False
     itunes_metadata_country: str = "US"
     enable_search_tracks: bool = True
     enable_search_albums: bool = True

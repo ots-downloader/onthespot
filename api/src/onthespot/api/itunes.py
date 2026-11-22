@@ -9,7 +9,7 @@ This is *not* a download service: it takes the metadata dict produced by any
 service (Spotify, Deezer, generic/yt-dlp, ...) and returns a copy enriched with
 fields Apple has available (genre, year, artwork, track/disc numbers, ...).
 Every failure path logs a warning and returns the original metadata so an
-optional lookup can never break a download.
+optional lookup can never break the caller.
 """
 
 import re

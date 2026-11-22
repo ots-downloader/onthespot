@@ -7,6 +7,7 @@ from unittest.mock import patch
 from _support import TEST_ROOT
 
 from onthespot import otsconfig
+from onthespot.basemodels import AppSettings
 from onthespot.otsconfig import Config, cache_dir, config_dir  # noqa: E402
 
 DEFAULT_CONFIG = json.loads(
@@ -17,6 +18,13 @@ DEFAULT_CONFIG = json.loads(
 
 
 class ConfigPathTests(unittest.TestCase):
+    def test_automatic_itunes_enrichment_flags_are_removed(self):
+        for flag in ("enable_itunes_metadata", "itunes_metadata_overwrite"):
+            self.assertNotIn(flag, DEFAULT_CONFIG)
+            self.assertNotIn(flag, AppSettings.model_fields)
+        self.assertIn("itunes_metadata_country", DEFAULT_CONFIG)
+        self.assertIn("itunes_metadata_country", AppSettings.model_fields)
+
     def test_nonexistent_config_override_is_honoured(self):
         override = TEST_ROOT / "new-config-root"
         self.assertFalse(override.exists())

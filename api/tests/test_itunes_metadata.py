@@ -11,7 +11,6 @@ from onthespot.api.itunes import (  # noqa: E402
     itunes_result_to_tag_changes,
     itunes_search_candidates,
 )
-from onthespot.api.metadata_enrichment import enrich_metadata  # noqa: E402
 
 ITUNES_SONG = {
     "wrapperType": "track",
@@ -30,37 +29,7 @@ ITUNES_SONG = {
 }
 
 
-def _settings(**overrides):
-    values = {
-        "enable_itunes_metadata": True,
-        "itunes_metadata_overwrite": False,
-        "itunes_metadata_country": "US",
-    }
-    values.update(overrides)
-    return lambda key, default=None: values.get(key, default)
-
-
 class ItunesMetadataTests(unittest.TestCase):
-    def test_disabled_provider_is_never_called(self):
-        original = {"title": "Song", "artists": "Artist"}
-        with (
-            patch("onthespot.api.metadata_enrichment.config.get", side_effect=_settings(enable_itunes_metadata=False)),
-            patch("onthespot.api.itunes.make_call") as mock_call,
-        ):
-            result = enrich_metadata(original)
-        self.assertIs(result, original)
-        mock_call.assert_not_called()
-
-    def test_non_track_items_are_skipped(self):
-        original = {"title": "Episode", "artists": "Podcast"}
-        with (
-            patch("onthespot.api.metadata_enrichment.config.get", side_effect=_settings()),
-            patch("onthespot.api.itunes.make_call") as mock_call,
-        ):
-            result = enrich_metadata(original, item_type="podcast_episode")
-        self.assertIs(result, original)
-        mock_call.assert_not_called()
-
     def test_missing_title_warns_and_does_not_call_api(self):
         original = {"artists": "Daft Punk"}
         with (
@@ -111,18 +80,6 @@ class ItunesMetadataTests(unittest.TestCase):
             result = itunes_get_metadata(original)
         self.assertEqual(result["release_year"], "2001")
         self.assertEqual(result["track_number"], 4)
-
-    def test_overwrite_setting_replaces_existing_fields(self):
-        original = {"title": "Harder Better Faster Stronger", "artists": "Daft Punk", "genre": "Electronic"}
-        response = {"resultCount": 1, "results": [ITUNES_SONG]}
-        with (
-            patch("onthespot.api.metadata_enrichment.config.get", side_effect=_settings(itunes_metadata_overwrite=True)),
-            patch("onthespot.api.itunes.make_call", return_value=response),
-        ):
-            result = enrich_metadata(original)
-
-        self.assertEqual(result["genre"], "Dance")
-        self.assertEqual(original["genre"], "Electronic")
 
     def test_no_results_warns_and_keeps_original(self):
         original = {"title": "Completely Different Song", "artists": "Somebody Else"}
