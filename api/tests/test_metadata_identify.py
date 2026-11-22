@@ -40,7 +40,7 @@ class ManualIdentifyTests(unittest.TestCase):
 
         self.settings = settings
         patchers = [
-            patch("onthespot.library.config.get", side_effect=settings),
+            patch("onthespot.metadata_files.config.get", side_effect=settings),
             patch("onthespot.metadata_identify.config.get", side_effect=settings),
             patch("onthespot.utils.config.get", side_effect=settings),
         ]
@@ -109,20 +109,19 @@ class ManualIdentifyTests(unittest.TestCase):
     def _run_apply(self, candidate=None, artwork=b"image-bytes", artwork_error=None):
         candidate = candidate or self._candidate()
         with (
-            patch("onthespot.metadata_identify.update_metadata", return_value={"title": candidate.title}) as update,
-            patch("onthespot.metadata_identify.update_cover", return_value={"artwork": True}) as cover,
+            patch("onthespot.metadata_identify.update_tags", return_value={"title": candidate.title}) as update,
+            patch("onthespot.metadata_identify.update_artwork", return_value={"artwork": True}) as cover,
             patch(
                 "onthespot.metadata_identify.fetch_itunes_artwork",
                 return_value=artwork,
                 side_effect=artwork_error,
             ) as fetch,
-            patch("onthespot.metadata_identify.remember_item") as remember,
             patch("onthespot.metadata_identify.notification_hook"),
         ):
             result = apply_manual_match(
                 IdentifyApplyRequest(local_id=42, candidate=candidate, embed_artwork=True)
             )
-        return result, update, cover, fetch, remember
+        return result, update, cover, fetch
 
     def test_search_uses_queue_values_and_configured_country(self):
         self._add_item()
@@ -137,7 +136,7 @@ class ManualIdentifyTests(unittest.TestCase):
 
     def test_apply_creates_tagged_copy_and_leaves_original_untouched(self):
         self._add_item()
-        result, update, cover, fetch, remember = self._run_apply()
+        result, update, cover, fetch = self._run_apply()
 
         expected = self.root / "Correct Artist" / "Correct Title.mp3"
         self.assertTrue(expected.is_file())
@@ -146,9 +145,12 @@ class ManualIdentifyTests(unittest.TestCase):
         self.assertEqual(result["original_path"], str(self.source))
         self.assertEqual(result["file_path"], str(expected))
         self.assertEqual(result["warnings"], [])
+        self.assertEqual(result["metadata"]["title"], "Correct Title")
+        self.assertTrue(result["metadata"]["artwork"])
 
         update.assert_called_once()
         self.assertEqual(update.call_args.args[0], str(expected))
+        self.assertEqual(update.call_args.kwargs["item"]["item_id"], "spotify:track:abc")
         self.assertEqual(
             update.call_args.args[1],
             {
@@ -159,12 +161,13 @@ class ManualIdentifyTests(unittest.TestCase):
                 "genre": "Dance",
                 "year": "2001",
                 "track_number": 3,
+                "total_tracks": 10,
                 "disc_number": 1,
+                "total_discs": 1,
             },
         )
         cover.assert_called_once_with(str(expected), b"image-bytes")
         fetch.assert_called_once()
-        remember.assert_called_once()
         self.assertEqual(download_queue[42].file_path, str(expected))
         self.assertEqual(download_queue[42].name, "Correct Title")
 
@@ -178,7 +181,7 @@ class ManualIdentifyTests(unittest.TestCase):
             return self.settings(key, default)
 
         with patch("onthespot.utils.config.get", side_effect=formatter_settings):
-            result, update, _, _, _ = self._run_apply(candidate=candidate)
+            result, update, _, _ = self._run_apply(candidate=candidate)
 
         expected = self.root / "Tracks" / "Correct Artist" / "2001 Correct Album" / "Correct Title.mp3"
         self.assertEqual(result["file_path"], str(expected))
@@ -189,7 +192,7 @@ class ManualIdentifyTests(unittest.TestCase):
         self._add_item()
         candidate = self._candidate(title="Song feat. Guest")
 
-        result, _, _, _, _ = self._run_apply(candidate=candidate)
+        result, _, _, _ = self._run_apply(candidate=candidate)
 
         expected = self.root / "Correct Artist" / "Song feat. Guest.mp3"
         self.assertEqual(result["file_path"], str(expected))
@@ -201,7 +204,7 @@ class ManualIdentifyTests(unittest.TestCase):
         existing.parent.mkdir(parents=True, exist_ok=True)
         existing.write_bytes(b"already-here")
 
-        result, _, _, _, _ = self._run_apply()
+        result, _, _, _ = self._run_apply()
 
         expected = self.root / "Correct Artist" / "Correct Title (2).mp3"
         self.assertEqual(result["file_path"], str(expected))
@@ -214,7 +217,7 @@ class ManualIdentifyTests(unittest.TestCase):
         source.write_bytes(b"original-audio")
         self._add_item(source=source)
 
-        result, _, _, _, _ = self._run_apply()
+        result, _, _, _ = self._run_apply()
 
         expected = self.root / "Correct Artist" / "Correct Title - tagged.mp3"
         self.assertEqual(result["file_path"], str(expected))
@@ -226,11 +229,11 @@ class ManualIdentifyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finished downloads"):
             apply_manual_match(IdentifyApplyRequest(local_id=42, candidate=self._candidate()))
 
-    def test_files_outside_the_library_are_rejected(self):
+    def test_files_outside_the_download_folders_are_rejected(self):
         outside = Path(tempfile.mkdtemp()) / "outside.mp3"
         outside.write_bytes(b"outside-audio")
         self._add_item(source=outside)
-        with self.assertRaisesRegex(ValueError, "outside the configured music library"):
+        with self.assertRaisesRegex(ValueError, "outside the configured download folders"):
             apply_manual_match(IdentifyApplyRequest(local_id=42, candidate=self._candidate()))
 
     def test_dict_queue_items_are_supported(self):
@@ -257,7 +260,7 @@ class ManualIdentifyTests(unittest.TestCase):
                 },
             }
 
-        result, _, _, _, _ = self._run_apply()
+        result, _, _, _ = self._run_apply()
 
         self.assertEqual(download_queue[42]["file_path"], result["file_path"])
         self.assertEqual(download_queue[42]["name"], "Correct Title")
@@ -265,7 +268,7 @@ class ManualIdentifyTests(unittest.TestCase):
 
     def test_artwork_failure_still_applies_tags(self):
         self._add_item()
-        result, update, cover, _, _ = self._run_apply(artwork_error=ValueError("bad artwork"))
+        result, update, cover, _ = self._run_apply(artwork_error=ValueError("bad artwork"))
 
         self.assertTrue(Path(result["file_path"]).is_file())
         self.assertTrue(any("Artwork was not embedded" in warning for warning in result["warnings"]))

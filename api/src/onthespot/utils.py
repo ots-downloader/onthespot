@@ -645,7 +645,7 @@ def convert_audio_format(filename, target_file_path, bitrate: int, temp_format, 
         command = [config.get("_ffmpeg_bin_path"), "-i", temp_file]
 
         # Set log level based on environment variable
-        if config.get("debug_mode", False) == False:
+        if not config.get("debug_mode", False):
             command += ["-loglevel", "error", "-hide_banner", "-nostats"]
 
         # Check if media format is service default
@@ -739,7 +739,7 @@ def convert_video_format(item, output_path, output_format, video_files, item_met
     command += format_map
 
     # Set log level based on environment variable
-    if config.get("debug_mode", False) == False:
+    if not config.get("debug_mode", False):
         command += ["-loglevel", "error", "-hide_banner", "-nostats"]
 
     # Add user defined parameters
@@ -791,7 +791,7 @@ def embed_metadata(item, metadata):
         # Existing command initialization
         command = [config.get("_ffmpeg_bin_path"), "-i", temp_name]
 
-        if config.get("debug_mode", False) == False:
+        if not config.get("debug_mode", False):
             command += ["-loglevel", "error", "-hide_banner", "-nostats"]
 
         command += ["-c:a", "copy"]
@@ -1030,13 +1030,14 @@ def embed_metadata(item, metadata):
 # ---------------------------------------------------------------------------
 
 
-def set_music_thumbnail(filename, metadata):
-    """Download the album artwork and embed or save it alongside *filename*.
+def set_music_thumbnail(filename, metadata, image_data=None):
+    """Embed or save artwork for *filename*.
 
-    Supports MP3, FLAC, OGG, and most common audio containers.
-    Does nothing when ``metadata['image_url']`` is falsy.
+    When *image_data* is supplied it is used directly; otherwise artwork is
+    downloaded from ``metadata['image_url']``. Supports MP3, FLAC, OGG, and
+    most common audio containers.
     """
-    if not metadata.get("image_url"):
+    if image_data is None and not metadata.get("image_url"):
         return
 
     target_path = os.path.abspath(filename)
@@ -1048,14 +1049,22 @@ def set_music_thumbnail(filename, metadata):
     format = config.get("album_cover_format")
     image_path = os.path.join(dirname, f"cover.{format}")
 
-    logger.info("Fetching item thumbnail")
-    try:
-        response = requests.get(metadata["image_url"], timeout=HTTP_TIMEOUT)
-        response.raise_for_status()
-        img = Image.open(BytesIO(response.content))
-    except Exception as e:
-        logger.error(f"Failed to download image: {e}")
-        return
+    if image_data is not None:
+        logger.info("Embedding provided item thumbnail")
+        try:
+            img = Image.open(BytesIO(image_data))
+        except Exception as e:
+            logger.error(f"Failed to read provided image: {e}")
+            raise
+    else:
+        logger.info("Fetching item thumbnail")
+        try:
+            response = requests.get(metadata["image_url"], timeout=HTTP_TIMEOUT)
+            response.raise_for_status()
+            img = Image.open(BytesIO(response.content))
+        except Exception as e:
+            logger.error(f"Failed to download image: {e}")
+            return
 
     _save_image(img, image_path, format)
 
@@ -1074,7 +1083,7 @@ def set_music_thumbnail(filename, metadata):
             command = [config.get("_ffmpeg_bin_path"), "-i", temp_name]
 
             # Set log level based on environment variable
-            if config.get("debug_mode", False) == False:
+            if not config.get("debug_mode", False):
                 command += ["-loglevel", "error", "-hide_banner", "-nostats"]
 
             command += [
@@ -1272,7 +1281,7 @@ def strip_metadata(item):
         # Existing command initialization
         command = [config.get("_ffmpeg_bin_path"), "-i", temp_name]
 
-        if config.get("debug_mode", False) == False:
+        if not config.get("debug_mode", False):
             command += ["-loglevel", "error", "-hide_banner", "-nostats"]
 
         command += ["-map", "0:a", "-map_metadata", "-1", "-c:a", "copy"]

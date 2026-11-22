@@ -145,8 +145,8 @@ def itunes_search_candidates(
     return candidates
 
 
-def itunes_result_to_library_changes(result: Mapping) -> dict:
-    """Map an iTunes result (or candidate dict) to ``library.update_metadata`` keys."""
+def itunes_result_to_tag_changes(result: Mapping) -> dict:
+    """Map an iTunes result (or candidate dict) to format-agnostic tag keys."""
     raw_keys = {"trackName", "artistName", "collectionName", "artworkUrl100"}
     mapped = _map_result(result) if raw_keys.intersection(result) else dict(result)
 
@@ -159,7 +159,9 @@ def itunes_result_to_library_changes(result: Mapping) -> dict:
         "genre": ("genre",),
         "year": ("release_year", "year"),
         "track_number": ("track_number",),
+        "total_tracks": ("total_tracks",),
         "disc_number": ("disc_number",),
+        "total_discs": ("total_discs",),
     }
     for target_key, source_keys in field_map.items():
         for source_key in source_keys:

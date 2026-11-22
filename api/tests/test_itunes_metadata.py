@@ -8,7 +8,7 @@ from _support import TEST_ROOT  # noqa: F401
 from onthespot.api.itunes import (  # noqa: E402
     fetch_itunes_artwork,
     itunes_get_metadata,
-    itunes_result_to_library_changes,
+    itunes_result_to_tag_changes,
     itunes_search_candidates,
 )
 from onthespot.api.metadata_enrichment import enrich_metadata  # noqa: E402
@@ -225,7 +225,7 @@ class ItunesManualSearchTests(unittest.TestCase):
             "image_url": "https://example.com/art.jpg",
         }
         self.assertEqual(
-            itunes_result_to_library_changes(candidate),
+            itunes_result_to_tag_changes(candidate),
             {
                 "title": "Harder Better Faster Stronger",
                 "artist": "Daft Punk",

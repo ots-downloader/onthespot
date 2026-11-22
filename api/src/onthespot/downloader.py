@@ -23,18 +23,15 @@ import threading
 import time
 
 from .accounts import get_account_token
-from .api.metadata_enrichment import enrich_metadata
 from .api.registry import (
     SERVICE_LYRICS_FUNCTIONS,
     get_metadata_function,
 )
 from .basemodels import QueueItem
 from .constants import ItemStatus
-from .library import remember_item, verify_file
 from .otsconfig import config
 from .resources.exceptions import DownloadCancelled, TrackUnavailableError
 from .runtimedata import (
-    download_paused,
     download_queue,
     download_queue_lock,
     get_logger,
@@ -238,9 +235,6 @@ class DownloadWorker:
                     requeue_item(item)
                     continue
 
-                # ---- Optional service-agnostic metadata enrichment -------------
-                item_metadata = enrich_metadata(item_metadata, item.model_dump(), item_type=item_type)
-
                 # ---- Emit progress metadata ------------------------------------
                 try:
                     progress_item = item
@@ -352,7 +346,6 @@ class DownloadWorker:
                     item_progress.length = int(item_metadata.get("length", 0))
                     if os.path.isfile(item.file_path):
                         item_progress.file_size = str(os.path.getsize(item.file_path))
-                        remember_item(item.model_dump(), item.file_path)
                     progress_hook(item_progress, 100, item.item_status)
                 except Exception as e:
                     logger.error("error emitting progress metadata", exc_info=e)

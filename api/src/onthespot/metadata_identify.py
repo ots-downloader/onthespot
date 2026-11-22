@@ -14,10 +14,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .api.itunes import fetch_itunes_artwork, itunes_result_to_library_changes, itunes_search_candidates
+from .api.itunes import fetch_itunes_artwork, itunes_result_to_tag_changes, itunes_search_candidates
 from .basemodels import IdentifyApplyRequest, IdentifySearchRequest, QueueItem
 from .constants import ItemStatus
-from .library import copy_library_file, is_allowed_path, remember_item, update_cover, update_metadata
+from .metadata_files import copy_file, is_allowed_path, update_artwork, update_tags
 from .otsconfig import config
 from .runtimedata import download_queue, download_queue_lock, get_logger, notification_hook
 from .utils import format_item_path, sanitize_data
@@ -76,7 +76,7 @@ def _validate_finished(snapshot: dict[str, Any]) -> str:
     if not os.path.isfile(source):
         raise ValueError("The downloaded file no longer exists")
     if not is_allowed_path(source):
-        raise ValueError("The downloaded file is outside the configured music library")
+        raise ValueError("The downloaded file is outside the configured download folders")
     return source
 
 
@@ -208,25 +208,19 @@ def apply_manual_match(request: IdentifyApplyRequest) -> dict[str, Any]:
     target = _unique_target(source, _target_path(source, snapshot, metadata))
 
     # Copy first so every subsequent write touches only the new file.
-    copy_library_file(source, target)
+    copy_file(source, target)
 
-    changes = itunes_result_to_library_changes(candidate)
-    updated = update_metadata(target, changes)
+    changes = itunes_result_to_tag_changes(candidate)
+    updated = update_tags(target, changes, item=snapshot)
 
     warnings: list[str] = []
     if request.embed_artwork:
         try:
             artwork = fetch_itunes_artwork(candidate.get("image_url", ""))
-            updated = update_cover(target, artwork)
+            updated.update(update_artwork(target, artwork))
         except Exception as exc:
             warnings.append(f"Artwork was not embedded: {exc}")
             logger.warning("Could not embed artwork for %s: %s", target, exc)
-
-    try:
-        remember_item(snapshot, target)
-    except Exception as exc:
-        warnings.append(f"Library index was not updated: {exc}")
-        logger.warning("Could not index identified copy %s: %s", target, exc)
 
     applied = dict(snapshot)
     applied.update(
