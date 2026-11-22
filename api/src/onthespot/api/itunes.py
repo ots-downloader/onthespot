@@ -26,9 +26,12 @@ from ..utils import make_call
 logger = get_logger("api.itunes")
 
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
+ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
 DEFAULT_COUNTRY = "US"
 SEARCH_LIMIT = 5
 ARTWORK_SIZE = 600
+ALBUM_LOOKUP_LIMIT = 200
+MAX_ALBUM_LOOKUPS = 3
 
 # yt-dlp's generic extractor uses its own name as the artist when the source
 # page has no artist metadata; do not send that to iTunes as a search term.
@@ -45,6 +48,7 @@ _WEAK_ARTISTS = {
 
 _PUNCTUATION_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _BRACKETED_RE = re.compile(r"[\(\[][^\)\]]*[\)\]]")
+_BRACKET_CONTENT_RE = re.compile(r"[\(\[]([^\)\]]*)[\)\]]")
 
 # Artwork URLs in iTunes responses are served from Apple's CDN.  Only fetch
 # from that host so a client-supplied candidate cannot be used for SSRF.
@@ -79,6 +83,172 @@ def _run_itunes_search(query: str, country: str, limit: int) -> list[dict]:
     return [result for result in results if isinstance(result, Mapping)]
 
 
+def _run_itunes_lookup(collection_id: Any, country: str, limit: int) -> list[dict]:
+    """Fetch an album's track list; never raise for an optional fallback."""
+    identifier = _text(collection_id)
+    if not identifier.isdigit():
+        return []
+
+    params = {"id": identifier, "entity": "song", "limit": limit, "country": country}
+    try:
+        response = make_call(ITUNES_LOOKUP_URL, params=params)
+    except Exception as exc:
+        logger.warning("iTunes album lookup failed for %s: %s", identifier, exc)
+        return []
+
+    if not isinstance(response, Mapping):
+        logger.warning("iTunes album lookup returned no usable response for %s", identifier)
+        return []
+    results = response.get("results")
+    if not isinstance(results, list):
+        logger.warning("iTunes album lookup returned malformed results for %s", identifier)
+        return []
+    return [result for result in results if isinstance(result, Mapping)]
+
+
+def _search_queries(title: str, artist: str, album: str) -> list[str]:
+    """Build focused queries instead of one overly restrictive combined term.
+
+    Provider metadata is not always accurate: a downloaded file can have the
+    wrong artist/album, and its duration need not match the iTunes master.
+    Searching title-plus-artist, title-plus-album, and title alone lets the
+    exact track surface even when one of those fields is wrong.
+    """
+    queries: list[str] = []
+
+    def add(*parts: str) -> None:
+        query = " ".join(part for part in parts if part)
+        if query and query not in queries:
+            queries.append(query)
+
+    add(title, artist)
+    add(title, album)
+    add(title)
+    return queries
+
+
+def _result_key(result: Mapping) -> tuple[str, ...]:
+    """Identity used to merge duplicates returned by different queries."""
+    track_id = _text(result.get("trackId"))
+    if track_id:
+        return ("id", track_id)
+    return (
+        "meta",
+        _normalized_title(result.get("trackName")),
+        _normalize(result.get("artistName")),
+        _normalize(result.get("collectionName")),
+    )
+
+
+def _merge_results(collected: dict[tuple[str, ...], Mapping], results: list[Mapping]) -> None:
+    for result in results:
+        collected.setdefault(_result_key(result), result)
+
+
+def _collect_search_results(
+    title: str, artist: str, album: str, country: str, query_limit: int
+) -> list[Mapping]:
+    """Run the focused queries once and merge their usable song results."""
+    collected: dict[tuple[str, ...], Mapping] = {}
+    for query in _search_queries(title, artist, album):
+        _merge_results(collected, _run_itunes_search(query, country, query_limit))
+    return list(collected.values())
+
+
+def _has_confident_title_match(results: list[Mapping], title: str, artist: str, album: str) -> bool:
+    """Whether a result already matches the title and one other trusted field.
+
+    Raw title equality is not enough here: a common title can return many exact
+    but unrelated tracks, as with "Painting Rainbows" by Skrillex. We only skip
+    the album fallback when the artist or album corroborates the hit.
+    """
+    wanted_title = _normalized_title(title)
+    wanted_artist = _normalize(artist)
+    wanted_album = _normalize(album)
+
+    for result in results:
+        if _normalized_title(result.get("trackName")) != wanted_title:
+            continue
+        candidate_artist = _normalize(result.get("artistName"))
+        candidate_album = _normalize(result.get("collectionName"))
+        artist_matches = bool(wanted_artist and candidate_artist and _similar(candidate_artist, wanted_artist))
+        album_matches = bool(wanted_album and candidate_album and _similar(candidate_album, wanted_album))
+        if artist_matches or album_matches:
+            return True
+    return False
+
+
+def _is_song_result(result: Mapping) -> bool:
+    """Search returns songs; album lookups also return a collection wrapper."""
+    kind = result.get("kind")
+    wrapper = result.get("wrapperType")
+    return kind == "song" or (kind is None and wrapper in (None, "track"))
+
+
+def _album_lookup_ids(results: list[Mapping], artist: str, album: str) -> list[str]:
+    """Pick album IDs corroborated by the requested artist and/or album name."""
+    wanted_artist = _normalize(artist)
+    wanted_album = _normalize(album)
+    scored: dict[str, float] = {}
+
+    for result in results:
+        collection_id = _text(result.get("collectionId"))
+        if not collection_id.isdigit():
+            continue
+
+        score = 0.0
+        candidate_album = _normalize(result.get("collectionName"))
+        candidate_artist = _normalize(result.get("artistName"))
+        if wanted_album and candidate_album:
+            if candidate_album == wanted_album:
+                score += 3.0
+            elif _similar(candidate_album, wanted_album):
+                score += 1.0
+        if wanted_artist and candidate_artist:
+            if candidate_artist == wanted_artist:
+                score += 2.0
+            elif _similar(candidate_artist, wanted_artist):
+                score += 1.0
+        if score:
+            scored[collection_id] = max(scored.get(collection_id, 0.0), score)
+
+    return [
+        collection_id
+        for collection_id, _ in sorted(scored.items(), key=lambda item: (-item[1], item[0]))[:MAX_ALBUM_LOOKUPS]
+    ]
+
+
+def _expand_album_matches(
+    results: list[Mapping], title: str, artist: str, album: str, country: str
+) -> list[Mapping]:
+    """Find tracks the search endpoint omits by looking up the matching album.
+
+    Apple's search endpoint can return a cover/karaoke version while hiding the
+    real track, even though the album's track list contains it. When no search
+    result corroborates the title with the artist or album, use those fields to
+    discover the album and then look up its full track list locally.
+    """
+    if not album or _has_confident_title_match(results, title, artist, album):
+        return results
+
+    collected: dict[tuple[str, ...], Mapping] = {}
+    _merge_results(collected, results)
+
+    discovery_terms = [term for term in (artist, album) if term]
+    if discovery_terms:
+        _merge_results(
+            collected,
+            _run_itunes_search(" ".join(discovery_terms), country, max(SEARCH_LIMIT, 10)),
+        )
+
+    for collection_id in _album_lookup_ids(list(collected.values()), artist, album):
+        _merge_results(
+            collected,
+            _run_itunes_lookup(collection_id, country, ALBUM_LOOKUP_LIMIT),
+        )
+    return list(collected.values())
+
+
 def itunes_search_candidates(
     title: Any = "",
     artist: Any = "",
@@ -105,18 +275,17 @@ def itunes_search_candidates(
         return []
 
     storefront = _storefront(country, "candidate search")
-    terms = [title_text]
-    if artist_text:
-        terms.append(artist_text)
-    if album_text:
-        terms.append(album_text)
-    query = " ".join(terms)
     length_ms = _duration_ms(length)
+    requested_limit = max(1, min(int(limit or SEARCH_LIMIT), 20))
+    # Ask each focused query for more results than we display: the exact track
+    # may be ranked below unrelated hits by iTunes itself.
+    query_limit = max(requested_limit, 10)
 
-    results = _run_itunes_search(query, storefront, max(1, min(int(limit or SEARCH_LIMIT), 20)))
+    results = _collect_search_results(title_text, artist_text, album_text, storefront, query_limit)
+    results = _expand_album_matches(results, title_text, artist_text, album_text, storefront)
     candidates = []
     for result in results:
-        if result.get("kind") not in (None, "song"):
+        if not _is_song_result(result):
             continue
         mapped = _map_result(result)
         candidates.append(
@@ -142,7 +311,7 @@ def itunes_search_candidates(
         )
 
     candidates.sort(key=lambda entry: entry["score"], reverse=True)
-    return candidates
+    return candidates[:requested_limit]
 
 
 def itunes_result_to_tag_changes(result: Mapping) -> dict:
@@ -259,6 +428,10 @@ def _normalized_title(value: Any) -> str:
     return _normalize(_BRACKETED_RE.sub(" ", _text(value)))
 
 
+def _bracketed_parts(value: Any) -> set[str]:
+    return {_normalize(match.group(1)) for match in _BRACKET_CONTENT_RE.finditer(_text(value))}
+
+
 def _primary_name(value: str) -> str:
     """First artist name in a possibly multi-valued artist string."""
     for separator in (";", ",", " & ", " / "):
@@ -292,15 +465,26 @@ def _similar(left: str, right: str) -> bool:
 
 
 def _score_candidate(result: Mapping, title: str, artist: str, album: str, length_ms: int | None) -> float:
+    """Rank an iTunes result by title first, then artist/album corroboration.
+
+    Duration is only a tiny tie-breaker: downloaded files and provider metadata
+    often disagree with the iTunes master, so a duration mismatch must never
+    push an exact title/album match below a weaker result. Likewise, a wrong
+    provider artist or album cannot disqualify an otherwise exact title match.
+    """
     candidate_title = _normalized_title(result.get("trackName"))
     wanted_title = _normalized_title(title)
     if not candidate_title or not wanted_title:
         return 0.0
 
     if candidate_title == wanted_title:
-        score = 3.0
+        score = 10.0
+        # "Painting Rainbows (Originally Performed by ...) [Karaoke Version]"
+        # normalizes to the same title; keep it below a literal match.
+        if _bracketed_parts(result.get("trackName")) - _bracketed_parts(title):
+            score -= 0.5
     elif _similar(candidate_title, wanted_title):
-        score = 1.5
+        score = 3.0
     else:
         return 0.0
 
@@ -308,7 +492,7 @@ def _score_candidate(result: Mapping, title: str, artist: str, album: str, lengt
     wanted_artist = _normalize(artist)
     if candidate_artist and wanted_artist:
         if candidate_artist == wanted_artist:
-            score += 2.0
+            score += 3.0
         elif _similar(candidate_artist, wanted_artist):
             score += 1.0
 
@@ -316,17 +500,17 @@ def _score_candidate(result: Mapping, title: str, artist: str, album: str, lengt
     wanted_album = _normalize(album)
     if candidate_album and wanted_album:
         if candidate_album == wanted_album:
-            score += 1.0
+            score += 3.0
         elif _similar(candidate_album, wanted_album):
-            score += 0.5
+            score += 1.0
 
     candidate_length = _duration_ms(result.get("trackTimeMillis"))
     if candidate_length and length_ms:
         difference = abs(candidate_length - length_ms)
         if difference <= 3000:
-            score += 1.0
+            score += 0.25
         elif difference <= 10000:
-            score += 0.5
+            score += 0.1
 
     return score
 
@@ -400,28 +584,24 @@ def itunes_get_metadata(track, item=None, *, overwrite: bool = False, country: s
         return track
 
     storefront = _storefront(country, context)
+    queries = _search_queries(title, artist, album)
+    query = " / ".join(queries)
 
-    terms = [title]
-    if artist:
-        terms.append(artist)
-    if album:
-        terms.append(album)
-    query = " ".join(terms)
-
-    results = _run_itunes_search(query, storefront, SEARCH_LIMIT)
+    results = _collect_search_results(title, artist, album, storefront, SEARCH_LIMIT)
+    results = _expand_album_matches(results, title, artist, album, storefront)
     length_ms = _duration_ms(track_data.get("length"))
     best_result = None
     best_score = 0.0
     for candidate in results:
-        if not isinstance(candidate, Mapping) or candidate.get("kind") not in (None, "song"):
+        if not isinstance(candidate, Mapping) or not _is_song_result(candidate):
             continue
         score = _score_candidate(candidate, title, artist, album, length_ms)
         if score > best_score:
             best_result, best_score = candidate, score
 
-    # An exact title alone (score 3) is enough when there is no artist, album
-    # or duration to cross-check; otherwise require a corroborating field.
-    threshold = 4.0 if (artist or album or length_ms) else 3.0
+    # Automatic enrichment requires an exact normalized title; artist and
+    # album only add confidence because provider values can be inaccurate.
+    threshold = 10.0
     if best_result is None or best_score < threshold:
         logger.warning(
             "No confident iTunes match for %s (%s, best score %.1f); keeping original metadata",

@@ -37,6 +37,7 @@ export function IdentifyTrackModal({ item, config, onClose, onApplied }: Identif
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<IdentifyApplyResponse | null>(null);
 
@@ -49,6 +50,7 @@ export function IdentifyTrackModal({ item, config, onClose, onApplied }: Identif
     setSelectedIndex(null);
     setError("");
     setResult(null);
+    setApplied(false);
   }, [item.local_id, item.name, item.artist, item.album, config.itunes_metadata_country]);
 
   const handleSearch = async () => {
@@ -56,6 +58,8 @@ export function IdentifyTrackModal({ item, config, onClose, onApplied }: Identif
     setError("");
     setCandidates(null);
     setSelectedIndex(null);
+    setResult(null);
+    setApplied(false);
     try {
       const response = await searchItunesMatches({
         local_id: item.local_id,
@@ -87,6 +91,7 @@ export function IdentifyTrackModal({ item, config, onClose, onApplied }: Identif
         embed_artwork: embedArtwork
       });
       setResult(response);
+      setApplied(true);
       onApplied(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply the selected match");
@@ -159,6 +164,21 @@ export function IdentifyTrackModal({ item, config, onClose, onApplied }: Identif
             </div>
           )}
 
+          {result && (
+            <div className="space-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+              <p className="flex items-center gap-2 font-medium">
+                <Check className="h-4 w-4" /> Tagged copy created
+              </p>
+              <p className="break-all">New: {result.file_path}</p>
+              <p className="break-all">Original kept: {result.original_path}</p>
+              {result.warnings.map((warning) => (
+                <p key={warning} className="break-all text-amber-700 dark:text-amber-300">
+                  {warning}
+                </p>
+              ))}
+            </div>
+          )}
+
           {candidates && candidates.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Matches</p>
@@ -197,21 +217,6 @@ export function IdentifyTrackModal({ item, config, onClose, onApplied }: Identif
               </div>
             </div>
           )}
-
-          {result && (
-            <div className="space-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
-              <p className="flex items-center gap-2 font-medium">
-                <Check className="h-4 w-4" /> Tagged copy created
-              </p>
-              <p className="break-all">New: {result.file_path}</p>
-              <p className="break-all">Original kept: {result.original_path}</p>
-              {result.warnings.map((warning) => (
-                <p key={warning} className="break-all text-amber-700 dark:text-amber-300">
-                  {warning}
-                </p>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-neutral-200 px-6 py-4 dark:border-[#353535]">
@@ -219,10 +224,18 @@ export function IdentifyTrackModal({ item, config, onClose, onApplied }: Identif
           <Button
             variant="primary"
             size="sm"
-            label={applying ? "Applying..." : "Apply Tags"}
-            icon={applying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Tag className="h-3.5 w-3.5" />}
+            label={applying ? "Applying..." : applied ? "Applied" : "Apply Tags"}
+            icon={
+              applying ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : applied ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Tag className="h-3.5 w-3.5" />
+              )
+            }
             onClick={handleApply}
-            isDisabled={applying || selectedIndex === null || !candidates}
+            isDisabled={applying || applied || selectedIndex === null || !candidates}
           />
         </div>
       </div>

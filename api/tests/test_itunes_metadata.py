@@ -95,9 +95,22 @@ class ItunesMetadataTests(unittest.TestCase):
         self.assertNotIn("release_year", original)
 
         params = mock_call.call_args.kwargs["params"]
+        terms = [call.kwargs["params"]["term"] for call in mock_call.call_args_list]
         self.assertEqual(params["entity"], "song")
         self.assertEqual(params["country"], "US")
-        self.assertIn("Daft Punk", params["term"])
+        self.assertTrue(any("Daft Punk" in term for term in terms))
+
+    def test_exact_title_enriches_even_when_provider_duration_is_wrong(self):
+        original = {
+            "title": "Harder Better Faster Stronger",
+            "artists": "Daft Punk",
+            "album_name": "Discovery",
+            "length": "100000",
+        }
+        with patch("onthespot.api.itunes.make_call", return_value={"results": [ITUNES_SONG]}):
+            result = itunes_get_metadata(original)
+        self.assertEqual(result["release_year"], "2001")
+        self.assertEqual(result["track_number"], 4)
 
     def test_overwrite_setting_replaces_existing_fields(self):
         original = {"title": "Harder Better Faster Stronger", "artists": "Daft Punk", "genre": "Electronic"}
@@ -150,13 +163,16 @@ class ItunesMetadataTests(unittest.TestCase):
 
         with patch("onthespot.api.itunes.make_call", return_value=response) as mock_call:
             itunes_get_metadata(generic_track)
-            generic_term = mock_call.call_args.kwargs["params"]["term"]
+            generic_terms = [call.kwargs["params"]["term"] for call in mock_call.call_args_list]
+            mock_call.reset_mock()
 
             itunes_get_metadata(queue_track)
-            queue_term = mock_call.call_args.kwargs["params"]["term"]
+            queue_terms = [call.kwargs["params"]["term"] for call in mock_call.call_args_list]
 
-        self.assertNotIn("youtube", generic_term)
-        self.assertEqual(queue_term, "Song Only Some Artist Album")
+        self.assertTrue(all("youtube" not in term for term in generic_terms))
+        self.assertEqual(generic_terms[0], "Song Only")
+        self.assertTrue(any("Some Artist" in term for term in queue_terms))
+        self.assertTrue(any("Album" in term for term in queue_terms))
 
     def test_object_with_model_dump_is_accepted(self):
         class Track:
@@ -166,8 +182,9 @@ class ItunesMetadataTests(unittest.TestCase):
         result = dict(ITUNES_SONG, trackName="Song Only", artistName="Some Artist")
         with patch("onthespot.api.itunes.make_call", return_value={"results": [result]}) as mock_call:
             enriched = itunes_get_metadata(Track())
+        terms = [call.kwargs["params"]["term"] for call in mock_call.call_args_list]
         self.assertEqual(enriched["release_year"], "2001")
-        self.assertIn("Some Artist", mock_call.call_args.kwargs["params"]["term"])
+        self.assertTrue(any("Some Artist" in term for term in terms))
 
     def test_invalid_storefront_falls_back_with_warning(self):
         original = {"title": "Song Only", "artists": "Daft Punk"}
@@ -197,6 +214,99 @@ class ItunesManualSearchTests(unittest.TestCase):
             )
 
         self.assertEqual(len(candidates), 2)
+        self.assertEqual(candidates[0]["track_id"], "1")
+        self.assertGreater(candidates[0]["score"], candidates[1]["score"])
+
+    def test_album_query_finds_exact_track_when_provider_artist_is_wrong(self):
+        wrong = dict(
+            ITUNES_SONG,
+            trackId="2",
+            trackName="Unrelated Song",
+            artistName="Wrong Artist",
+            collectionName="Wrong Album",
+        )
+        exact = dict(ITUNES_SONG, trackId="1", trackTimeMillis=500000)
+        responses = [{"results": [wrong]}, {"results": [exact]}, {"results": []}]
+        with patch("onthespot.api.itunes.make_call", side_effect=responses):
+            candidates = itunes_search_candidates(
+                "Harder Better Faster Stronger", "Wrong Artist", "Discovery", length="224693"
+            )
+
+        self.assertEqual(candidates[0]["track_id"], "1")
+        self.assertGreaterEqual(candidates[0]["score"], 13.0)
+
+    def test_album_lookup_finds_track_hidden_from_itunes_search(self):
+        karaoke = dict(
+            ITUNES_SONG,
+            trackId="9",
+            trackName=(
+                "Painting Rainbows (Originally Performed by Skrillex & Bibi Bourelly) "
+                "[Karaoke Version]"
+            ),
+            artistName="Backing Business",
+            collectionName="Pristine Karaoke, Vol. 98",
+            trackTimeMillis=200000,
+        )
+        album_peer = dict(
+            ITUNES_SONG,
+            trackId="8",
+            trackName="Mixed Signals",
+            artistName="Skrillex & Swae Lee",
+            collectionArtistName="Skrillex",
+            collectionId=1672465067,
+            collectionName="Don’t Get Too Close",
+            trackTimeMillis=210000,
+        )
+        exact = dict(
+            ITUNES_SONG,
+            trackId="1672465765",
+            trackName="Painting Rainbows",
+            artistName="Skrillex & Bibi Bourelly",
+            collectionArtistName="Skrillex",
+            collectionId=1672465067,
+            collectionName="Don’t Get Too Close",
+            trackTimeMillis=220000,
+        )
+        responses = [
+            {"results": [karaoke]},
+            {"results": []},
+            {"results": []},
+            {"results": [album_peer]},
+            {"results": [album_peer, exact]},
+        ]
+
+        with patch("onthespot.api.itunes.make_call", side_effect=responses) as mock_call:
+            candidates = itunes_search_candidates(
+                "Painting Rainbows", "Skrillex, Bibi Bourelly", "Don't Get Too Close"
+            )
+
+        self.assertEqual(candidates[0]["track_id"], "1672465765")
+        self.assertEqual(candidates[0]["title"], "Painting Rainbows")
+        lookup_calls = [call for call in mock_call.call_args_list if "/lookup" in call.args[0]]
+        self.assertEqual(len(lookup_calls), 1)
+        self.assertEqual(str(lookup_calls[0].kwargs["params"]["id"]), "1672465067")
+
+    def test_title_only_query_finds_track_when_provider_album_is_wrong(self):
+        exact = dict(ITUNES_SONG, trackId="3")
+        responses = [{"results": []}, {"results": []}, {"results": [exact]}]
+        with patch("onthespot.api.itunes.make_call", side_effect=responses):
+            candidates = itunes_search_candidates("Harder Better Faster Stronger", "Wrong Artist", "Wrong Album")
+
+        self.assertEqual([candidate["track_id"] for candidate in candidates], ["3"])
+
+    def test_duration_does_not_outweigh_exact_title_and_album(self):
+        near_miss = dict(
+            ITUNES_SONG,
+            trackId="2",
+            trackName="Harder Better Faster Stronger Remix",
+            trackTimeMillis=224693,
+        )
+        exact = dict(ITUNES_SONG, trackId="1", trackTimeMillis=500000)
+        with patch("onthespot.api.itunes.make_call", return_value={"results": [near_miss, exact]}):
+            candidates = itunes_search_candidates(
+                "Harder Better Faster Stronger", "Daft Punk", "Discovery", length="224693"
+            )
+
         self.assertEqual(candidates[0]["track_id"], "1")
         self.assertGreater(candidates[0]["score"], candidates[1]["score"])
 
