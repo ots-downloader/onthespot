@@ -1,0 +1,40 @@
+name: Edge nightly
+
+# Builds the :edge image from fastapi-dev each night that the branch has new
+# commits. GitHub runs schedules from the default branch only, so this file
+# lives here and calls the build workflow on fastapi-dev. When the app moves
+# to this branch, a schedule in docker-ci.yml can replace this file.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      pushed: ${{ steps.check.outputs.pushed }}
+    steps:
+      - name: Look for a push to fastapi-dev since the last run
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # 26 hours, not 24: GitHub can start a schedule late, and a second
+        # build of the same commit does no harm.
+        run: |
+          last=$(gh api "repos/$GITHUB_REPOSITORY/activity?ref=fastapi-dev&per_page=1" --jq '.[0].timestamp // empty')
+          since=$(date -u -d '26 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          if [[ -n "$last" && "$last" > "$since" ]]; then pushed=true; else pushed=false; fi
+          echo "last push $last, window starts $since, pushed=$pushed"
+          echo "pushed=$pushed" >> "$GITHUB_OUTPUT"
+
+  edge:
+    needs: changes
+    if: needs.changes.outputs.pushed == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ots-downloader/onthespot/.github/workflows/docker-ci.yml@fastapi-dev
