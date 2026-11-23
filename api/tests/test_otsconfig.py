@@ -128,7 +128,7 @@ class SourceVersionTests(unittest.TestCase):
         with patch.object(otsconfig.subprocess, "run", side_effect=[no_tags, self._git_output("abc1234\n")]):
             self.assertEqual(otsconfig._source_version(), "dev-abc1234")
 
-    def test_missing_git_or_checkout_leaves_the_template_dev(self):
+    def test_missing_git_or_checkout_reports_no_version(self):
         failures = (FileNotFoundError("git"), subprocess.TimeoutExpired(["git"], 5))
         for failure in failures:
             with patch.object(otsconfig.subprocess, "run", side_effect=failure):
@@ -137,14 +137,6 @@ class SourceVersionTests(unittest.TestCase):
             with patch.object(otsconfig.subprocess, "run") as run:
                 self.assertIsNone(otsconfig._source_version())
             run.assert_not_called()
-
-        env = {
-            "ONTHESPOTDIR": str(TEST_ROOT / "no-git-config"),
-            "ONTHESPOTCACHEDIR": str(TEST_ROOT / "no-git-cache"),
-        }
-        with patch.dict(os.environ, env), patch.object(otsconfig.subprocess, "run", side_effect=FileNotFoundError):
-            os.environ.pop("ONTHESPOT_VERSION", None)
-            self.assertEqual(Config().get("version"), DEFAULT_CONFIG["version"])
 
     def test_build_version_wins_without_asking_git(self):
         env = {

@@ -101,8 +101,7 @@ so the app can still change the files it makes.
 
 Both are built for `linux/amd64` and `linux/arm64`. To run the newest
 unreleased build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
-`:edge` is the newest manual build of `fastapi-dev`, so it may be behind the
-branch.
+`:edge` may be behind the `fastapi-dev` branch.
 
 ### Build the image from source
 
@@ -188,7 +187,7 @@ cd ..
 uv run --project api uvicorn onthespot.main:app --app-dir api/src --host 127.0.0.1 --port 6767
 ```
 
-Open `http://127.0.0.1:6767`. The app reads its version from git at start.
+Open `http://127.0.0.1:6767`.
 
 On Windows, settings are stored under `%APPDATA%\onthespot` and media defaults
 to the current user's Music and Videos folders. On Linux, settings default to

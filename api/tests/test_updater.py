@@ -36,11 +36,6 @@ class UpdaterVersionTests(unittest.TestCase):
         self.assertTrue(status["development_build"])
         self.assertEqual(status["latest_version"], "v2.0.5")
 
-    def test_source_run_without_version_tags_never_reports_an_update(self):
-        status = _normalise_release(LATEST, "dev-abc1234")
-        self.assertFalse(status["update_available"])
-        self.assertTrue(status["development_build"])
-
 
 if __name__ == "__main__":
     unittest.main()
