@@ -97,11 +97,11 @@ so the app can still change the files it makes.
 | Image | Tags |
 | --- | --- |
 | `moddroid94/ots-dl` (Docker Hub) | the version on each release; `latest` on each full release (not a pre-release) |
-| `ghcr.io/ots-downloader/onthespot` | the version on each release; `latest` on each full release (not a pre-release); `edge` when a maintainer runs the Docker CI workflow by hand |
+| `ghcr.io/ots-downloader/onthespot` | the version on each release; `latest` on each full release (not a pre-release); `edge` each night that `fastapi-dev` has new commits |
 
 Both are built for `linux/amd64` and `linux/arm64`. To run the newest
 unreleased build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
-`:edge` may be behind the `fastapi-dev` branch.
+`:edge` can be up to a day behind the `fastapi-dev` branch.
 
 ### Build the image from source
 

@@ -72,7 +72,10 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("ONTHESPOT_VERSION=${{ steps.version.outputs.version }}", workflow)
         self.assertIn('git describe --tags --match "v[0-9]*" --abbrev=7', workflow)
         self.assertIn("fetch-depth: 0", workflow)
-        # :edge builds on manual runs only, not on each push.
+        # :edge builds each night, not on each push: the nightly workflow
+        # on the default branch calls this one and names the branch.
+        self.assertIn("workflow_call:", workflow)
+        self.assertIn("ref: ${{ inputs.ref }}", workflow)
         self.assertNotIn("branches: [fastapi-dev]", workflow)
         self.assertNotIn("\n  push:\n", workflow)
 
