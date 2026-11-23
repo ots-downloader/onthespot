@@ -118,6 +118,7 @@
   "fetch_extended_album_metadata": false,
   "fetch_audio_features": false,
   "fetch_track_credits": false,
+  "itunes_metadata_country": "US",
   "enable_search_tracks": true,
   "enable_search_albums": true,
   "enable_search_playlists": true,

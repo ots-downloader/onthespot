@@ -29,11 +29,9 @@ from .api.registry import (
 )
 from .basemodels import QueueItem
 from .constants import ItemStatus
-from .library import remember_item, verify_file
 from .otsconfig import config
 from .resources.exceptions import DownloadCancelled, TrackUnavailableError
 from .runtimedata import (
-    download_paused,
     download_queue,
     download_queue_lock,
     get_logger,
@@ -348,7 +346,6 @@ class DownloadWorker:
                     item_progress.length = int(item_metadata.get("length", 0))
                     if os.path.isfile(item.file_path):
                         item_progress.file_size = str(os.path.getsize(item.file_path))
-                        remember_item(item.model_dump(), item.file_path)
                     progress_hook(item_progress, 100, item.item_status)
                 except Exception as e:
                     logger.error("error emitting progress metadata", exc_info=e)

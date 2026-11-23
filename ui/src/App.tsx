@@ -60,6 +60,7 @@ import {
   AccountItem,
   DownloadProfile,
   DownloadQueueItem,
+  IdentifyApplyResponse,
   LogEntry,
   OTSConfig,
   ParsingJob,
@@ -71,6 +72,7 @@ import {
 import { AccountsManager } from "./components/AccountsManager";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { DownloadQueue } from "./components/DownloadQueue";
+import { IdentifyTrackModal } from "./components/IdentifyTrackModal";
 import { LogViewer } from "./components/LogViewer";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { NotificationHistory } from "./components/NotificationHistory";
@@ -116,6 +118,7 @@ export default function App() {
   // App Data States
   const [config, setConfig] = useState<OTSConfig>(DEFAULT_CONFIG);
   const [queue, setQueue] = useState<DownloadQueueItem[]>([]);
+  const [identifyItem, setIdentifyItem] = useState<DownloadQueueItem | null>(null);
   const [parsingJobs, setParsingJobs] = useState<ParsingJob[]>([]);
   const [pendingQueue, setPendingQueue] = useState<PendingQueueItem[]>([]);
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
@@ -273,6 +276,22 @@ export default function App() {
     await executeQueueAction(local_id, action);
     const updatedQueue = await fetchDownloadQueue();
     setQueue(updatedQueue);
+  };
+
+  const handleIdentifyApplied = async (result: IdentifyApplyResponse) => {
+    try {
+      const updatedQueue = await fetchDownloadQueue();
+      setQueue(updatedQueue);
+    } catch (err) {
+      console.error("Could not refresh queue after identify", err);
+    }
+    addNotification({
+      title: "Track identified",
+      message: result.warnings.length
+        ? `Tagged copy created with ${result.warnings.length} warning(s).`
+        : `Tagged copy saved to ${result.file_path}`,
+      status: "Downloaded"
+    });
   };
 
   const handleBatchAction = async (
@@ -617,8 +636,18 @@ export default function App() {
               onClearFailed={handleClearFailed}
               onRetryFailed={handleRetryFailed}
               onAction={handleQueueAction}
+              onIdentify={setIdentifyItem}
               onBatchAction={handleBatchAction}
               onReorder={handleReorder}
+            />
+          )}
+
+          {identifyItem && (
+            <IdentifyTrackModal
+              item={identifyItem}
+              config={config}
+              onClose={() => setIdentifyItem(null)}
+              onApplied={handleIdentifyApplied}
             />
           )}
 

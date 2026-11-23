@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Sliders,
   Square,
+  Tag,
   Trash2,
   User,
   XCircle
@@ -44,6 +45,7 @@ interface DownloadQueueProps {
   onClearFailed: () => Promise<void>;
   onRetryFailed: () => Promise<void>;
   onAction: (local_id: number, action: "cancel" | "delete" | "retry") => Promise<void>;
+  onIdentify: (item: DownloadQueueItem) => void;
   onBatchAction: (local_ids: number[], action: QueueBatchAction, options?: any) => Promise<void>;
   onReorder?: (local_ids: string[]) => Promise<void>;
 }
@@ -58,6 +60,7 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
   onClearFailed,
   onRetryFailed,
   onAction,
+  onIdentify,
   onBatchAction,
 }) => {
   const [filter, setFilter] = useState<string>("All");
@@ -568,6 +571,20 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                           />
                         )}
 
+                        {isDownloaded && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            label="Identify"
+                            icon={<Tag className="w-3.5 h-3.5" />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onIdentify(item);
+                            }}
+                            id={`btn-row-identify-${item.local_id}`}
+                          />
+                        )}
+
                         {isFailed && (
                           <Button
                             variant="secondary"
@@ -976,6 +993,17 @@ export const DownloadQueue: React.FC<DownloadQueueProps> = ({
                                 icon={<FileDown className="w-3.5 h-3.5" />}
                                 onClick={() => downloadFile(selectedItem)}
                                 id={`btn-detail-download-${selectedItem.local_id}`}
+                              />
+                            )}
+
+                            {isDownloaded && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                label="Identify"
+                                icon={<Tag className="w-3.5 h-3.5" />}
+                                onClick={() => onIdentify(selectedItem)}
+                                id={`btn-detail-identify-${selectedItem.local_id}`}
                               />
                             )}
 

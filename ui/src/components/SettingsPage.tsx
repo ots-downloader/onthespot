@@ -613,6 +613,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
           <Card padding={4} elevation="low">
             <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
+              iTunes Metadata Lookup (Free, No API Key)
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { key: "itunes_metadata_country", label: "Storefront Country Code", type: "text", description: "Two-letter iTunes store code, e.g. US, GB, DE." },
+              ].map(renderInput)}
+            </div>
+          </Card>
+
+          <Card padding={4} elevation="low">
+            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-4">
               Spotify Specific Catalog Scraping (Needs WebAPI Keys)
             </h3>
 
