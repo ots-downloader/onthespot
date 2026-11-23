@@ -101,7 +101,9 @@ so the app can still change the files it makes.
 
 Both are built for `linux/amd64` and `linux/arm64`. To run the newest
 unreleased build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
-`:edge` can be up to a day behind the `fastapi-dev` branch.
+`:edge` is most often less than a day behind the `fastapi-dev` branch. If
+GitHub skips a nightly run, it stays behind until the night after the next
+push.
 
 ### Build the image from source
 
