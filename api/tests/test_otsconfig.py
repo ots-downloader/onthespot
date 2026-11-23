@@ -122,6 +122,8 @@ class SourceVersionTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[:4], ["git", "-C", str(self.checkout), "describe"])
         self.assertIn("v[0-9]*", command)
+        # Without check=True a failed describe would return "" and skip dev-<sha>.
+        self.assertTrue(run.call_args.kwargs["check"])
 
     def test_clone_without_version_tags_reports_dev_and_the_commit(self):
         no_tags = subprocess.CalledProcessError(128, ["git", "describe"])

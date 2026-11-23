@@ -74,6 +74,7 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("fetch-depth: 0", workflow)
         # :edge builds on manual runs only, not on each push.
         self.assertNotIn("branches: [fastapi-dev]", workflow)
+        self.assertNotIn("\n  push:\n", workflow)
 
     def test_private_runtime_data_is_excluded_from_image_context(self):
         dockerignore = (REPOSITORY_ROOT / ".dockerignore").read_text(encoding="utf-8")

@@ -118,6 +118,7 @@ In PowerShell:
 ```powershell
 $env:ONTHESPOT_VERSION = git describe --tags --match "v[0-9]*" --abbrev=7
 docker compose -f compose.build.yml up -d --build
+Remove-Item Env:ONTHESPOT_VERSION
 ```
 
 `ONTHESPOT_VERSION` names the build. It is optional; without it the app
@@ -216,14 +217,15 @@ docker compose pull
 docker compose up -d
 ```
 
-If you build from source, pull the branch and rebuild instead:
+If you build from source, pull the branch instead:
 
 ```bash
 git pull --ff-only
-ONTHESPOT_VERSION=$(git describe --tags --match "v[0-9]*" --abbrev=7) docker compose -f compose.build.yml up -d --build
 ```
 
-The `-f compose.build.yml` flag is needed. Without it the command runs the
+Then run the build command from
+[Build the image from source](#build-the-image-from-source) again. The
+`-f compose.build.yml` flag is needed. Without it the command runs the
 published image and does not build your checkout.
 
 The app reports its version in one of these ways:
