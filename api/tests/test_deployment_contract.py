@@ -57,6 +57,8 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("ONTHESPOT_VERSION=${{ steps.version.outputs.version }}", workflow)
         self.assertIn('git describe --tags --match "v[0-9]*" --abbrev=7', workflow)
         self.assertIn("fetch-depth: 0", workflow)
+        # :edge builds on manual runs only, not on each push.
+        self.assertNotIn("branches: [fastapi-dev]", workflow)
 
     def test_private_runtime_data_is_excluded_from_image_context(self):
         dockerignore = (REPOSITORY_ROOT / ".dockerignore").read_text(encoding="utf-8")
