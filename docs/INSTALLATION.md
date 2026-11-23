@@ -97,28 +97,40 @@ so the app can still change the files it makes.
 | Image | Tags |
 | --- | --- |
 | `moddroid94/ots-dl` (Docker Hub) | the version on each release; `latest` on each full release (not a pre-release) |
-| `ghcr.io/ots-downloader/onthespot` | the version on each release; `latest` on each full release (not a pre-release); `edge` on each push to `fastapi-dev` |
+| `ghcr.io/ots-downloader/onthespot` | the version on each release; `latest` on each full release (not a pre-release); `edge` when a maintainer runs the Docker CI workflow by hand |
 
 Both are built for `linux/amd64` and `linux/arm64`. To run the newest
 unreleased build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
+`:edge` is the newest manual build of `fastapi-dev`, so it may be behind the
+branch.
 
 ### Build the image from source
 
-Clone the repository and name `compose.build.yml` together with `compose.yml`:
+Clone the repository and build with `compose.build.yml`:
 
 ```bash
 git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
 cd onthespot
-docker compose -f compose.yml -f compose.build.yml up -d --build
+ONTHESPOT_VERSION=$(git describe --tags --match "v[0-9]*" --abbrev=7) docker compose -f compose.build.yml up -d --build
 ```
+
+In PowerShell:
+
+```powershell
+$env:ONTHESPOT_VERSION = git describe --tags --match "v[0-9]*" --abbrev=7
+docker compose -f compose.build.yml up -d --build
+```
+
+`ONTHESPOT_VERSION` names the build. It is optional; without it the app
+reports `dev`.
 
 Building needs BuildKit, the default in Docker Engine 23+ and Compose v2.
 
 > [!WARNING]
-> `docker compose up -d --build` with no `-f` flags no longer builds from
-> source. `compose.yml` alone has no build settings, so that command runs the
-> published image and prints no error. If you built from a clone before this
-> change, use the command above from now on.
+> `compose.yml` alone has no build settings, so `docker compose up -d --build`
+> runs the published image and prints no error. The
+> `-f compose.yml -f compose.build.yml` command from the last release is
+> replaced by the one above.
 
 ## Unraid
 
@@ -176,7 +188,7 @@ cd ..
 uv run --project api uvicorn onthespot.main:app --app-dir api/src --host 127.0.0.1 --port 6767
 ```
 
-Open `http://127.0.0.1:6767`.
+Open `http://127.0.0.1:6767`. The app reads its version from git at start.
 
 On Windows, settings are stored under `%APPDATA%\onthespot` and media defaults
 to the current user's Music and Videos folders. On Linux, settings default to
@@ -209,17 +221,25 @@ If you build from source, pull the branch and rebuild instead:
 
 ```bash
 git pull --ff-only
-docker compose -f compose.yml -f compose.build.yml up -d --build
+ONTHESPOT_VERSION=$(git describe --tags --match "v[0-9]*" --abbrev=7) docker compose -f compose.build.yml up -d --build
 ```
 
-The two `-f` flags are needed. Without them the command runs the published
-image and does not build your checkout.
+The `-f compose.build.yml` flag is needed. Without it the command runs the
+published image and does not build your checkout.
 
-Published images take their version from the release tag. `:edge` images
-report the newest tag plus the commits since it, such as `v2.0.5-4-g14eda2c`,
-and are offered the next release like any other image. A local build or a
-source run reports `dev` and is never offered updates. The version replaces
-any version saved in an older config volume at startup.
+The app reports its version in one of these ways:
+
+- A release image: the release tag.
+- An `:edge` image: the newest tag plus the commits since it, such as
+  `v2.0.5-4-g14eda2c`.
+- A source run: the same form, read from git. A clone with no version tags
+  reports `dev-` and the commit, such as `dev-14eda2c`; a copy with no git
+  reports `dev`.
+- A local Docker build: what `ONTHESPOT_VERSION` held at build time, or `dev`.
+
+`dev` and `dev-…` builds are never offered updates; all others are offered the
+next release. The version replaces any version saved in an older config volume
+at startup.
 
 ## Troubleshooting
 

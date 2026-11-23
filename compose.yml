@@ -1,7 +1,7 @@
 services:
   onthespot:
     container_name: onthespot
-    # Pulls the published image. To build from source instead, add
+    # Pulls the published image. To build from source instead, use
     # compose.build.yml (see docs/INSTALLATION.md).
     image: ${ONTHESPOT_IMAGE:-moddroid94/ots-dl:latest}
     # One FastAPI process serves both the API and compiled React application.

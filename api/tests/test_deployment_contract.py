@@ -1,5 +1,6 @@
 import unittest
 
+import yaml
 from _support import API_ROOT
 
 
@@ -28,6 +29,20 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("image: onthespot:local", compose_build)
         self.assertIn("build:", compose_build)
         self.assertIn("pull_policy: build", compose_build)
+        self.assertIn("ONTHESPOT_VERSION: ${ONTHESPOT_VERSION:-dev}", compose_build)
+
+    def test_compose_build_matches_compose_apart_from_the_build(self):
+        # compose.build.yml is used on its own, so it must keep every other
+        # setting in compose.yml.
+        compose, compose_build = (
+            yaml.safe_load((REPOSITORY_ROOT / name).read_text(encoding="utf-8"))
+            for name in ("compose.yml", "compose.build.yml")
+        )
+        for key in ("image", "build", "pull_policy"):
+            compose["services"]["onthespot"].pop(key, None)
+            compose_build["services"]["onthespot"].pop(key, None)
+
+        self.assertEqual(compose_build, compose)
 
     def test_image_builds_ui_and_serves_it_from_fastapi(self):
         dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
