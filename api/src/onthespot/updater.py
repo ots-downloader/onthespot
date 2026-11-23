@@ -77,8 +77,9 @@ def _version_key(value: str | None) -> tuple[int, int, int, int, int]:
 
 
 def is_development_build(value: str | None) -> bool:
-    """True for ``dev``: local builds and source runs, which have no release to compare."""
-    return str(value or "").strip().lower() in ("", "dev")
+    """True for ``dev`` and ``dev-<sha>``: builds with no release tag to compare."""
+    text = str(value or "").strip().lower()
+    return text in ("", "dev") or text.startswith("dev-")
 
 
 def _normalise_release(payload: dict[str, Any], current_version: str) -> dict[str, Any]:

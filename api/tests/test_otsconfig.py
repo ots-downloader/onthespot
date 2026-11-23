@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -58,11 +59,13 @@ class ConfigPathTests(unittest.TestCase):
             self.assertEqual(instance.get("version"), "v2.0.6")
             instance.reset()
             self.assertEqual(instance.get("version"), "v2.0.6")
-        with patch.dict(os.environ, {**env, "ONTHESPOT_VERSION": "  "}):
-            self.assertEqual(Config().get("version"), DEFAULT_CONFIG["version"])
-        with patch.dict(os.environ, env):
-            os.environ.pop("ONTHESPOT_VERSION", None)
-            self.assertEqual(Config().get("version"), DEFAULT_CONFIG["version"])
+        # A checkout would answer with git describe output, so stub git out.
+        with patch.object(otsconfig, "_source_version", return_value=None):
+            with patch.dict(os.environ, {**env, "ONTHESPOT_VERSION": "  "}):
+                self.assertEqual(Config().get("version"), DEFAULT_CONFIG["version"])
+            with patch.dict(os.environ, env):
+                os.environ.pop("ONTHESPOT_VERSION", None)
+                self.assertEqual(Config().get("version"), DEFAULT_CONFIG["version"])
 
     def test_public_snapshot_is_flat_detached_and_redacts_secrets(self):
         config_root = TEST_ROOT / "public-snapshot-config"
@@ -98,6 +101,71 @@ class ConfigPathTests(unittest.TestCase):
         self.assertNotIn("_Config__config", snapshot)
         snapshot["accounts"][0]["service"] = "changed"
         self.assertEqual(instance.get("accounts")[0]["service"], "spotify")
+
+
+class SourceVersionTests(unittest.TestCase):
+    def setUp(self):
+        # A stand-in checkout, so no test depends on the real one's git state.
+        self.checkout = TEST_ROOT / "source-checkout"
+        (self.checkout / ".git").mkdir(parents=True, exist_ok=True)
+        root = patch.object(otsconfig, "_REPOSITORY_ROOT", str(self.checkout))
+        root.start()
+        self.addCleanup(root.stop)
+
+    @staticmethod
+    def _git_output(stdout):
+        return subprocess.CompletedProcess(args=["git"], returncode=0, stdout=stdout, stderr="")
+
+    def test_source_run_reports_git_describe(self):
+        with patch.object(otsconfig.subprocess, "run", return_value=self._git_output("v2.0.5-4-g14eda2c\n")) as run:
+            self.assertEqual(otsconfig._source_version(), "v2.0.5-4-g14eda2c")
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["git", "-C", str(self.checkout), "describe"])
+        self.assertIn("v[0-9]*", command)
+
+    def test_clone_without_version_tags_reports_dev_and_the_commit(self):
+        no_tags = subprocess.CalledProcessError(128, ["git", "describe"])
+        with patch.object(otsconfig.subprocess, "run", side_effect=[no_tags, self._git_output("abc1234\n")]):
+            self.assertEqual(otsconfig._source_version(), "dev-abc1234")
+
+    def test_missing_git_or_checkout_leaves_the_template_dev(self):
+        failures = (FileNotFoundError("git"), subprocess.TimeoutExpired(["git"], 5))
+        for failure in failures:
+            with patch.object(otsconfig.subprocess, "run", side_effect=failure):
+                self.assertIsNone(otsconfig._source_version(), failure)
+        with patch.object(otsconfig, "_REPOSITORY_ROOT", str(TEST_ROOT / "zip-download")):
+            with patch.object(otsconfig.subprocess, "run") as run:
+                self.assertIsNone(otsconfig._source_version())
+            run.assert_not_called()
+
+        env = {
+            "ONTHESPOTDIR": str(TEST_ROOT / "no-git-config"),
+            "ONTHESPOTCACHEDIR": str(TEST_ROOT / "no-git-cache"),
+        }
+        with patch.dict(os.environ, env), patch.object(otsconfig.subprocess, "run", side_effect=FileNotFoundError):
+            os.environ.pop("ONTHESPOT_VERSION", None)
+            self.assertEqual(Config().get("version"), DEFAULT_CONFIG["version"])
+
+    def test_build_version_wins_without_asking_git(self):
+        env = {
+            "ONTHESPOTDIR": str(TEST_ROOT / "build-wins-config"),
+            "ONTHESPOTCACHEDIR": str(TEST_ROOT / "build-wins-cache"),
+            "ONTHESPOT_VERSION": "v2.0.6",
+        }
+        with patch.dict(os.environ, env), patch.object(otsconfig, "_source_version") as source_version:
+            self.assertEqual(Config().get("version"), "v2.0.6")
+        source_version.assert_not_called()
+
+    def test_source_version_replaces_the_template_dev(self):
+        env = {
+            "ONTHESPOTDIR": str(TEST_ROOT / "source-run-config"),
+            "ONTHESPOTCACHEDIR": str(TEST_ROOT / "source-run-cache"),
+        }
+        with patch.dict(os.environ, env), patch.object(
+            otsconfig.subprocess, "run", return_value=self._git_output("v2.0.5-4-g14eda2c\n")
+        ):
+            os.environ.pop("ONTHESPOT_VERSION", None)
+            self.assertEqual(Config().get("version"), "v2.0.5-4-g14eda2c")
 
 
 class ConfigCoercionTests(unittest.TestCase):

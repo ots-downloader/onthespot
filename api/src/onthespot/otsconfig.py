@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import uuid
 
 from pydantic import TypeAdapter, ValidationError
@@ -55,6 +56,35 @@ def cache_dir():
     return os.path.join(config_dir(), "cache")
 
 
+# The checkout root: api/src/onthespot/ is three folders below it.
+_REPOSITORY_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+
+def _source_version() -> str | None:
+    """Name a source checkout's version the way CI names an :edge image.
+
+    Returns git describe output such as v2.0.5-4-g14eda2c, or dev-<sha> for a
+    clone with no version tags. Returns None with no git or no checkout.
+    """
+    # Look only at this checkout's own .git, so git never describes a parent
+    # repository, and a zip download never starts git.
+    if not os.path.exists(os.path.join(_REPOSITORY_ROOT, ".git")):
+        return None
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", _REPOSITORY_ROOT, *args], capture_output=True, text=True, timeout=5, check=True
+        ).stdout.strip()
+
+    try:
+        try:
+            return git("describe", "--tags", "--match", "v[0-9]*", "--abbrev=7")
+        except subprocess.CalledProcessError:
+            return f"dev-{git('rev-parse', '--short=7', 'HEAD')}"
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 class Config:
     def __init__(self):
         """
@@ -88,12 +118,12 @@ class Config:
             self.__template_data = {}
 
         # The build sets ONTHESPOT_VERSION to the release tag, or git describe
-        # output for edge images; source runs keep the template's "dev".
-        # Setting it on the template covers start-up, a fresh config and a
-        # settings reset.
-        build_version = os.environ.get("ONTHESPOT_VERSION", "").strip()
-        if build_version:
-            self.__template_data["version"] = build_version
+        # output for edge images; a source run asks git. With neither, the
+        # template's "dev" stays. Setting it on the template covers start-up,
+        # a fresh config and a settings reset.
+        version = os.environ.get("ONTHESPOT_VERSION", "").strip() or _source_version()
+        if version:
+            self.__template_data["version"] = version
 
         # Load or create user config
         if os.path.isfile(self.__cfg_path):

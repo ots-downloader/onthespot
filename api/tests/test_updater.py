@@ -9,7 +9,7 @@ LATEST = {"tag_name": "v2.0.5", "name": "v2.0.5", "assets": []}
 
 class UpdaterVersionTests(unittest.TestCase):
     def test_development_builds_are_recognised(self):
-        for version in ("dev", "", None):
+        for version in ("dev", "", None, "dev-abc1234"):
             self.assertTrue(is_development_build(version), version)
         # Any other version is checked, even in an unusual format.
         for version in ("v2.0.5", "2.0.5", "v2.0.2 Beta 4", "V2.0.2beta4", "release-2.0.6", "v2.0.5-4-g14eda2c"):
@@ -35,6 +35,11 @@ class UpdaterVersionTests(unittest.TestCase):
         self.assertFalse(status["update_available"])
         self.assertTrue(status["development_build"])
         self.assertEqual(status["latest_version"], "v2.0.5")
+
+    def test_source_run_without_version_tags_never_reports_an_update(self):
+        status = _normalise_release(LATEST, "dev-abc1234")
+        self.assertFalse(status["update_available"])
+        self.assertTrue(status["development_build"])
 
 
 if __name__ == "__main__":
