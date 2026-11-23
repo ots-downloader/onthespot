@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, DownloadCloud, Info, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { isInAppLink, notificationLinkLabel } from "../lib/notifications";
 import { NotificationBannerItem } from "../types";
 
 interface NotificationBannerProps {
@@ -82,11 +83,10 @@ const NotificationItem: React.FC<{
         {notif.url && (
           <a
             href={notif.url}
-            target="_blank"
-            rel="noopener noreferrer"
+            {...(isInAppLink(notif.url) ? {} : { target: "_blank", rel: "noopener noreferrer" })}
             className="text-[11px] text-blue-600 hover:underline dark:text-blue-400 mt-1 block truncate"
           >
-            {notif.url}
+            {notificationLinkLabel(notif.url)}
           </a>
         )}
       </div>

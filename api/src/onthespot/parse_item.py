@@ -18,7 +18,7 @@ from .accounts import get_account_token
 from .api.generic import generic_get_track_metadata
 from .api.soundcloud import soundcloud_parse_url
 from .constants import ROUTABLE_ITEM_TYPES
-from .resources.exceptions import UnsupportedItemError
+from .resources.exceptions import QueueFullError, UnsupportedItemError
 from .resources.regexes import (
     APPLE_MUSIC_URL_REGEX,
     BANDCAMP_URL_REGEX,
@@ -36,6 +36,7 @@ from .runtimedata import (
     account_pool,
     get_logger,
     parsing,
+    queue_new_item,
 )
 
 logger = get_logger("parse_item")
@@ -219,14 +220,14 @@ class UrlMatcher:
                         logger.error("Unable to parse url: %s", entry_url)
                         continue
 
-                    parsing.put_nowait(
-                        {
-                            "item_url": entry_url,
-                            "item_service": "generic",
-                            "item_type": "track",
-                            "item_id": entry_url,
-                        }
-                    )
+                    entry = {
+                        "item_url": entry_url,
+                        "item_service": "generic",
+                        "item_type": "track",
+                        "item_id": entry_url,
+                    }
+                    if not queue_new_item(parsing, entry):
+                        break
                     queued += 1
                     logger.info("Handled by generic: %s", entry_url)
                 if not queued:
@@ -262,6 +263,9 @@ def parse_url(url: str) -> bool:
     cannot download (Spotify Liked Songs and Your Episodes) or whose item
     type the parsing worker cannot route; nothing is enqueued and the
     message says why.
+
+    Raises :class:`QueueFullError` when the parsing queue already holds
+    ``max_queue_size`` items; nothing is enqueued.
     """
     resolved = _url_matcher.match(url)
 
@@ -273,14 +277,14 @@ def parse_url(url: str) -> bool:
     service, item_type, item_id = resolved
     if item_type not in ROUTABLE_ITEM_TYPES:
         raise UnsupportedItemError(f"{service.replace('_', ' ').title()} {item_type} links are not supported.")
-    parsing.put_nowait(
-        {
-            "item_url": url,
-            "item_service": service,
-            "item_type": item_type,
-            "item_id": item_id,
-        }
-    )
+    entry = {
+        "item_url": url,
+        "item_service": service,
+        "item_type": item_type,
+        "item_id": item_id,
+    }
+    if not queue_new_item(parsing, entry):
+        raise QueueFullError("The queue is full. Increase Max Queue Size in the settings, or wait for it to drain.")
     return True
 
 

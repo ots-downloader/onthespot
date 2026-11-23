@@ -1,5 +1,6 @@
 import { AlertCircle, Bell, CheckCircle2, DownloadCloud, ExternalLink, Info, Trash2, X } from "lucide-react";
 import React, { useState } from "react";
+import { isInAppLink, notificationLinkLabel } from "../lib/notifications";
 import { NotificationBannerItem } from "../types";
 
 interface NotificationHistoryProps {
@@ -143,12 +144,11 @@ export const NotificationHistory: React.FC<NotificationHistoryProps> = ({
                       {item.url && (
                         <a
                           href={item.url}
-                          target="_blank"
-                          rel="noreferrer"
+                          {...(isInAppLink(item.url) ? {} : { target: "_blank", rel: "noreferrer" })}
                           className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline truncate max-w-full"
                         >
-                          <span className="truncate">{item.url}</span>
-                          <ExternalLink className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{notificationLinkLabel(item.url)}</span>
+                          {!isInAppLink(item.url) && <ExternalLink className="w-3 h-3 shrink-0" />}
                         </a>
                       )}
                     </div>

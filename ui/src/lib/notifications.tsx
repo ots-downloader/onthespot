@@ -4,6 +4,16 @@ import { getTargetBackendUrl } from "./api";
 
 const HISTORY_STORAGE_KEY = "ots-notification-history";
 
+/** True for links inside the app, such as "#settings/max_queue_size". */
+export function isInAppLink(url: string): boolean {
+  return url.startsWith("#");
+}
+
+/** Text shown for a notification link: a short label for in-app links, else the URL. */
+export function notificationLinkLabel(url: string): string {
+  return url.startsWith("#settings") ? "Open settings" : url;
+}
+
 // Global dispatch helper to trigger notifications from anywhere in the app
 export function notify(item: {
   title: string;

@@ -72,7 +72,7 @@ from .library import (
 from .otsconfig import config
 from .parse_item import search
 from .parsingworker import ParsingWorker
-from .resources.exceptions import UnsupportedItemError
+from .resources.exceptions import QueueFullError, UnsupportedItemError
 from .runtimedata import (
     account_pool,
     adopt_loggers,
@@ -459,13 +459,14 @@ async def query_url(q: str | None = None, filters: dict | None = None):
     :raises HTTPException: 400 with the reason when the URL is a link
         OnTheSpot recognises but cannot download or route, when no
         logged-in service can handle the input (including text that is not
-        a URL), or when no account is logged in.
+        a URL), when no account is logged in, or when the queue is full
+        (``max_queue_size``).
     """
     result = None
     if q:
         try:
             result = search(q)
-        except UnsupportedItemError as exc:
+        except (UnsupportedItemError, QueueFullError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not result:
             if not account_pool:
