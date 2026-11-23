@@ -1,9 +1,10 @@
 # Builds the image from source. Use this file on its own, in place of
 # compose.yml:
-#   docker compose -f compose.build.yml up -d --build
-# Set ONTHESPOT_VERSION to name the build (see docs/INSTALLATION.md);
-# without it the app reports "dev". Apart from the build settings, this file
-# matches compose.yml, and a test checks that.
+#   ONTHESPOT_VERSION=$(git describe --tags --match "v[0-9]*" --abbrev=7) docker compose -f compose.build.yml up -d --build
+# ONTHESPOT_VERSION names the build, so a bug report can point at a commit.
+# The build cannot read git itself; without the variable the app reports
+# "dev". docs/INSTALLATION.md has the PowerShell form. Apart from the build
+# settings, this file matches compose.yml, and a test checks that.
 services:
   onthespot:
     container_name: onthespot

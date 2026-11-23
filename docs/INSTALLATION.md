@@ -121,8 +121,10 @@ docker compose -f compose.build.yml up -d --build
 Remove-Item Env:ONTHESPOT_VERSION
 ```
 
-`ONTHESPOT_VERSION` names the build. It is optional; without it the app
-reports `dev`.
+`ONTHESPOT_VERSION` names the build, so a bug report can point at a commit.
+The build cannot read git itself; without the variable the app reports `dev`.
+Do not put it in `.env`: the value would stay the same across later builds,
+and the app would then ask you to update when you already have.
 
 Building needs BuildKit, the default in Docker Engine 23+ and Compose v2.
 

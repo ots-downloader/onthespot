@@ -51,7 +51,7 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = release ]; then version="$TAG"
-          else version=$(git describe --tags --match "v[0-9]*" --abbrev=7 2>/dev/null || echo dev); fi
+          else version=$(git describe --tags --match "v[0-9]*" --abbrev=7 2>/dev/null || echo "dev-$(git rev-parse --short=7 HEAD)"); fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Login to Docker Hub
