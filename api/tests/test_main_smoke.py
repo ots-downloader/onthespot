@@ -39,7 +39,7 @@ class ApiSmokeTests(unittest.TestCase):
 
     def test_core_read_endpoints_respond(self):
         for route in (
-            "/config/version",
+            "/updates/check",
             "/profiles",
             "/queue/downloads",
             "/queue/downloads/state",
@@ -251,7 +251,7 @@ class ApiSmokeTests(unittest.TestCase):
             "Access-Control-Request-Method": "GET",
             "Origin": "http://localhost:3000",
         }
-        allowed = self.client.options("/config/version", headers=headers)
+        allowed = self.client.options("/profiles", headers=headers)
         self.assertEqual(allowed.status_code, 200)
         self.assertEqual(
             allowed.headers.get("access-control-allow-origin"),
@@ -259,7 +259,7 @@ class ApiSmokeTests(unittest.TestCase):
         )
 
         headers["Origin"] = "https://untrusted.example"
-        blocked = self.client.options("/config/version", headers=headers)
+        blocked = self.client.options("/profiles", headers=headers)
         self.assertNotIn("access-control-allow-origin", blocked.headers)
 
 

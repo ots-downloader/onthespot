@@ -88,7 +88,6 @@
   "mirror_spotify_playback": false,
 
   "check_for_updates": true,
-  "update_repository": "ots-downloader/onthespot",
   "update_check_interval_hours": 12,
   "illegal_character_replacement": "-",
   "raw_media_download": false,

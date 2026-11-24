@@ -12,7 +12,7 @@ Sections
 * Audio processing     — :func:`convert_audio_format`, :func:`embed_metadata`, …
 * Thumbnail handling   — :func:`set_music_thumbnail`
 * M3U playlist         — :func:`add_to_m3u_file`
-* Miscellaneous        — :func:`is_latest_release`, :func:`open_item`, …
+* Miscellaneous        — :func:`open_item`, …
 """
 
 import itertools
@@ -43,7 +43,6 @@ from .runtimedata import (
     download_queue_lock,
     get_logger,
     get_rate_limit_delay,
-    notification_hook,
     progress_hook,
     record_rate_limit,
 )
@@ -433,28 +432,6 @@ def _version_to_int(version):
     except Exception:
         logger.error("Error during version extraction %s", version)
         return 0
-
-
-def is_latest_release():
-    """Return ``True`` if the running version is the latest GitHub release.
-
-    This compatibility wrapper is retained for callers from the desktop
-    application.  The structured updater lives in :mod:`onthespot.updater`.
-    """
-    from .updater import check_for_updates
-
-    status = check_for_updates(force=True)
-    if status is None or not status.get("update_available"):
-        return True
-    if status.get("update_available"):
-        latest = status.get("latest_version")
-        notification_hook(
-            "Update available",
-            f"OnTheSpot {latest} is ready to download.",
-            status.get("release_url", ""),
-        )
-        logger.info("Update Available: %s", latest)
-        return False
 
 
 def open_item(item):

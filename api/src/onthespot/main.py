@@ -1122,17 +1122,6 @@ async def import_backup(payload: dict):
     }
 
 
-@app.get("/config/version")
-async def check_version():
-    # Keep this legacy boolean endpoint for the existing diagnostics view.
-    status = await run_in_threadpool(check_for_updates)
-    try:
-        status = not bool(status.get("update_available", False))
-        return status
-    except Exception:
-        return status
-
-
 @app.get("/updates/check")
 async def updates_check(force: bool = False):
     """Return the stored update status; ``force=true`` asks GitHub first."""

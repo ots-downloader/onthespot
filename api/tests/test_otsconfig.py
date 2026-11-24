@@ -26,6 +26,11 @@ class ConfigPathTests(unittest.TestCase):
         self.assertIn("itunes_metadata_country", DEFAULT_CONFIG)
         self.assertIn("itunes_metadata_country", AppSettings.model_fields)
 
+    def test_update_repository_setting_is_removed(self):
+        self.assertNotIn("update_repository", DEFAULT_CONFIG)
+        self.assertNotIn("update_repository", AppSettings.model_fields)
+        self.assertIn("check_for_updates", DEFAULT_CONFIG)
+
     def test_nonexistent_config_override_is_honoured(self):
         override = TEST_ROOT / "new-config-root"
         self.assertFalse(override.exists())
@@ -236,6 +241,15 @@ class ConfigHealingTests(unittest.TestCase):
         self.assertEqual(
             instance.get("download_delay"), DEFAULT_CONFIG["download_delay"]
         )
+
+    def test_saved_update_repository_is_dropped_on_load(self):
+        instance = self._load(
+            "removed-update-repository",
+            {"update_repository": "someone/fork", "check_for_updates": False},
+        )
+        self.assertNotIn("update_repository", instance._Config__config)
+        self.assertIsNone(instance.get("update_repository"))
+        self.assertFalse(instance.get("check_for_updates"))
 
     def test_profile_bitrate_that_is_already_a_number_is_left_alone(self):
         profiles = [

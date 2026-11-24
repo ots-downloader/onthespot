@@ -35,7 +35,6 @@ export interface OTSConfig {
   mirror_spotify_playback: boolean;
   close_to_tray: boolean;
   check_for_updates: boolean;
-  update_repository?: string;
   update_check_interval_hours?: number;
   illegal_character_replacement: string;
   raw_media_download: boolean;
