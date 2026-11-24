@@ -168,7 +168,12 @@ Navigation and some display preferences save immediately in the browser.
 - **Notification history** keeps user-visible success, warning, and error
   messages for the current installation.
 - **Server logs** can be filtered by severity and cleared from the view.
-- **Updates** check if a new update is available from source.
+- **Updates** in Diagnostics tell you when a new release is out. The server
+  checks GitHub at startup and once a day; **Check Now** checks at once, even
+  when **Check for Updates Automatically** is off in Settings. When a release
+  is out, the panel shows the two Docker commands to run, with a copy button,
+  and links to [Updating](INSTALLATION.md#updating) for source builds.
+  OnTheSpot does not update itself.
 
 
 ## Troubleshooting
