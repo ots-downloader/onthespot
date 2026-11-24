@@ -185,6 +185,16 @@ export default function App() {
     loadData();
   }, []);
 
+  // Re-read the stored update status each time Diagnostics opens, so a page
+  // left open picks up the daily background check. A failed read keeps the
+  // old status.
+  useEffect(() => {
+    if (activeTab !== "diagnostics") return;
+    fetchUpdateInfo()
+      .then(setUpdateStatus)
+      .catch(() => {});
+  }, [activeTab]);
+
   useEffect(() => {
     async function refreshQueue() {
       try {

@@ -424,16 +424,6 @@ def requeue_item(item: QueueItem) -> None:
             return
 
 
-def _version_to_int(version):
-    try:
-        match = re.findall(r"\d+\.\d+\.\d+", version)
-        digits = match[0].replace(".", "") if match else 0
-        return int(digits) if digits else 0
-    except Exception:
-        logger.error("Error during version extraction %s", version)
-        return 0
-
-
 def open_item(item):
     """Open *item* (a file path or URL) with the OS default application."""
     if platform.system() == "Windows":
