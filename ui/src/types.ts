@@ -432,6 +432,8 @@ export interface UpdateInfo {
   /** Unix seconds of the last check; null until the server has checked. */
   checked_at?: number | null;
   error?: string;
+  /** True only on a Check Now answer that reused a check from under a minute ago. */
+  reused_recent_check?: boolean;
 }
 
 export interface SystemDiagnostics {

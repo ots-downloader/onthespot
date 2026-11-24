@@ -614,7 +614,20 @@ export default function App() {
               />
               <SideNavItem
                 label="Diagnostics"
-                icon={<Activity className="w-4 h-4" />}
+                aria-label={updateStatus?.update_available ? "Diagnostics, update available" : undefined}
+                icon={
+                  // The dot sits on the icon so it also shows on the collapsed rail.
+                  <span className="relative inline-flex">
+                    <Activity className="w-4 h-4" />
+                    {updateStatus?.update_available && (
+                      <StatusDot
+                        variant="success"
+                        label="Update available"
+                        className="absolute -top-1 -right-1"
+                      />
+                    )}
+                  </span>
+                }
                 isSelected={activeTab === "diagnostics"}
                 onClick={() => setActiveTab("diagnostics")}
               />

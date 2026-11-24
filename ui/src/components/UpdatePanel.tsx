@@ -74,6 +74,12 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion, status
       </div>
 
       <div className="mt-4 border-t border-neutral-200 dark:border-neutral-800 pt-4 space-y-3">
+        {status?.reused_recent_check && !requestError && (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Checked less than a minute ago. Showing that result.
+          </p>
+        )}
+
         {error && (
           <p className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
             <AlertTriangle className="h-4 w-4 shrink-0" />
