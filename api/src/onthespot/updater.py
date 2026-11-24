@@ -245,7 +245,7 @@ def _checker_loop(stop_event: threading.Event) -> None:
 def start_update_checker() -> None:
     """Start the background checker thread. It never blocks startup."""
     global _update_thread, _stop_event
-    if _update_thread is not None and _update_thread.is_alive() and not _stop_event.is_set():
+    if _update_thread is not None and _update_thread.is_alive():
         return
     # A new event per thread, so a thread that was told to stop stays stopped.
     _stop_event = threading.Event()

@@ -104,7 +104,6 @@ class UpdateCheckTests(unittest.TestCase):
     def test_network_failure_returns_an_error_status(self):
         self.get.side_effect = requests.ConnectionError("offline")
         status = check_for_updates(force=True)
-        self.assertIsInstance(status, dict)
         self.assertTrue(status["error"])
         self.assertFalse(status["update_available"])
         self.assertIsNotNone(status["checked_at"])

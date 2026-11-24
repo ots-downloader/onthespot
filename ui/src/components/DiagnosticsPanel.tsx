@@ -23,7 +23,6 @@ import { UpdatePanel } from "./UpdatePanel";
 
 interface DiagnosticsPanelProps {
   wsConnected?: boolean;
-  newVersion?: boolean;
   updateStatus: UpdateInfo | null;
   onCheckForUpdates: () => Promise<void>;
   config?: OTSConfig | null;
@@ -43,7 +42,6 @@ const formatBytes = (value: number) => {
 
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   wsConnected = true,
-  newVersion = false,
   updateStatus,
   onCheckForUpdates,
   config,
@@ -215,7 +213,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
                   </span>
                 </div>
 
-                {newVersion && (
+                {updateStatus?.update_available && (
                   <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
                     <Sparkles className="w-3.5 h-3.5" /> Update Ready
                   </span>

@@ -91,7 +91,6 @@ export default function App() {
   const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
   // Update status as last stored by the server. Reading it never calls GitHub.
   const [updateStatus, setUpdateStatus] = useState<UpdateInfo | null>(null);
-  const hasNewVersion = Boolean(updateStatus?.update_available);
   const [settingsFocusField, setSettingsFocusField] = useState<string | undefined>(undefined);
 
   // In-app links sent with backend notifications: "#settings/max_queue_size"
@@ -715,7 +714,6 @@ export default function App() {
           {activeTab === "diagnostics" && (
             <DiagnosticsPanel
               wsConnected={serverStatus === "online"}
-              newVersion={hasNewVersion}
               updateStatus={updateStatus}
               onCheckForUpdates={handleCheckForUpdates}
               config={config}
