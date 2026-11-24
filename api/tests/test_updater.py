@@ -1,3 +1,4 @@
+import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -7,6 +8,7 @@ from _support import TEST_ROOT  # noqa: F401
 from onthespot import updater
 from onthespot.updater import (
     AUTO_CHECK_INTERVAL_SECONDS,
+    AUTO_RETRY_AFTER_FAILURE_SECONDS,
     MIN_CHECK_INTERVAL_SECONDS,
     _normalise_release,
     check_for_updates,
@@ -63,7 +65,7 @@ class UpdateCheckTests(unittest.TestCase):
             patch("onthespot.updater.notification_hook"),
             patch("onthespot.updater._current_version", return_value="v2.0.4"),
         )
-        self.get, self.notify, _ = (p.start() for p in patches)
+        self.get, self.notify, self.version = (p.start() for p in patches)
         for p in patches:
             self.addCleanup(p.stop)
         self.get.return_value = _response()
@@ -87,6 +89,7 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertEqual(status["latest_version"], "v2.0.5")
         self.assertIsNotNone(status["checked_at"])
         self.assertNotIn("assets", status)
+        self.assertNotIn("reused_recent_check", status)
 
         self.assertEqual(check_for_updates(), status)
         self.get.assert_called_once()
@@ -95,11 +98,24 @@ class UpdateCheckTests(unittest.TestCase):
         first = check_for_updates(force=True)
         second = check_for_updates(force=True)
         self.get.assert_called_once()
+        # Only the reused copy is marked; the stored status and reads are not.
+        self.assertIs(second.pop("reused_recent_check"), True)
         self.assertEqual(first, second)
+        self.assertNotIn("reused_recent_check", check_for_updates())
 
         self._allow_next_check()
-        check_for_updates(force=True)
+        third = check_for_updates(force=True)
         self.assertEqual(self.get.call_count, 2)
+        self.assertNotIn("reused_recent_check", third)
+
+    def test_forced_check_on_a_development_build_reports_the_latest_release(self):
+        self.version.return_value = "dev"
+        status = check_for_updates(force=True)
+        self.get.assert_called_once()
+        self.assertTrue(status["development_build"])
+        self.assertFalse(status["update_available"])
+        self.assertEqual(status["latest_version"], "v2.0.5")
+        self.notify.assert_not_called()
 
     def test_network_failure_returns_an_error_status(self):
         self.get.side_effect = requests.ConnectionError("offline")
@@ -110,11 +126,15 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertEqual(check_for_updates()["error"], status["error"])
 
     def test_rate_limit_is_named_in_the_error(self):
-        for code in (403, 429):
-            with self.subTest(code=code):
-                updater._last_attempt = None
-                self.get.return_value = _response(code, {"message": "API rate limit exceeded"})
-                self.assertIn("rate limit", check_for_updates(force=True)["error"])
+        self.get.return_value = _response(429, {"message": "API rate limit exceeded"})
+        self.assertEqual(check_for_updates(force=True)["error"], "GitHub rate limit reached. Try again later.")
+
+    def test_forbidden_names_both_causes(self):
+        # GitHub sends 403 for a rate limit and for a refused token alike.
+        self.get.return_value = _response(403, {"message": "Bad credentials"})
+        error = check_for_updates(force=True)["error"]
+        self.assertIn("refused", error)
+        self.assertIn("rate limit or token", error)
 
     def test_other_http_errors_return_an_error_status(self):
         self.get.return_value = _response(500, {})
@@ -147,6 +167,23 @@ class UpdateCheckTests(unittest.TestCase):
         self._allow_next_check()
         self.get.side_effect = None
         self.assertEqual(check_for_updates(force=True)["error"], "")
+
+    def test_unexpected_exception_returns_an_error_status(self):
+        self.get.side_effect = RuntimeError("unexpected")
+        status = check_for_updates(force=True)
+        self.assertTrue(status["error"])
+        self.assertEqual(check_for_updates()["error"], status["error"])
+
+    def test_failed_check_sends_no_notification(self):
+        # Not even when the kept status still says an update is out.
+        check_for_updates(force=True)
+        self.notify.assert_called_once()
+        updater._notified_versions.clear()
+        self._allow_next_check()
+        self.get.side_effect = requests.Timeout("slow")
+        failed = check_for_updates(force=True)
+        self.assertTrue(failed["update_available"])
+        self.notify.assert_called_once()
 
     def test_notification_is_sent_once_per_version(self):
         check_for_updates(force=True)
@@ -190,6 +227,64 @@ class BackgroundCheckDecisionTests(unittest.TestCase):
     def test_a_day_after_the_last_attempt_checks_again(self):
         last = self.NOW - AUTO_CHECK_INTERVAL_SECONDS
         self.assertTrue(should_check_now(self.NOW, last, True, "v2.0.4"))
+
+    def test_failed_attempt_retries_after_an_hour(self):
+        too_soon = self.NOW - AUTO_RETRY_AFTER_FAILURE_SECONDS + 60
+        self.assertFalse(should_check_now(self.NOW, too_soon, True, "v2.0.4", last_check_failed=True))
+        an_hour_ago = self.NOW - AUTO_RETRY_AFTER_FAILURE_SECONDS
+        self.assertTrue(should_check_now(self.NOW, an_hour_ago, True, "v2.0.4", last_check_failed=True))
+
+    def test_good_attempt_still_waits_a_day(self):
+        an_hour_ago = self.NOW - AUTO_RETRY_AFTER_FAILURE_SECONDS
+        self.assertFalse(should_check_now(self.NOW, an_hour_ago, True, "v2.0.4", last_check_failed=False))
+
+    def test_failed_attempt_still_respects_the_setting_and_development_builds(self):
+        long_ago = self.NOW - AUTO_CHECK_INTERVAL_SECONDS
+        self.assertFalse(should_check_now(self.NOW, long_ago, False, "v2.0.4", last_check_failed=True))
+        self.assertFalse(should_check_now(self.NOW, long_ago, True, "dev", last_check_failed=True))
+
+
+class BackgroundCheckerThreadTests(unittest.TestCase):
+    def setUp(self):
+        # The thread wakes, decides not to check, and waits on its stop event,
+        # so it makes no request and stops as soon as it is told to.
+        decide = patch("onthespot.updater.should_check_now", return_value=False)
+        decide.start()
+        self.addCleanup(decide.stop)
+        self.addCleanup(self._stop_all)
+
+    def _stop_all(self):
+        updater.stop_update_checker()
+        for thread in self._live_checker_threads():
+            thread.join(timeout=5)
+
+    def _live_checker_threads(self):
+        return [t for t in threading.enumerate() if t.name == "update-checker" and t.is_alive()]
+
+    def _stop_and_join(self, thread):
+        updater.stop_update_checker()
+        thread.join(timeout=5)
+        self.assertFalse(thread.is_alive())
+
+    def test_starting_twice_keeps_one_thread(self):
+        updater.start_update_checker()
+        first = updater._update_thread
+        updater.start_update_checker()
+        self.assertIs(updater._update_thread, first)
+        self.assertEqual(self._live_checker_threads(), [first])
+        self._stop_and_join(first)
+
+    def test_stop_then_start_runs_a_new_thread(self):
+        updater.start_update_checker()
+        first = updater._update_thread
+        self._stop_and_join(first)
+
+        updater.start_update_checker()
+        second = updater._update_thread
+        self.assertIsNot(second, first)
+        self.assertTrue(second.is_alive())
+        self.assertEqual(self._live_checker_threads(), [second])
+        self._stop_and_join(second)
 
 
 if __name__ == "__main__":

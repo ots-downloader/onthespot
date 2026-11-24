@@ -10,10 +10,14 @@ The server keeps the last update status in memory:
   never calls GitHub, so loading or reloading the page costs no request.
 * :func:`check_for_updates` with ``force=True`` asks GitHub for the latest
   release, stores the result and returns it. Checks closer together than
-  :data:`MIN_CHECK_INTERVAL_SECONDS` return the stored status instead.
-* A background thread (:func:`start_update_checker`) checks at startup and then
-  once every :data:`AUTO_CHECK_INTERVAL_SECONDS` while the ``check_for_updates``
-  setting is on.
+  :data:`MIN_CHECK_INTERVAL_SECONDS` return the stored status instead, marked
+  with ``reused_recent_check: True`` on the returned copy only.
+* A background thread (:func:`start_update_checker`) checks at startup while the
+  ``check_for_updates`` setting is on. After a good check it waits
+  :data:`AUTO_CHECK_INTERVAL_SECONDS`; after a failed one (no network, an HTTP
+  error, a reply that is not a release) it tries again after
+  :data:`AUTO_RETRY_AFTER_FAILURE_SECONDS`, so a server that starts before its
+  network is up does not show the error for a whole day.
 """
 
 from __future__ import annotations
@@ -36,8 +40,10 @@ UPDATE_REPOSITORY = "ots-downloader/onthespot"
 GITHUB_API = "https://api.github.com"
 #: A forced check this soon after the last attempt returns the stored status.
 MIN_CHECK_INTERVAL_SECONDS = 60
-#: The background checker asks GitHub at most this often.
+#: After a good check, the background checker waits this long before the next.
 AUTO_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
+#: After a failed check, the background checker tries again after this long.
+AUTO_RETRY_AFTER_FAILURE_SECONDS = 60 * 60
 #: How often the background checker wakes to decide whether to check.
 CHECKER_WAKE_SECONDS = 15 * 60
 #: In-app link to the diagnostics view, which holds the update panel.
@@ -147,9 +153,13 @@ def _fetch_latest_release() -> tuple[dict[str, Any] | None, str]:
     except requests.RequestException as exc:
         logger.warning("Update check could not reach GitHub: %s", exc)
         return None, "Could not reach GitHub to check for updates."
-    if response.status_code in (403, 429):
-        logger.warning("Update check hit the GitHub rate limit (HTTP %s)", response.status_code)
+    if response.status_code == 429:
+        logger.warning("Update check hit the GitHub rate limit (HTTP 429)")
         return None, "GitHub rate limit reached. Try again later."
+    if response.status_code == 403:
+        # GitHub sends 403 both for a rate limit and for a token it refuses.
+        logger.warning("Update check refused by GitHub (HTTP 403: rate limit or token)")
+        return None, "GitHub refused the request (rate limit or token). Try again later."
     if response.status_code != 200:
         logger.warning("Update check got HTTP %s from GitHub", response.status_code)
         return None, f"GitHub answered with HTTP {response.status_code}."
@@ -181,7 +191,8 @@ def check_for_updates(force: bool = False) -> dict[str, Any]:
 
     ``force=False`` returns the stored status and makes no request.
     ``force=True`` asks GitHub for the latest release and stores the result,
-    unless the last attempt was under :data:`MIN_CHECK_INTERVAL_SECONDS` ago.
+    unless the last attempt was under :data:`MIN_CHECK_INTERVAL_SECONDS` ago:
+    then it returns the stored status with ``reused_recent_check`` set to True.
     A failed check keeps the last good release fields and sets ``error``.
     """
     global _status, _last_attempt
@@ -192,7 +203,9 @@ def check_for_updates(force: bool = False) -> dict[str, Any]:
     with _check_lock:
         now = time.monotonic()
         if _last_attempt is not None and now - _last_attempt < MIN_CHECK_INTERVAL_SECONDS:
-            return _stored_status(current_version)
+            reused = _stored_status(current_version)
+            reused["reused_recent_check"] = True
+            return reused
         _last_attempt = now
 
         try:
@@ -218,16 +231,24 @@ def should_check_now(
     last_attempt: float | None,
     enabled: bool,
     current_version: str,
+    *,
+    last_check_failed: bool = False,
 ) -> bool:
-    """Decide whether the background checker asks GitHub on this wake."""
+    """Decide whether the background checker asks GitHub on this wake.
+
+    The wait after the last attempt is :data:`AUTO_CHECK_INTERVAL_SECONDS` when
+    it succeeded and :data:`AUTO_RETRY_AFTER_FAILURE_SECONDS` when it failed.
+    """
     if not enabled or is_development_build(current_version):
         return False
-    return last_attempt is None or now - last_attempt >= AUTO_CHECK_INTERVAL_SECONDS
+    if last_attempt is None:
+        return True
+    wait = AUTO_RETRY_AFTER_FAILURE_SECONDS if last_check_failed else AUTO_CHECK_INTERVAL_SECONDS
+    return now - last_attempt >= wait
 
 
 def _checker_loop(stop_event: threading.Event) -> None:
-    # The first wake is right at startup. Later wakes make no request unless
-    # a day has passed since the last attempt.
+    # The first wake is right at startup; should_check_now decides the later ones.
     while not stop_event.is_set():
         try:
             if should_check_now(
@@ -235,6 +256,7 @@ def _checker_loop(stop_event: threading.Event) -> None:
                 _last_attempt,
                 bool(config.get("check_for_updates", True)),
                 _current_version(),
+                last_check_failed=bool(_status and _status["error"]),
             ):
                 check_for_updates(force=True)
         except Exception:

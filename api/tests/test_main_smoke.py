@@ -1,9 +1,10 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from _support import TEST_ROOT  # noqa: F401
 
 from fastapi.testclient import TestClient  # noqa: E402
+from onthespot import updater  # noqa: E402
 from onthespot.main import app, search_service_catalogs  # noqa: E402
 from onthespot.otsconfig import config
 from onthespot.playlist_automation import (  # noqa: E402
@@ -48,6 +49,30 @@ class ApiSmokeTests(unittest.TestCase):
         ):
             with self.subTest(route=route):
                 self.assertEqual(self.client.get(route).status_code, 200)
+
+    def test_update_check_asks_github_only_when_forced(self):
+        release = MagicMock(status_code=200)
+        release.json.return_value = {"tag_name": "v2.0.5", "name": "v2.0.5"}
+        with (
+            patch.object(updater, "_status", None),
+            patch.object(updater, "_last_attempt", None),
+            patch.object(updater, "_notified_versions", set()),
+            patch("onthespot.updater._current_version", return_value="v2.0.4"),
+            patch("onthespot.updater.notification_hook"),
+            patch("onthespot.updater.requests.get", return_value=release) as get,
+        ):
+            plain = self.client.get("/updates/check")
+            self.assertEqual(plain.status_code, 200)
+            self.assertIsNone(plain.json()["checked_at"])
+            get.assert_not_called()
+
+            forced = self.client.get("/updates/check?force=true")
+            self.assertEqual(forced.status_code, 200)
+            self.assertTrue(forced.json()["update_available"])
+            get.assert_called_once()
+
+            self.assertEqual(self.client.get("/updates/check").json(), forced.json())
+            get.assert_called_once()
 
     def test_config_response_is_flat_and_does_not_expose_secrets(self):
         with patch("onthespot.main.config.get") as config_get:
