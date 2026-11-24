@@ -25,6 +25,16 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion, status
     return () => window.clearTimeout(timer);
   }, [copyState]);
 
+  // "Checked less than a minute ago" stops being true after a minute, so the
+  // line goes away then. The server's floor is 60 seconds.
+  const [reusedNoteShown, setReusedNoteShown] = useState(false);
+  useEffect(() => {
+    setReusedNoteShown(Boolean(status?.reused_recent_check));
+    if (!status?.reused_recent_check) return;
+    const timer = window.setTimeout(() => setReusedNoteShown(false), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+
   const checkNow = async () => {
     setChecking(true);
     setRequestError("");
@@ -42,6 +52,9 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion, status
   };
 
   const error = requestError || status?.error || "";
+  // The background checker retries a failed check after an hour, but only when
+  // automatic checks are on and the build is not a development build.
+  const willRetry = !requestError && Boolean(status?.error) && autoCheckEnabled && !status?.development_build;
   const checkedAt = status?.checked_at ? new Date(status.checked_at * 1000).toLocaleString() : "";
 
   return (
@@ -74,7 +87,7 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion, status
       </div>
 
       <div className="mt-4 border-t border-neutral-200 dark:border-neutral-800 pt-4 space-y-3">
-        {status?.reused_recent_check && !requestError && (
+        {reusedNoteShown && !requestError && (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Checked less than a minute ago. Showing that result.
           </p>
@@ -83,7 +96,10 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion, status
         {error && (
           <p className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
+            <span>
+              {error}
+              {willRetry ? " The server tries again in about an hour." : ""}
+            </span>
           </p>
         )}
 
