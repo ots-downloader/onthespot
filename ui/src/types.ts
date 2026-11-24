@@ -422,13 +422,6 @@ export interface NotificationBannerItem {
   url?: string;
 }
 
-export interface UpdateAsset {
-  name: string;
-  size: number;
-  download_url: string;
-  platform: string;
-}
-
 export interface UpdateInfo {
   repository: string;
   current_version: string;
@@ -437,9 +430,8 @@ export interface UpdateInfo {
   development_build?: boolean;
   release_name: string;
   release_url?: string;
-  recommended_asset?: UpdateAsset;
-  checked_at?: number;
-  install_supported?: boolean;
+  /** Unix seconds of the last check; null until the server has checked. */
+  checked_at?: number | null;
   error?: string;
 }
 

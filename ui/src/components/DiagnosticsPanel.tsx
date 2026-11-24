@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { fetchSystemDiagnostics, getTargetBackendUrl } from "../lib/api";
-import { OTSConfig, SystemDiagnostics } from "../types";
+import { OTSConfig, SystemDiagnostics, UpdateInfo } from "../types";
 import { PageHeader } from "./PageHeader";
 import { SectionHeader } from "./SectionHeader";
 import { UpdatePanel } from "./UpdatePanel";
@@ -24,7 +24,8 @@ import { UpdatePanel } from "./UpdatePanel";
 interface DiagnosticsPanelProps {
   wsConnected?: boolean;
   newVersion?: boolean;
-  onCheckVersion?: () => Promise<void>;
+  updateStatus: UpdateInfo | null;
+  onCheckForUpdates: () => Promise<void>;
   config?: OTSConfig | null;
 }
 
@@ -43,7 +44,8 @@ const formatBytes = (value: number) => {
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
   wsConnected = true,
   newVersion = false,
-  onCheckVersion,
+  updateStatus,
+  onCheckForUpdates,
   config,
 }) => {
   const [data, setData] = useState<SystemDiagnostics | null>(null);
@@ -56,9 +58,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
       const res = await fetchSystemDiagnostics();
       setData(res);
       setLastRefreshed(new Date());
-      if (onCheckVersion) {
-        await onCheckVersion();
-      }
     } finally {
       setIsLoading(false);
     }
@@ -510,7 +509,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({
           </Card>
 
           {/* Integrated Update & Version Release Panel */}
-          <UpdatePanel currentVersion={config?.version || data.version} />
+          <UpdatePanel
+            currentVersion={config?.version || data.version}
+            status={updateStatus}
+            onCheckNow={onCheckForUpdates}
+            autoCheckEnabled={config?.check_for_updates ?? true}
+          />
         </div>
       )}
     </div>

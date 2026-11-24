@@ -43,6 +43,7 @@ import {
   fetchOTSConfig,
   fetchPendingQueue,
   fetchProfiles,
+  fetchUpdateInfo,
   reconnectAccounts,
   removeAccount,
   removePendingItems,
@@ -67,6 +68,7 @@ import {
   PendingQueueItem,
   QueueBatchAction,
   SearchResultItem,
+  UpdateInfo,
 } from "./types";
 
 import { AccountsManager } from "./components/AccountsManager";
@@ -87,23 +89,31 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>("parsing");
   const [themeMode, setThemeMode] = useState<"neutral" | "stone" | "gothic">("neutral");
   const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
-  const [hasNewVersion, setHasNewVersion] = useState(false);
+  // Update status as last stored by the server. Reading it never calls GitHub.
+  const [updateStatus, setUpdateStatus] = useState<UpdateInfo | null>(null);
+  const hasNewVersion = Boolean(updateStatus?.update_available);
   const [settingsFocusField, setSettingsFocusField] = useState<string | undefined>(undefined);
 
-  // In-app links such as "#settings/max_queue_size" (sent with backend
-  // notifications) open the settings page and jump to that field.
+  // In-app links sent with backend notifications: "#settings/max_queue_size"
+  // opens the settings page at that field, "#diagnostics" opens diagnostics.
   useEffect(() => {
-    const openSettingsFromHash = () => {
-      const match = window.location.hash.match(/^#settings(?:\/([\w-]+))?$/);
-      if (!match) return;
-      setActiveTab("settings");
-      setSettingsFocusField(match[1]);
+    const openViewFromHash = () => {
+      const hash = window.location.hash;
+      const settingsMatch = hash.match(/^#settings(?:\/([\w-]+))?$/);
+      if (settingsMatch) {
+        setActiveTab("settings");
+        setSettingsFocusField(settingsMatch[1]);
+      } else if (hash === "#diagnostics") {
+        setActiveTab("diagnostics");
+      } else {
+        return;
+      }
       // Clear the hash so the same link works again on the next click.
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     };
-    openSettingsFromHash();
-    window.addEventListener("hashchange", openSettingsFromHash);
-    return () => window.removeEventListener("hashchange", openSettingsFromHash);
+    openViewFromHash();
+    window.addEventListener("hashchange", openViewFromHash);
+    return () => window.removeEventListener("hashchange", openViewFromHash);
   }, []);
 
   // Real-time Notification Banner & History Hook
@@ -144,6 +154,7 @@ export default function App() {
           profs,
           lgs,
           acctHealth,
+          updates,
         ] = await Promise.all([
           checkServerHealth().catch(() => ({ status: "offline" as const, version: "", target: "" })),
           fetchOTSConfig().catch(() => DEFAULT_CONFIG),
@@ -153,6 +164,7 @@ export default function App() {
           fetchProfiles().catch(() => DEFAULT_PROFILES),
           fetchLogs().catch(() => []),
           fetchAccountHealth().catch(() => null),
+          fetchUpdateInfo().catch(() => null),
         ]);
 
         setServerStatus(health.status);
@@ -164,6 +176,7 @@ export default function App() {
         setAccountHealth(acctHealth);
         setProfiles(profs);
         setLogs(lgs);
+        setUpdateStatus(updates);
       } catch (err) {
         console.error("Initialization error", err);
       }
@@ -428,6 +441,12 @@ export default function App() {
     return deleted;
   };
 
+  // "Check Now" in the update panel: the server asks GitHub, then the badge
+  // and the panel both show the new status.
+  const handleCheckForUpdates = async () => {
+    setUpdateStatus(await fetchUpdateInfo(true));
+  };
+
   // Logs actions
   const handleClearLogs = async () => {
     await clearLogs();
@@ -687,6 +706,8 @@ export default function App() {
             <DiagnosticsPanel
               wsConnected={serverStatus === "online"}
               newVersion={hasNewVersion}
+              updateStatus={updateStatus}
+              onCheckForUpdates={handleCheckForUpdates}
               config={config}
             />
           )}
