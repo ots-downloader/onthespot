@@ -620,10 +620,9 @@ export default function App() {
                   <span className="relative inline-flex">
                     <Activity className="w-4 h-4" />
                     {updateStatus?.update_available && (
-                      <StatusDot
-                        variant="success"
-                        label="Update available"
-                        className="absolute -top-1 -right-1"
+                      <span
+                        aria-hidden="true"
+                        className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-500"
                       />
                     )}
                   </span>
