@@ -131,7 +131,9 @@ def _patch_librespot_zeroconf_runner() -> bool:
             self._HttpRunner__socket.close()
         except OSError:
             pass
-        self._HttpRunner__worker.shutdown(wait=True, cancel_futures=True, timeout=2)
+        # shutdown() takes no timeout, so do not wait on a request that is
+        # still running; the bounded wait is the runner join below.
+        self._HttpRunner__worker.shutdown(wait=False, cancel_futures=True)
         runner_thread = getattr(self, "_onthespot_runner_thread", None)
         if runner_thread is not None and runner_thread is not threading.current_thread():
             runner_thread.join(timeout=2)
