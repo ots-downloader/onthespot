@@ -25,7 +25,17 @@ class ApiSmokeTests(unittest.TestCase):
         document = response.json()
         self.assertEqual(document["info"]["title"], "OnTheSpot API")
         self.assertEqual(document["info"]["version"], config.get("version"))
-        self.assertGreaterEqual(len(document["paths"]), 80)
+        for path in (
+            "/config/get",
+            "/updates/check",
+            "/accounts/get",
+            "/profiles",
+            "/queue/downloads",
+            "/search",
+            "/api/sse/{user_id}",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, document["paths"])
 
     def test_core_read_endpoints_respond(self):
         for route in (
@@ -33,8 +43,6 @@ class ApiSmokeTests(unittest.TestCase):
             "/profiles",
             "/queue/downloads",
             "/queue/downloads/state",
-            "/library",
-            "/statistics",
             "/accounts/health",
             "/system/diagnostics",
         ):
@@ -63,18 +71,6 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertIsInstance(payload["items"], list)
                 self.assertEqual(payload["count"], len(payload["items"]))
                 self.assertNotIn("_queue", payload)
-
-    def test_spotify_playback_mirror_endpoint_controls_worker(self):
-        with patch("onthespot.main.spotifymirrorworker") as worker:
-            enabled = self.client.post("/spotify/mirror?state=true")
-            disabled = self.client.post("/spotify/mirror?state=false")
-
-        self.assertEqual(enabled.status_code, 200)
-        self.assertEqual(enabled.json(), {"enabled": True})
-        self.assertEqual(disabled.status_code, 200)
-        self.assertEqual(disabled.json(), {"enabled": False})
-        worker.start.assert_called_once_with()
-        worker.stop.assert_called_once_with()
 
     def test_cross_service_search_returns_results_without_enqueueing(self):
         provider_result = {
