@@ -1,5 +1,4 @@
-import { Badge } from "@astryxdesign/core/Badge";
-import { Card } from "@astryxdesign/core/Card";
+import { Badge, Card } from "./ui";
 import React, { ReactNode } from "react";
 
 interface PageHeaderProps {
@@ -28,12 +27,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     <Card padding={4} elevation="low" id={id}>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-300 shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-raised flex items-center justify-center text-fg-muted shrink-0">
             {icon}
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+              <h2 className="text-base font-semibold text-fg">
                 {title}
               </h2>
               {badge && (
@@ -41,7 +40,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               )}
             </div>
             {description && (
-              <p className="text-xs text-neutral-500 mt-0.5">
+              <p className="text-xs text-fg-muted mt-0.5">
                 {description}
               </p>
             )}
@@ -56,7 +55,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       </div>
 
       {bottomContent && (
-        <div className="mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-800">
+        <div className="mt-4 pt-3 border-t border-line">
           {bottomContent}
         </div>
       )}

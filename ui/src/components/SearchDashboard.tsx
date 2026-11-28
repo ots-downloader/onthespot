@@ -1,10 +1,3 @@
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
-import { Divider } from "@astryxdesign/core/Divider";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
-import { TextInput } from "@astryxdesign/core/TextInput";
 import {
   AudioWaveform,
   CheckCircle2,
@@ -21,6 +14,17 @@ import React, { useState } from "react";
 import { CATALOG_SERVICES, getServiceInfo } from "../lib/catalogServices";
 import { SearchResultItem } from "../types";
 import { SectionHeader } from "./SectionHeader";
+import {
+  Badge,
+  Button,
+  Card,
+  Divider,
+  EmptyState,
+  SegmentedControl,
+  SegmentedControlItem,
+  TextInput,
+  focusRing,
+} from "./ui";
 
 interface SearchDashboardProps {
   onSearch: (query: string, filters: Record<string, boolean>, services: string[]) => Promise<SearchResultItem[]>;
@@ -91,7 +95,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                 onChange={(val) => setQuery(val)}
                 hasClear={true}
                 size="md"
-                startIcon={<Search className="w-4 h-4 text-neutral-400" />}
+                startIcon={<Search className="w-4 h-4 text-fg-subtle" />}
               />
             </div>
 
@@ -121,18 +125,17 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
             </div>
           </div>
 
-          <Divider variant="subtle" />
+          <Divider />
 
           {/* Filter Bar: Media Types (SegmentedControl) & Services */}
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 pt-0.5">
             {/* Media Type Segmented Control */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-medium text-neutral-500">Type:</span>
+              <span className="text-xs font-medium text-fg-muted">Type:</span>
               <SegmentedControl
                 label="Media type filter"
                 value={selectedType}
                 onChange={handleTypeChange}
-                size="sm"
               >
                 <SegmentedControlItem
                   value="all"
@@ -164,7 +167,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
 
             {/* Service Filters */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-medium text-neutral-500 mr-1">Services:</span>
+              <span className="text-xs font-medium text-fg-muted mr-1">Services:</span>
               {CATALOG_SERVICES.map((srv) => {
                 const isSelected = selectedServices.includes(srv.id);
                 return (
@@ -172,10 +175,10 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                     key={srv.id}
                     type="button"
                     onClick={() => toggleService(srv.id)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer border ${
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer border ${focusRing} ${
                       isSelected
-                        ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
-                        : "border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50 text-neutral-600 dark:text-neutral-400 hover:border-neutral-300 dark:hover:border-neutral-700"
+                        ? "border-inverse bg-inverse text-fg-on-inverse"
+                        : "border-line bg-sunken text-fg-muted hover:border-line-strong"
                     }`}
                   >
                     <span
@@ -237,7 +240,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                   {/* Top: Thumbnail & Metadata */}
                   <div className="flex gap-3.5 items-start">
                     {/* Thumbnail Artwork */}
-                    <div className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60">
+                    <div className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-raised border border-line/60">
                       <img
                         src={item.thumbnail || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=160&auto=format&fit=crop&q=80"}
                         alt={item.name}
@@ -246,7 +249,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                       />
                       <div className="absolute top-1.5 left-1.5">
                         <span
-                          className="w-2.5 h-2.5 rounded-full block ring-2 ring-white dark:ring-neutral-900 shadow-xs"
+                          className="w-2.5 h-2.5 rounded-full block ring-2 ring-surface shadow-xs"
                           style={{ backgroundColor: serviceInfo.color }}
                           title={serviceInfo.name}
                         />
@@ -262,40 +265,40 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-1.5">
                         <h4
-                          className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate leading-snug"
+                          className="text-sm font-semibold text-fg truncate leading-snug"
                           title={item.name}
                         >
                           {item.name}
                         </h4>
                         {item.explicit && (
-                          <span className="text-[10px] font-bold text-neutral-500 border border-neutral-300 dark:border-neutral-700 px-1 rounded uppercase tracking-wider shrink-0">
+                          <span className="text-[10px] font-bold text-fg-muted border border-line-strong px-1 rounded uppercase tracking-wider shrink-0">
                             E
                           </span>
                         )}
                       </div>
 
                       <p
-                        className="text-xs text-neutral-600 dark:text-neutral-400 truncate mt-0.5"
+                        className="text-xs text-fg-muted truncate mt-0.5"
                         title={item.artist}
                       >
                         {item.artist}
                       </p>
 
                       <p
-                        className="text-[11px] text-neutral-400 truncate mt-0.5 min-h-[16px]"
+                        className="text-[11px] text-fg-muted truncate mt-0.5 min-h-[16px]"
                         title={item.album}
                       >
                         {item.album && item.album !== item.name ? item.album : item.item_type.toUpperCase()}
                       </p>
 
-                      <div className="flex items-center gap-2 text-[11px] text-neutral-500 mt-2">
+                      <div className="flex items-center gap-2 text-[11px] text-fg-muted mt-2">
                         <span className="inline-flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-neutral-400" />
+                          <Clock className="w-3 h-3 text-fg-subtle" />
                           {item.duration || "3:30"}
                         </span>
                         <span>•</span>
-                        <span className="inline-flex items-center gap-1 font-mono text-[10px] text-neutral-600 dark:text-neutral-400">
-                          <AudioWaveform className="w-3 h-3 text-neutral-400" />
+                        <span className="inline-flex items-center gap-1 font-mono text-[10px] text-fg-muted">
+                          <AudioWaveform className="w-3 h-3 text-fg-subtle" />
                           {item.bitrate || serviceInfo.maxBitrate}
                         </span>
                       </div>
@@ -303,7 +306,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                   </div>
 
                   {/* Card Action Footer */}
-                  <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
+                  <div className="pt-3 border-t border-line flex items-center justify-between">
                     <Badge
                       variant={serviceInfo.badgeVariant}
                       label={serviceInfo.name}
@@ -315,7 +318,7 @@ export const SearchDashboard: React.FC<SearchDashboardProps> = ({
                       label={isQueued ? "Queued" : "Queue Download"}
                       icon={
                         isQueued ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                          <CheckCircle2 className="w-3.5 h-3.5 text-success-fg" />
                         ) : (
                           <Download className="w-3.5 h-3.5" />
                         )

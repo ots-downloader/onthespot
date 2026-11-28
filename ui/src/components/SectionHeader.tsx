@@ -1,4 +1,4 @@
-import { Badge } from "@astryxdesign/core/Badge";
+import { Badge } from "./ui";
 import React, { ReactNode } from "react";
 
 interface SectionHeaderProps {
@@ -21,14 +21,14 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-0.5" id={id}>
       <div className="flex items-center gap-2 flex-wrap">
-        <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+        <h3 className="text-sm font-semibold text-fg">
           {title}
         </h3>
         {count !== undefined && (
           <Badge variant={badgeVariant} label={String(count)} />
         )}
         {description && (
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-fg-muted">
             • {description}
           </span>
         )}

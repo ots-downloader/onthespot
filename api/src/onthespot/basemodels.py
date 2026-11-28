@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -169,7 +169,7 @@ class AppSettings(BaseModel):
     accounts: list[Account] = Field(default_factory=list)
 
     language: str = "en_US"
-    theme: str = "dark"
+    theme: Literal["system", "dark", "light"] = "system"
     active_download_profile: str = "mp3-320"
     export_folder_path: str = ""
     playlist_backup_folder_path: str = ""

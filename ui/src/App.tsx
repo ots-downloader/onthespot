@@ -1,25 +1,14 @@
-import { AppShell } from "@astryxdesign/core/AppShell";
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { SideNav, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
-import { StatusDot } from "@astryxdesign/core/StatusDot";
-import { Theme } from "@astryxdesign/core/theme";
-import { TopNav } from "@astryxdesign/core/TopNav";
-import { gothicTheme } from "@astryxdesign/theme-gothic/built";
-import { neutralTheme } from "@astryxdesign/theme-neutral/built";
-import { stoneTheme } from "@astryxdesign/theme-stone/built";
 import {
   Activity,
   Bell,
   Disc3,
   Download,
   ListPlus,
-  Palette,
   Sliders,
   Terminal,
   Users
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 import {
   activateProfile,
@@ -55,6 +44,7 @@ import {
   uploadYouTubeCookies
 } from "./lib/api";
 import { useNotifications } from "./lib/notifications";
+import { applyAppearance } from "./lib/theme";
 import {
   AccountHealth,
   AccountItem,
@@ -78,6 +68,16 @@ import { NotificationBanner } from "./components/NotificationBanner";
 import { NotificationHistory } from "./components/NotificationHistory";
 import { ParsingPendingQueue } from "./components/ParsingPendingQueue";
 import { SettingsPage } from "./components/SettingsPage";
+import {
+  AppShell,
+  Badge,
+  Button,
+  SideNav,
+  SideNavItem,
+  SideNavSection,
+  StatusDot,
+  TopNav,
+} from "./components/ui";
 
 type NavigationTab = "parsing" | "queue" | "accounts" | "settings" | "diagnostics" | "logs";
 
@@ -85,7 +85,6 @@ export const uuid = Math.random().toString(36).substring(2, 7)
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>("parsing");
-  const [themeMode, setThemeMode] = useState<"neutral" | "stone" | "gothic">("neutral");
   const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
   const [hasNewVersion, setHasNewVersion] = useState(false);
   const [settingsFocusField, setSettingsFocusField] = useState<string | undefined>(undefined);
@@ -130,6 +129,11 @@ export default function App() {
   const [downloadsPaused, setDownloadsPaused] = useState(false);
   const [serverStatus, setServerStatus] = useState<"online" | "offline">("online");
   const [serverVersion, setServerVersion] = useState("");
+
+  // Light/dark mode follows the "Theme Appearance" setting. Runs before paint.
+  useLayoutEffect(() => {
+    applyAppearance(config.theme);
+  }, [config.theme]);
 
   // Load initial data
   useEffect(() => {
@@ -439,44 +443,25 @@ export default function App() {
     setLogs(updatedLogs);
   };
 
-  // Current active theme object
-  const currentTheme =
-    themeMode === "stone"
-      ? stoneTheme
-      : themeMode === "gothic"
-      ? gothicTheme
-      : neutralTheme;
-
-  // Light/dark mode from the "Theme Appearance" setting. Gothic is a dark-only theme.
-  const mode =
-    themeMode === "gothic"
-      ? "dark"
-      : config.theme === "light" || config.theme === "dark"
-      ? config.theme
-      : "system";
-
   // Counts for navigation badges
   const activeDownloadsCount = queue.filter((i) => i.item_status === "Downloading").length;
   const waitingCount = queue.filter((i) => i.item_status === "Waiting").length;
   const pendingCount = activeDownloadsCount + waitingCount;
 
   return (
-    <Theme theme={currentTheme} mode={mode}>
+    <>
       <AppShell
-        height="fill"
-        contentPadding={4}
-        variant="elevated"
         topNav={
           <TopNav
-            label="OnTheSpot Main Navigation"
+            label="OnTheSpot"
             heading={
               <div className="flex items-center gap-2.5 py-1">
-                <div className="w-8 h-8 rounded-lg bg-neutral-900 dark:bg-neutral-100 flex items-center justify-center text-white dark:text-neutral-900 shadow-xs">
+                <div className="w-8 h-8 rounded-lg bg-inverse flex items-center justify-center text-fg-on-inverse shadow-xs">
                   <Disc3 className="w-4 h-4" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-sm tracking-tight text-neutral-900 dark:text-neutral-100">
+                    <span className="font-semibold text-sm tracking-tight text-fg">
                       OnTheSpot
                     </span>
                     {serverVersion && <Badge variant="neutral" label={serverVersion} />}
@@ -485,18 +470,18 @@ export default function App() {
               </div>
             }
             centerContent={
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/60 text-xs">
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-raised border border-line text-xs">
                 <StatusDot
                   variant={serverStatus === "online" ? "success" : "error"}
                   label={serverStatus === "online" ? "Online" : "Offline"}
                 />
-                <span className="text-neutral-700 dark:text-neutral-300 font-medium">
+                <span className="text-fg-muted font-medium">
                   {serverStatus === "online" ? "FastAPI Core Ready" : "Disconnected"}
                 </span>
                 {activeDownloadsCount > 0 && (
                   <>
-                    <span className="text-neutral-300 dark:text-neutral-600">•</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                    <span className="text-fg-subtle">•</span>
+                    <span className="text-success-fg font-medium">
                       {activeDownloadsCount} active download{activeDownloadsCount > 1 ? "s" : ""}
                     </span>
                   </>
@@ -504,32 +489,13 @@ export default function App() {
               </div>
             }
             endContent={
-              <div className="flex items-center gap-2 invisible w-0 sm:visible sm:w-auto">
-                {/* Theme Selector Group */}
-                <div className="flex items-center gap-1 p-0.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs">
-                  <Palette className="w-3.5 h-3.5 ml-1.5 text-neutral-400" />
-                  {(["neutral", "stone", "gothic"] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setThemeMode(t)}
-                      className={`px-2 py-0.5 rounded text-[11px] font-medium capitalize transition cursor-pointer ${
-                        themeMode === t
-                          ? "bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 shadow-xs"
-                          : "text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-
+              <div className="hidden items-center gap-2 sm:flex">
                 {/* Notification History Button in place of Queue button */}
                 <Button
                   variant={notificationHistoryOpen ? "primary" : "secondary"}
                   size="sm"
                   label={`History (${history.length})`}
-                  icon={<Bell className="w-3.5 h-3.5 text-emerald-500" />}
+                  icon={<Bell className="w-3.5 h-3.5 text-accent" />}
                   onClick={() => setNotificationHistoryOpen(true)}
                   id="btn-header-notifications"
                 />
@@ -538,9 +504,7 @@ export default function App() {
           />
         }
         sideNav={
-          <SideNav
-            collapsible={true}
-          >
+          <SideNav>
             <SideNavSection title="Downloader">
               <SideNavItem
                 label="Parsing & Pending"
@@ -562,7 +526,7 @@ export default function App() {
                   pendingCount > 0 ? (
                     <Badge variant="info" label={String(pendingCount)} />
                   ) : (
-                    <span className="text-[11px] text-neutral-400 font-mono">{queue.length}</span>
+                    <span className="text-[11px] text-fg-muted font-mono">{queue.length}</span>
                   )
                 }
               />
@@ -596,7 +560,7 @@ export default function App() {
                 isSelected={activeTab === "logs"}
                 onClick={() => setActiveTab("logs")}
                 endContent={
-                  <span className="text-[11px] font-mono text-neutral-400">
+                  <span className="text-[11px] font-mono text-fg-muted">
                     {logs.length}
                   </span>
                 }
@@ -716,6 +680,6 @@ export default function App() {
         onOpenChange={setNotificationHistoryOpen}
         hideTrigger={true}
       />
-    </Theme>
+    </>
   );
 }

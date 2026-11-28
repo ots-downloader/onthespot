@@ -1,3 +1,4 @@
+import type { Appearance } from "./lib/theme";
 export interface OTSConfig {
   version: string;
   debug_mode: boolean;
@@ -13,7 +14,7 @@ export interface OTSConfig {
   use_webui_login: boolean;
   webui_username: string;
   webui_password: string;
-  theme: string;
+  theme: Appearance;
   active_download_profile?: string;
   export_folder_path?: string;
   playlist_backup_folder_path?: string;
