@@ -1,5 +1,6 @@
 import unittest
 
+import yaml
 from _support import API_ROOT
 
 
@@ -28,6 +29,20 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("image: onthespot:local", compose_build)
         self.assertIn("build:", compose_build)
         self.assertIn("pull_policy: build", compose_build)
+        self.assertIn("ONTHESPOT_VERSION: ${ONTHESPOT_VERSION:-dev}", compose_build)
+
+    def test_compose_build_matches_compose_apart_from_the_build(self):
+        # compose.build.yml is used on its own, so it must keep every other
+        # setting in compose.yml.
+        compose, compose_build = (
+            yaml.safe_load((REPOSITORY_ROOT / name).read_text(encoding="utf-8"))
+            for name in ("compose.yml", "compose.build.yml")
+        )
+        for key in ("image", "build", "pull_policy"):
+            compose["services"]["onthespot"].pop(key, None)
+            compose_build["services"]["onthespot"].pop(key, None)
+
+        self.assertEqual(compose_build, compose)
 
     def test_image_builds_ui_and_serves_it_from_fastapi(self):
         dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
@@ -47,6 +62,22 @@ class DeploymentContractTests(unittest.TestCase):
             '"--host", "0.0.0.0", "--port", "6767"]',
             dockerfile,
         )
+
+    def test_image_version_comes_from_the_build(self):
+        dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "docker-ci.yml").read_text(encoding="utf-8")
+
+        self.assertIn("ARG ONTHESPOT_VERSION=dev", dockerfile)
+        self.assertIn("ENV ONTHESPOT_VERSION=$ONTHESPOT_VERSION", dockerfile)
+        self.assertIn("ONTHESPOT_VERSION=${{ steps.version.outputs.version }}", workflow)
+        self.assertIn('git describe --tags --match "v[0-9]*" --abbrev=7', workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+        # :edge builds each night, not on each push: the nightly workflow
+        # on the default branch calls this one and names the branch.
+        self.assertIn("workflow_call:", workflow)
+        self.assertIn("ref: ${{ inputs.ref }}", workflow)
+        self.assertNotIn("branches: [fastapi-dev]", workflow)
+        self.assertNotIn("\n  push:\n", workflow)
 
     def test_private_runtime_data_is_excluded_from_image_context(self):
         dockerignore = (REPOSITORY_ROOT / ".dockerignore").read_text(encoding="utf-8")

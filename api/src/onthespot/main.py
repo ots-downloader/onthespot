@@ -370,7 +370,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="OnTheSpot API",
-    version=str(config.get("version") or "2.0.0"),
+    version=str(config.get("version") or "dev"),
     lifespan=lifespan,
 )
 

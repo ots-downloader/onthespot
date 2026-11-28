@@ -97,28 +97,44 @@ so the app can still change the files it makes.
 | Image | Tags |
 | --- | --- |
 | `moddroid94/ots-dl` (Docker Hub) | the version on each release; `latest` on each full release (not a pre-release) |
-| `ghcr.io/ots-downloader/onthespot` | the version on each release; `latest` on each full release (not a pre-release); `edge` on each push to `fastapi-dev` |
+| `ghcr.io/ots-downloader/onthespot` | the version on each release; `latest` on each full release (not a pre-release); `edge` each night that `fastapi-dev` has new commits |
 
 Both are built for `linux/amd64` and `linux/arm64`. To run the newest
-development build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
+unreleased build, set `ONTHESPOT_IMAGE=ghcr.io/ots-downloader/onthespot:edge`.
+`:edge` is most often less than a day behind the `fastapi-dev` branch. If
+GitHub skips a nightly run, it stays behind until the night after the next
+push.
 
 ### Build the image from source
 
-Clone the repository and name `compose.build.yml` together with `compose.yml`:
+Clone the repository and build with `compose.build.yml`:
 
 ```bash
 git clone --branch fastapi-dev --single-branch https://github.com/ots-downloader/onthespot.git
 cd onthespot
-docker compose -f compose.yml -f compose.build.yml up -d --build
+ONTHESPOT_VERSION=$(git describe --tags --match "v[0-9]*" --abbrev=7) docker compose -f compose.build.yml up -d --build
 ```
+
+In PowerShell:
+
+```powershell
+$env:ONTHESPOT_VERSION = git describe --tags --match "v[0-9]*" --abbrev=7
+docker compose -f compose.build.yml up -d --build
+Remove-Item Env:ONTHESPOT_VERSION
+```
+
+`ONTHESPOT_VERSION` names the build, so a bug report can point at a commit.
+The build cannot read git itself; without the variable the app reports `dev`.
+Do not put it in `.env`: the value would stay the same across later builds,
+and the app would then ask you to update when you already have.
 
 Building needs BuildKit, the default in Docker Engine 23+ and Compose v2.
 
 > [!WARNING]
-> `docker compose up -d --build` with no `-f` flags no longer builds from
-> source. `compose.yml` alone has no build settings, so that command runs the
-> published image and prints no error. If you built from a clone before this
-> change, use the command above from now on.
+> `compose.yml` alone has no build settings, so `docker compose up -d --build`
+> runs the published image and prints no error. The
+> `-f compose.yml -f compose.build.yml` command from the last release is
+> replaced by the one above.
 
 ## Unraid
 
@@ -205,18 +221,30 @@ docker compose pull
 docker compose up -d
 ```
 
-If you build from source, pull the branch and rebuild instead:
+If you build from source, pull the branch instead:
 
 ```bash
 git pull --ff-only
-docker compose -f compose.yml -f compose.build.yml up -d --build
 ```
 
-The two `-f` flags are needed. Without them the command runs the published
-image and does not build your checkout.
+Then run the build command from
+[Build the image from source](#build-the-image-from-source) again. The
+`-f compose.build.yml` flag is needed. Without it the command runs the
+published image and does not build your checkout.
 
-The bundled application version replaces stale version values from older
-config volumes during startup.
+The app reports its version in one of these ways:
+
+- A release image: the release tag.
+- An `:edge` image: the newest tag plus the commits since it, such as
+  `v2.0.5-4-g14eda2c`.
+- A source run: the same form, read from git. A clone with no version tags
+  reports `dev-` and the commit, such as `dev-14eda2c`; a copy with no git
+  reports `dev`.
+- A local Docker build: what `ONTHESPOT_VERSION` held at build time, or `dev`.
+
+`dev` and `dev-…` builds are never offered updates; all others are offered the
+next release. The version replaces any version saved in an older config volume
+at startup.
 
 ## Troubleshooting
 

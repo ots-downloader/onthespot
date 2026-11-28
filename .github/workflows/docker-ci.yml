@@ -1,16 +1,26 @@
 name: Docker CI
 
-# Push to fastapi-dev, or a manual run: GHCR :edge only.
+# The nightly workflow on the default branch calls this file, and a manual
+# run works too: both publish GHCR :edge only.
 # Published release: the release's own tag on GHCR, and on Docker Hub when
 # the DOCKERHUB_USERNAME variable is set; :latest as well, unless it is a
 # pre-release. Forks without the variable publish to their own GHCR only.
+# The image's version is the release tag, or for :edge the newest tag plus
+# commits since (v2.0.5-4-g14eda2c); no version file needs bumping.
 
 on:
   release:
     types: [published]
-  push:
-    branches: [fastapi-dev]
   workflow_dispatch:
+  # GitHub runs schedules from the default branch only, so edge-nightly.yml
+  # there calls this file. A called run takes the caller's event and ref,
+  # so the caller names the branch to build.
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch to build
+        type: string
+        default: fastapi-dev
 
 permissions:
   contents: read
@@ -18,9 +28,8 @@ permissions:
 
 concurrency:
   group: docker-ci-${{ github.event_name }}-${{ github.ref }}
-  # A newer push to fastapi-dev cancels an older edge build. A manual run or
-  # a release build is never cancelled once it has started.
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  # A build is never cancelled once it has started.
+  cancel-in-progress: false
 
 jobs:
   docker:
@@ -30,6 +39,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Blank outside a called run, which means the triggering ref.
+          ref: ${{ inputs.ref }}
+          # Full history and tags, so git describe can name the edge version.
+          # It matches v<digit> tags only: the old "dev" tag holds no version.
+          fetch-depth: 0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -41,6 +56,16 @@ jobs:
       - name: Name the GHCR image
         id: ghcr
         run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/onthespot" >> "$GITHUB_OUTPUT"
+
+      - name: Name the app version
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = release ]; then version="$TAG"
+          else version=$(git describe --tags --match "v[0-9]*" --abbrev=7 2>/dev/null || echo "dev-$(git rev-parse --short=7 HEAD)"); fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Login to Docker Hub
         if: env.DOCKERHUB_ENABLED == 'true'
@@ -69,6 +94,10 @@ jobs:
             type=raw,value=edge,enable=${{ github.event_name != 'release' }}
             type=raw,value=${{ github.event.release.tag_name }},enable=${{ github.event_name == 'release' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
+          # The commit that was built; in a called run github.sha is the
+          # caller's commit.
+          labels: |
+            org.opencontainers.image.revision=${{ steps.version.outputs.revision }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -78,6 +107,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONTHESPOT_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           # A release runs on a tag ref, and a cache written there is one no
           # later run can read, so a release only reads the cache.

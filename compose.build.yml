@@ -1,10 +1,50 @@
-# Builds the image from source. Compose does not load this file by itself;
-# name it together with compose.yml:
-#   docker compose -f compose.yml -f compose.build.yml up -d --build
+# Builds the image from source. Use this file on its own, in place of
+# compose.yml:
+#   ONTHESPOT_VERSION=$(git describe --tags --match "v[0-9]*" --abbrev=7) docker compose -f compose.build.yml up -d --build
+# ONTHESPOT_VERSION names the build, so a bug report can point at a commit.
+# The build cannot read git itself; without the variable the app reports
+# "dev". docs/INSTALLATION.md has the PowerShell form. Apart from the build
+# settings, this file matches compose.yml, and a test checks that.
 services:
   onthespot:
+    container_name: onthespot
     image: onthespot:local
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        ONTHESPOT_VERSION: ${ONTHESPOT_VERSION:-dev}
     pull_policy: build
+    # One FastAPI process serves both the API and compiled React application.
+    ports:
+      - "${ONTHESPOT_WEB_PORT:-6767}:6767"
+    environment:
+      # The app runs as this user and group and must be able to write to
+      # the data folders.
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      ONTHESPOTDIR: /root/.config/onthespot
+      ONTHESPOTCACHEDIR: /root/.config/onthespot/cache
+      # Blank means the bgutil-provider container below.
+      ONTHESPOT_BGUTIL_URL: ${ONTHESPOT_BGUTIL_URL:-}
+    volumes:
+      - "${ONTHESPOT_MUSIC_DIR:-./otsdata/Music}:/root/Music/OnTheSpot"
+      - "${ONTHESPOT_VIDEO_DIR:-./otsdata/Videos}:/root/Videos/OnTheSpot"
+      - "${ONTHESPOT_CONFIG_DIR:-./otsdata/Config}:/root/.config/onthespot"
+    restart: unless-stopped
+    stop_grace_period: 20s
+    networks:
+      - ots-network
+
+  bgutil-ytdlp-pot-provider:
+    container_name: bgutil-provider
+    init: true
+    ports:
+      - "127.0.0.1:4416:4416"
+    image: brainicism/bgutil-ytdlp-pot-provider
+    networks:
+      - ots-network
+
+networks:
+  ots-network:
+    driver: bridge
