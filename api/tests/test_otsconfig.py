@@ -238,7 +238,6 @@ class ConfigHealingTests(unittest.TestCase):
         )
 
     def test_profile_bitrate_that_is_already_a_number_is_left_alone(self):
-        # A file already on the new format should pass through unchanged.
         profiles = [
             {
                 "id": "mp3-320",
