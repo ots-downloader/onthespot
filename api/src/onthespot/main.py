@@ -93,6 +93,8 @@ from .runtimedata import (
 from .statistics import clear_history, export_history, import_history
 from .updater import (
     check_for_updates,
+    start_update_checker,
+    stop_update_checker,
 )
 from .utils import open_item
 from .youtube_auth import (
@@ -353,6 +355,7 @@ async def lifespan(app: FastAPI):
         retryworker.start()
 
     fillaccountpool.start()
+    start_update_checker()
 
     logger.info("Initializing...")
 
@@ -362,6 +365,7 @@ async def lifespan(app: FastAPI):
     downloadworker.stop()
 
     fillaccountpool.stop()
+    stop_update_checker()
     device_auth.cancel_all()
     # stop_spotify_connect_service()
 
@@ -1118,21 +1122,10 @@ async def import_backup(payload: dict):
     }
 
 
-@app.get("/config/version")
-async def check_version():
-    # Keep this legacy boolean endpoint for the existing diagnostics view.
-    status = await run_in_threadpool(check_for_updates)
-    try:
-        status = not bool(status.get("update_available", False))
-        return status
-    except Exception:
-        return status
-
-
 @app.get("/updates/check")
 async def updates_check(force: bool = False):
-    """Return release metadata."""
-    return await run_in_threadpool(check_for_updates)
+    """Return the stored update status; ``force=true`` asks GitHub first."""
+    return await run_in_threadpool(check_for_updates, force)
 
 
 # ACCOUNTS ENDPOINTS

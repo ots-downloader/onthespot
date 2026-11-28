@@ -1,59 +1,61 @@
-import { CheckCircle2, Download, ExternalLink, Loader2, RefreshCw, Sparkles } from "lucide-react";
-import React, { useCallback, useEffect, useState } from "react";
-import { fetchUpdateInfo } from "../lib/api";
+import { AlertTriangle, Check, CheckCircle2, Copy, Download, ExternalLink, RefreshCw, Sparkles } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { copyToClipboard } from "../lib/clipboard";
 import { UpdateInfo } from "../types";
 
 interface UpdatePanelProps {
   currentVersion: string;
+  status: UpdateInfo | null;
+  onCheckNow: () => Promise<void>;
+  autoCheckEnabled: boolean;
 }
 
-const formatSize = (bytes: number) => {
-  if (!bytes) return "";
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-};
+const DOCKER_UPDATE_COMMANDS = "docker compose pull\ndocker compose up -d";
+const SOURCE_UPDATE_DOCS_URL =
+  "https://github.com/ots-downloader/onthespot/blob/fastapi-dev/docs/INSTALLATION.md#updating";
 
-export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion }) => {
-  const [status, setStatus] = useState<UpdateInfo | null>(null);
-  const [checking, setChecking] = useState(true);
-  const [installing, setInstalling] = useState(false);
-  const [message, setMessage] = useState("");
+export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion, status, onCheckNow, autoCheckEnabled }) => {
+  const [checking, setChecking] = useState(false);
+  const [requestError, setRequestError] = useState("");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
-  const check = useCallback(async (force = false) => {
+  useEffect(() => {
+    if (copyState === "idle") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  // "Checked less than a minute ago" stops being true after a minute, so the
+  // line goes away then. The server's floor is 60 seconds.
+  const [reusedNoteShown, setReusedNoteShown] = useState(false);
+  useEffect(() => {
+    setReusedNoteShown(Boolean(status?.reused_recent_check));
+    if (!status?.reused_recent_check) return;
+    const timer = window.setTimeout(() => setReusedNoteShown(false), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+
+  const checkNow = async () => {
     setChecking(true);
+    setRequestError("");
     try {
-      const result = await fetchUpdateInfo(force);
-      if (result) setStatus(result);
+      await onCheckNow();
+    } catch {
+      setRequestError("Could not reach the OnTheSpot server to check for updates.");
     } finally {
       setChecking(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void check();
-  }, [check]);
-
-  const install = async () => {
-    setInstalling(true);
-    setMessage("");
-    try {
-      const result = await installApplicationUpdate();
-      if (!result) {
-        setMessage("The update service could not be reached.");
-        return;
-      }
-      if (result.success) {
-        setMessage(result.message || "The update is ready. Daemon restarting…");
-        return;
-      }
-      setMessage(result.message || "Automatic installation is not available for this environment.");
-    } finally {
-      setInstalling(false);
-    }
   };
 
-  const assetUrl = status?.recommended_asset?.download_url || status?.release_url || "";
-  const checkedAt = status?.checked_at ? new Date(status.checked_at * 1000).toLocaleTimeString() : "";
+  const copyCommands = async () => {
+    setCopyState((await copyToClipboard(DOCKER_UPDATE_COMMANDS)) ? "copied" : "failed");
+  };
+
+  const error = requestError || status?.error || "";
+  // The background checker retries a failed check after an hour, but only when
+  // automatic checks are on and the build is not a development build.
+  const willRetry = !requestError && Boolean(status?.error) && autoCheckEnabled && !status?.development_build;
+  const checkedAt = status?.checked_at ? new Date(status.checked_at * 1000).toLocaleString() : "";
 
   return (
     <section className="mt-6 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/60 p-5 shadow-xs">
@@ -66,13 +68,16 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion }) => {
             Keep OnTheSpot Current
           </h3>
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-            Running version <span className="font-mono font-medium text-neutral-700 dark:text-neutral-300">{currentVersion || "unknown"}</span>. Background checks occur periodically.
+            Running version <span className="font-mono font-medium text-neutral-700 dark:text-neutral-300">{currentVersion || "unknown"}</span>.{" "}
+            {autoCheckEnabled
+              ? "The server checks GitHub for a new release at startup and once a day."
+              : "Automatic checks are off in Settings. Check Now still works."}
           </p>
         </div>
         <button
           type="button"
           id="btn-check-updates-now"
-          onClick={() => void check(true)}
+          onClick={() => void checkNow()}
           disabled={checking}
           className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-750 text-neutral-800 dark:text-neutral-200 transition cursor-pointer shrink-0 disabled:opacity-50"
         >
@@ -81,75 +86,87 @@ export const UpdatePanel: React.FC<UpdatePanelProps> = ({ currentVersion }) => {
         </button>
       </div>
 
-      <div className="mt-4 border-t border-neutral-200 dark:border-neutral-800 pt-4">
-        {checking && !status ? (
-          <p className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-            <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
-            Connecting to release feed…
-          </p>
-        ) : status?.error ? (
+      <div className="mt-4 border-t border-neutral-200 dark:border-neutral-800 pt-4 space-y-3">
+        {reusedNoteShown && !requestError && (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            {status.error} You can inspect the release repository directly below.
+            Checked less than a minute ago. Showing that result.
           </p>
-        ) : status?.development_build ? (
+        )}
+
+        {error && (
+          <p className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>
+              {error}
+              {willRetry ? " The server tries again in about an hour." : ""}
+            </span>
+          </p>
+        )}
+
+        {status?.development_build ? (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Development build: no update prompts.
             {status.latest_version ? ` The latest release is ${status.latest_version}.` : ""}
           </p>
         ) : status?.update_available ? (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3">
-            <div>
-              <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                <Download className="h-4 w-4" />
-                New Version Available: {status.latest_version}
-              </p>
-              <p className="mt-0.5 text-[11px] text-neutral-600 dark:text-neutral-400">
-                {status.release_name}
-                {status.recommended_asset?.name ? ` · ${status.recommended_asset.name}` : ""}
-                {status.recommended_asset?.size ? ` · ${formatSize(status.recommended_asset.size)}` : ""}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {status.install_supported && (
-                <button
-                  type="button"
-                  id="btn-install-restart-update"
-                  onClick={() => void install()}
-                  disabled={installing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition cursor-pointer shadow-xs"
-                >
-                  {installing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                  {installing ? "Installing…" : "Install & Restart"}
-                </button>
-              )}
-              {assetUrl && (
+          <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
+              <Download className="h-4 w-4" />
+              New Version Available: {status.latest_version}
+            </p>
+            <p className="mt-2 text-[11px] text-neutral-600 dark:text-neutral-400">
+              To update a Docker install, run these commands in the folder that holds your <span className="font-mono">compose.yml</span>:
+            </p>
+            <code className="mt-1 block overflow-x-auto whitespace-pre rounded-md bg-neutral-900 dark:bg-black/40 p-2 font-mono text-[11px] text-emerald-400">
+              {DOCKER_UPDATE_COMMANDS}
+            </code>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                id="btn-copy-update-commands"
+                onClick={() => void copyCommands()}
+                className="inline-flex items-center gap-1 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-2.5 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-200 cursor-pointer"
+              >
+                {copyState === "copied" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed, select the text" : "Copy commands"}
+              </button>
+              {status.release_url && (
                 <a
-                  href={assetUrl}
+                  href={status.release_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 text-xs font-medium hover:bg-neutral-50 dark:hover:bg-neutral-700 transition"
+                  className="inline-flex items-center gap-1 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-2.5 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {status.install_supported ? "Release Details" : "Download Update"}
+                  <ExternalLink className="w-3 h-3" /> Release notes
                 </a>
               )}
             </div>
+            <p className="mt-2 text-[11px] text-neutral-600 dark:text-neutral-400">
+              Built from source? Follow{" "}
+              <a
+                href={SOURCE_UPDATE_DOCS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-emerald-700 dark:text-emerald-400 underline"
+              >
+                Updating in the install guide
+              </a>
+              .
+            </p>
           </div>
-        ) : (
+        ) : !status?.checked_at ? (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Not checked yet. Press Check Now to ask GitHub for the latest release.
+          </p>
+        ) : !error ? (
           <p className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <span>You are on the latest release of OnTheSpot.</span>
           </p>
-        )}
-
-        {message && (
-          <p className="mt-2.5 text-xs font-mono text-neutral-500 dark:text-neutral-400">
-            {message}
-          </p>
-        )}
+        ) : null}
 
         {checkedAt && (
-          <p className="mt-2 text-[10px] text-neutral-400 dark:text-neutral-500">
+          <p className="text-[10px] text-neutral-400 dark:text-neutral-500">
             Last checked {checkedAt} · Repository: {status?.repository || "ots-downloader/onthespot"}
           </p>
         )}

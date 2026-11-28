@@ -191,8 +191,6 @@ class AppSettings(BaseModel):
     mirror_spotify_playback: bool = False
 
     check_for_updates: bool = True
-    update_repository: str = "ots-downloader/onthespot"
-    update_check_interval_hours: int = 12
     illegal_character_replacement: str = "-"
     raw_media_download: bool = False
     rotate_active_account_number: bool = False

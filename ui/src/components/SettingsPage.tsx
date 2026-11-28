@@ -336,7 +336,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             <div className="mt-5 pt-4 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
               {[
-                { key: "check_for_updates", label: "Check for Updates Automatically", type: "switch", description: "Query the release repository on launch and intervals." },
+                { key: "check_for_updates", label: "Check for Updates Automatically", type: "switch", description: "The server checks GitHub for a new release at startup and once a day." },
                 { key: "windows_10_explorer_thumbnails", label: "Windows 10 Explorer Thumbnail Support", type: "switch", description: "Format cover streams for standard Explorer folder caching." },
                 { key: "debug_mode", label: "Debug Logging Mode", type: "switch", description: "Output verbose internal states and network request traces." },
               ].map(renderInput)}

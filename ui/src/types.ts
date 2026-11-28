@@ -35,8 +35,6 @@ export interface OTSConfig {
   mirror_spotify_playback: boolean;
   close_to_tray: boolean;
   check_for_updates: boolean;
-  update_repository?: string;
-  update_check_interval_hours?: number;
   illegal_character_replacement: string;
   raw_media_download: boolean;
   rotate_active_account_number: boolean;
@@ -423,13 +421,6 @@ export interface NotificationBannerItem {
   url?: string;
 }
 
-export interface UpdateAsset {
-  name: string;
-  size: number;
-  download_url: string;
-  platform: string;
-}
-
 export interface UpdateInfo {
   repository: string;
   current_version: string;
@@ -438,10 +429,11 @@ export interface UpdateInfo {
   development_build?: boolean;
   release_name: string;
   release_url?: string;
-  recommended_asset?: UpdateAsset;
-  checked_at?: number;
-  install_supported?: boolean;
+  /** Unix seconds of the last check; null until the server has checked. */
+  checked_at?: number | null;
   error?: string;
+  /** True only on a Check Now answer that reused a check from under a minute ago. */
+  reused_recent_check?: boolean;
 }
 
 export interface SystemDiagnostics {
